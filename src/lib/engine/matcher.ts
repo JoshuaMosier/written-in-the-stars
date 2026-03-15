@@ -242,6 +242,7 @@ function computeCostGnomonic(
   nearestY: Float64Array,
   usedGen: Uint32Array,
   gen: number,
+  costCeiling = Infinity,
 ): number {
   if (scale <= 0) return 1e12;
 
@@ -272,6 +273,8 @@ function computeCostGnomonic(
       totalDist += invScale + invScale * invScale;
       nearestIdx[i] = -1;
     }
+
+    if (totalDist > costCeiling) return totalDist;
   }
 
   let edgeCost = 0;
@@ -572,27 +575,151 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph): MatchResu
   const usedGen = new Uint32Array(stars.length);
   let gen = 0;
 
-  // Run multiple jittered grid passes to avoid missing good candidates that
-  // fall between grid lines.  Each pass offsets the grid by a fraction of the
-  // cell size, effectively tripling the spatial resolution without tripling
-  // the grid density of a single pass.
+  // ---------------------------------------------------------------------------
+  // Hierarchical coarse search:
+  //   Pass 1 — coarse grid (with jitter), keep top regions
+  //   Pass 2 — refine each region in a fine neighborhood + scale neighbors
+  // ---------------------------------------------------------------------------
+
+  const coarseStepsX = 40;
+  const coarseStepsY = 40;
+  const coarseTopN = 300;
+  const coarseBest: Candidate[] = [];
+  let coarseWorstCost = Infinity;
+
+  const insertCoarse = (c: Candidate): void => {
+    if (coarseBest.length < coarseTopN) {
+      let lo = 0, hi = coarseBest.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (coarseBest[mid].cost < c.cost) lo = mid + 1;
+        else hi = mid;
+      }
+      coarseBest.splice(lo, 0, c);
+      if (coarseBest.length === coarseTopN) coarseWorstCost = coarseBest[coarseTopN - 1].cost;
+    } else if (c.cost < coarseWorstCost) {
+      let lo = 0, hi = coarseTopN - 1;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (coarseBest[mid].cost < c.cost) lo = mid + 1;
+        else hi = mid;
+      }
+      coarseBest.splice(lo, 0, c);
+      coarseBest.length = coarseTopN;
+      coarseWorstCost = coarseBest[coarseTopN - 1].cost;
+    }
+  };
+
   const jitterOffsets = [
-    [0, 0],           // base grid
-    [0.33, 0.33],     // offset by 1/3 cell
-    [0.67, 0.67],     // offset by 2/3 cell
+    [0, 0],
+    [0.33, 0.33],
+    [0.67, 0.67],
   ];
 
+  const coarseCellW = rangeX / coarseStepsX;
+  const coarseCellH = rangeY / coarseStepsY;
+
+  // Pass 1: coarse grid with scale-adaptive stepping
+  // At large scales the glyph covers many cells, so adjacent positions are
+  // highly correlated. Skip redundant positions proportionally.
   for (const [jx, jy] of jitterOffsets) {
-    for (let xi = 0; xi < posStepsX; xi++) {
-      const tx = minSX + (rangeX * (xi + jx + 0.5)) / posStepsX;
-      for (let yi = 0; yi < posStepsY; yi++) {
-        const ty = minSY + (rangeY * (yi + jy + 0.5)) / posStepsY;
-        for (const scale of scaleValues) {
+    for (const scale of scaleValues) {
+      const strideX = Math.max(1, Math.floor(scale / coarseCellW));
+      const strideY = Math.max(1, Math.floor(scale / coarseCellH));
+      for (let xi = 0; xi < coarseStepsX; xi += strideX) {
+        const tx = minSX + (rangeX * (xi + jx + 0.5)) / coarseStepsX;
+        for (let yi = 0; yi < coarseStepsY; yi += strideY) {
+          const ty = minSY + (rangeY * (yi + jy + 0.5)) / coarseStepsY;
           gen++;
           const cost = computeCostEq(eqGrid, anchorDx, anchorDy, edges, tx, ty, scale,
-            projX, projY, nearestIdx, nearestXArr, nearestYArr, usedGen, gen, worstBestCost);
-          insertCandidate({ tx, ty, scale, cost });
+            projX, projY, nearestIdx, nearestXArr, nearestYArr, usedGen, gen, coarseWorstCost);
+          insertCoarse({ tx, ty, scale, cost });
         }
+      }
+    }
+  }
+
+  // Pass 2: refine each coarse winner in a fine neighborhood + scale neighbors
+  const fineSteps = 5;
+  const fineHalfW = coarseCellW * 0.6;
+  const fineHalfH = coarseCellH * 0.6;
+  const fineStepW = (2 * fineHalfW) / fineSteps;
+  const fineStepH = (2 * fineHalfH) / fineSteps;
+
+  const visitedFine = new Set<string>();
+
+  for (const cand of coarseBest) {
+    const cellKey = `${Math.round(cand.tx / coarseCellW)}:${Math.round(cand.ty / coarseCellH)}:${cand.scale}`;
+    if (visitedFine.has(cellKey)) continue;
+    visitedFine.add(cellKey);
+
+    const scaleIdx = scaleValues.indexOf(cand.scale);
+    const fineScales: number[] = [cand.scale];
+    if (scaleIdx > 0) fineScales.push(scaleValues[scaleIdx - 1]);
+    if (scaleIdx < scaleValues.length - 1) fineScales.push(scaleValues[scaleIdx + 1]);
+
+    for (const fineScale of fineScales) {
+      for (let fi = 0; fi < fineSteps; fi++) {
+        const ftx = cand.tx - fineHalfW + fineStepW * (fi + 0.5);
+        for (let fj = 0; fj < fineSteps; fj++) {
+          const fty = cand.ty - fineHalfH + fineStepH * (fj + 0.5);
+          gen++;
+          const cost = computeCostEq(eqGrid, anchorDx, anchorDy, edges, ftx, fty, fineScale,
+            projX, projY, nearestIdx, nearestXArr, nearestYArr, usedGen, gen, worstBestCost);
+          insertCandidate({ tx: ftx, ty: fty, scale: fineScale, cost });
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Edge-based candidate generation (RANSAC-style)
+  // For anchor edges, hypothesize each star matches one endpoint, verify the
+  // other endpoint has a nearby star, and derive the implied transform.
+  // Uses ALL stars (no sampling) for complete coverage.
+  // ---------------------------------------------------------------------------
+
+  const edgeInfos = edges.map(([a, b]) => {
+    const dx = anchorDx[a] - anchorDx[b];
+    const dy = anchorDy[a] - anchorDy[b];
+    return { a, b, dx, dy, len: Math.sqrt(dx * dx + dy * dy) };
+  });
+  edgeInfos.sort((a, b) => b.len - a.len);
+  const ransacEdges = edgeInfos.slice(0, Math.min(2, edgeInfos.length));
+
+  // Sample stars with a stride; use two different offsets to catch different stars
+  const ransacSampleSize = 1500;
+  const ransacStride = Math.max(1, Math.floor(eqStars.length / ransacSampleSize));
+
+  for (const re of ransacEdges) {
+    for (let si = 0; si < eqStars.length; si += ransacStride) {
+      const s1 = eqStars[si];
+
+      for (const scale of scaleValues) {
+        // Compute implied center if s1 matches node A
+        const ty = s1.y - scale * anchorDy[re.a];
+        if (ty < minSY || ty > maxSY) continue;
+
+        const pointDec = ty * Math.PI - Math.PI / 2;
+        const cosDec = Math.cos(pointDec);
+        const xStretch = Math.min(2.5, cosDec > 0.1 ? 1 / cosDec : 2.5);
+        const tx = s1.x + scale * anchorDx[re.a] * xStretch;
+
+        // Check where node B's star should be
+        const expectedX = tx - scale * anchorDx[re.b] * xStretch;
+        const expectedY = ty + scale * anchorDy[re.b];
+        const match = eqGrid.nearest1WithDist(expectedX, expectedY);
+        if (!match) continue;
+
+        // Accept if the nearest star is close enough (within 20% of scale)
+        const matchDist = Math.sqrt(eqGrid.lastDistSq);
+        if (matchDist > scale * 0.2) continue;
+
+        // Score and insert
+        gen++;
+        const cost = computeCostEq(eqGrid, anchorDx, anchorDy, edges, tx, ty, scale,
+          projX, projY, nearestIdx, nearestXArr, nearestYArr, usedGen, gen, worstBestCost);
+        insertCandidate({ tx, ty, scale, cost });
       }
     }
   }
@@ -682,16 +809,18 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph): MatchResu
     const costFn = (p: number[]): number => {
       gnoGen++;
       return computeCostGnomonic(cachedGno!.grid, anchorDx, anchorDy, edges, p[0], p[1], p[2],
-        gnoProjX, gnoProjY, gnoNearIdx, gnoNearX, gnoNearY, usedGen, gnoGen);
+        gnoProjX, gnoProjY, gnoNearIdx, gnoNearX, gnoNearY, usedGen, gnoGen, bestResult.cost);
     };
 
     // Multi-start: original + spatial perturbations to escape local minima
+    // Perturbation size scales with glyph size so small/large glyphs explore proportionally
+    const perturbSize = Math.max(0.003, gnoScaleInit * 0.15);
     const starts = [
       [offX0, offY0, gnoScaleInit],
-      [offX0 + 0.005, offY0, gnoScaleInit],
-      [offX0 - 0.005, offY0, gnoScaleInit],
-      [offX0, offY0 + 0.005, gnoScaleInit],
-      [offX0, offY0 - 0.005, gnoScaleInit],
+      [offX0 + perturbSize, offY0, gnoScaleInit],
+      [offX0 - perturbSize, offY0, gnoScaleInit],
+      [offX0, offY0 + perturbSize, gnoScaleInit],
+      [offX0, offY0 - perturbSize, gnoScaleInit],
     ];
 
     for (const start of starts) {
