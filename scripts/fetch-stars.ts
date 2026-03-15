@@ -1,11 +1,16 @@
 import { writeFileSync, mkdirSync } from "fs";
-import { join } from "path";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 interface Star {
   id: number;
   ra: number;
   dec: number;
   mag: number;
+  ci?: number;  // B-V color index
   name?: string;
 }
 
@@ -62,6 +67,7 @@ async function main() {
   const magIdx = col("mag");
   const properIdx = col("proper");
   const idIdx = col("id");
+  const ciIdx = col("ci");
 
   const stars: Star[] = [];
 
@@ -94,6 +100,14 @@ async function main() {
       dec: Math.round(decrad * 1e6) / 1e6,
       mag: Math.round(mag * 100) / 100,
     };
+
+    const ciStr = cols[ciIdx]?.trim();
+    if (ciStr) {
+      const ci = parseFloat(ciStr);
+      if (!isNaN(ci)) {
+        star.ci = Math.round(ci * 100) / 100;
+      }
+    }
 
     const proper = cols[properIdx]?.trim();
     if (proper && proper.length > 0) {

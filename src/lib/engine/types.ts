@@ -7,6 +7,7 @@ export interface Star {
   ra: number;   // radians, 0 to 2π
   dec: number;  // radians, -π/2 to π/2
   mag: number;
+  ci?: number;  // B-V color index (blue=-0.3, white=0, yellow=0.6, red=2.0)
   name?: string;
 }
 
