@@ -505,8 +505,8 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph): MatchResu
   maxSY = Math.min(maxSY, Y_MAX_CLAMP);
 
   // --- Coarse grid search in equirectangular space ---
-  const posStepsX = 80;
-  const posStepsY = 80;
+  const posStepsX = 100;
+  const posStepsY = 100;
 
   let anchorMinX = Infinity, anchorMaxX = -Infinity;
   for (let i = 0; i < n; i++) {
@@ -516,7 +516,7 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph): MatchResu
   const anchorWidth = anchorMaxX - anchorMinX || 1;
   const maxAngularSpan = 0.139;
   const maxScale = maxAngularSpan / anchorWidth;
-  const allScales = [0.015, 0.02, 0.025, 0.03, 0.04, 0.05, 0.065, 0.08, 0.1, 0.13, 0.17, 0.22];
+  const allScales = [0.012, 0.015, 0.018, 0.02, 0.025, 0.03, 0.035, 0.04, 0.05, 0.065, 0.08, 0.1, 0.13, 0.17, 0.22];
   const scaleValues = allScales.filter(s => s <= maxScale);
   if (scaleValues.length < 3) {
     for (const s of allScales) {
@@ -536,7 +536,7 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph): MatchResu
     cost: number;
   }
 
-  const topN = 30;
+  const topN = 80;
   const best: Candidate[] = [];
   let worstBestCost = Infinity;
 
@@ -572,15 +572,27 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph): MatchResu
   const usedGen = new Uint32Array(stars.length);
   let gen = 0;
 
-  for (let xi = 0; xi < posStepsX; xi++) {
-    const tx = minSX + (rangeX * (xi + 0.5)) / posStepsX;
-    for (let yi = 0; yi < posStepsY; yi++) {
-      const ty = minSY + (rangeY * (yi + 0.5)) / posStepsY;
-      for (const scale of scaleValues) {
-        gen++;
-        const cost = computeCostEq(eqGrid, anchorDx, anchorDy, edges, tx, ty, scale,
-          projX, projY, nearestIdx, nearestXArr, nearestYArr, usedGen, gen, worstBestCost);
-        insertCandidate({ tx, ty, scale, cost });
+  // Run multiple jittered grid passes to avoid missing good candidates that
+  // fall between grid lines.  Each pass offsets the grid by a fraction of the
+  // cell size, effectively tripling the spatial resolution without tripling
+  // the grid density of a single pass.
+  const jitterOffsets = [
+    [0, 0],           // base grid
+    [0.33, 0.33],     // offset by 1/3 cell
+    [0.67, 0.67],     // offset by 2/3 cell
+  ];
+
+  for (const [jx, jy] of jitterOffsets) {
+    for (let xi = 0; xi < posStepsX; xi++) {
+      const tx = minSX + (rangeX * (xi + jx + 0.5)) / posStepsX;
+      for (let yi = 0; yi < posStepsY; yi++) {
+        const ty = minSY + (rangeY * (yi + jy + 0.5)) / posStepsY;
+        for (const scale of scaleValues) {
+          gen++;
+          const cost = computeCostEq(eqGrid, anchorDx, anchorDy, edges, tx, ty, scale,
+            projX, projY, nearestIdx, nearestXArr, nearestYArr, usedGen, gen, worstBestCost);
+          insertCandidate({ tx, ty, scale, cost });
+        }
       }
     }
   }
@@ -593,7 +605,14 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph): MatchResu
   // centered at the candidate's equirectangular position, then run Nelder-Mead
   // in that locally-Euclidean space.
 
-  let bestResult = { params: [0, 0, 0], cost: Infinity, ra0: 0, dec0: 0 };
+  interface NMResult {
+    params: number[];
+    cost: number;
+    ra0: number;
+    dec0: number;
+  }
+
+  let bestResult: NMResult = { params: [0, 0, 0], cost: Infinity, ra0: 0, dec0: 0 };
 
   // Scratch arrays reusable across candidates (gnomonic cost fn uses same layout)
   const gnoProjX = new Float64Array(n);
@@ -602,16 +621,12 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph): MatchResu
   const gnoNearX = new Float64Array(n);
   const gnoNearY = new Float64Array(n);
 
-  for (const candidate of best) {
-    // Convert equirectangular center to spherical
-    const ra0 = candidate.tx * 2 * Math.PI;
-    const dec0 = candidate.ty * Math.PI - Math.PI / 2;
+  // Helper to build gnomonic grid for a given sky center
+  const buildGnoGrid = (ra0: number, dec0: number): { grid: StarGrid; points: KDPoint[] } | null => {
     const sinDec0 = Math.sin(dec0);
     const cosDec0 = Math.cos(dec0);
-
-    // Project stars within ~40° angular distance onto the tangent plane
     const gnoPoints: KDPoint[] = [];
-    const maxCosC = Math.cos(40 * Math.PI / 180); // ~0.766
+    const maxCosC = Math.cos(40 * Math.PI / 180);
 
     for (let i = 0; i < stars.length; i++) {
       const s = stars[i];
@@ -622,47 +637,77 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph): MatchResu
       if (cosC <= maxCosC) continue;
 
       const invCosC = 1 / cosC;
-      const gx = cosDec * Math.sin(s.ra - ra0) * invCosC;
-      const gy = (cosDec0 * sinDec - sinDec0 * cosDec * cosDra) * invCosC;
-      gnoPoints.push({ x: gx, y: gy, idx: i });
+      gnoPoints.push({
+        x: cosDec * Math.sin(s.ra - ra0) * invCosC,
+        y: (cosDec0 * sinDec - sinDec0 * cosDec * cosDra) * invCosC,
+        idx: i,
+      });
     }
 
-    if (gnoPoints.length < n) continue; // not enough nearby stars
+    if (gnoPoints.length < n) return null;
 
-    // Build spatial hash in gnomonic space
-    // Stars within 40° → gnomonic coords up to tan(40°) ≈ 0.84
-    // Average spacing ≈ 1.7 / sqrt(gnoPoints.length)
     const gnoCellSize = 1.7 / Math.sqrt(gnoPoints.length);
-    const gnoGrid = new StarGrid(gnoPoints, gnoCellSize, 1.0);
+    return { grid: new StarGrid(gnoPoints, gnoCellSize, 1.0), points: gnoPoints };
+  };
 
-    // Estimate initial gnomonic scale from equirectangular scale.
-    // In equirectangular, vertical: Δdec = scale * dy * π
-    // In gnomonic near center: Δy ≈ Δdec
-    // So gnoScale ≈ scale * π
+  // Phase 2: NM refinement with multi-start on all coarse candidates
+  // Cache gnomonic grids — candidates near the same sky position share a grid
+  const gnoGridCache = new Map<string, { grid: StarGrid; ra0: number; dec0: number } | null>();
+  const GNO_CACHE_RES = 0.02; // ~1° grid for caching
+
+  for (const candidate of best) {
+    const ra0 = candidate.tx * 2 * Math.PI;
+    const dec0 = candidate.ty * Math.PI - Math.PI / 2;
+
+    // Snap to cache grid
+    const cacheKey = `${Math.round(ra0 / GNO_CACHE_RES)}:${Math.round(dec0 / GNO_CACHE_RES)}`;
+    let cachedGno = gnoGridCache.get(cacheKey);
+    if (cachedGno === undefined) {
+      const gno = buildGnoGrid(ra0, dec0);
+      cachedGno = gno ? { grid: gno.grid, ra0, dec0 } : null;
+      gnoGridCache.set(cacheKey, cachedGno);
+    }
+    if (!cachedGno) continue;
+
+    // Compute candidate center offset in cached grid's gnomonic space
+    const gridRa0 = cachedGno.ra0;
+    const gridDec0 = cachedGno.dec0;
+    const gnoOff = projectStarGnomonic(ra0, dec0, gridRa0, Math.sin(gridDec0), Math.cos(gridDec0));
+    const offX0 = gnoOff ? gnoOff.x : 0;
+    const offY0 = gnoOff ? gnoOff.y : 0;
+
     const gnoScaleInit = candidate.scale * Math.PI;
-
-    // Gnomonic used-gen tracking (reuse same array — star indices are global)
-    const gnoUsedGen = usedGen; // reuse, gen counter keeps incrementing
     let gnoGen = gen;
 
     const costFn = (p: number[]): number => {
       gnoGen++;
-      return computeCostGnomonic(gnoGrid, anchorDx, anchorDy, edges, p[0], p[1], p[2],
-        gnoProjX, gnoProjY, gnoNearIdx, gnoNearX, gnoNearY, gnoUsedGen, gnoGen);
+      return computeCostGnomonic(cachedGno!.grid, anchorDx, anchorDy, edges, p[0], p[1], p[2],
+        gnoProjX, gnoProjY, gnoNearIdx, gnoNearX, gnoNearY, usedGen, gnoGen);
     };
 
-    const optimized = nelderMead(
-      costFn,
-      [0, 0, gnoScaleInit],
-      { tolerance: 1e-12, maxIterations: 2000, initialScale: 0.01 },
-    );
+    // Multi-start: original + spatial perturbations to escape local minima
+    const starts = [
+      [offX0, offY0, gnoScaleInit],
+      [offX0 + 0.005, offY0, gnoScaleInit],
+      [offX0 - 0.005, offY0, gnoScaleInit],
+      [offX0, offY0 + 0.005, gnoScaleInit],
+      [offX0, offY0 - 0.005, gnoScaleInit],
+    ];
 
-    const cost = costFn(optimized);
-    if (cost < bestResult.cost) {
-      bestResult = { params: optimized, cost, ra0, dec0 };
+    for (const start of starts) {
+      const optimized = nelderMead(
+        costFn,
+        start,
+        { tolerance: 1e-8, maxIterations: 1000, initialScale: 0.01 },
+      );
+
+      const cost = costFn(optimized);
+      if (cost < bestResult.cost) {
+        bestResult = { params: optimized, cost, ra0: gridRa0, dec0: gridDec0 };
+      }
     }
 
-    gen = gnoGen; // keep gen counter in sync
+    gen = gnoGen;
   }
 
   // =========================================================================
