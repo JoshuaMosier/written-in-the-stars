@@ -1,0 +1,10 @@
+import { textToGraph } from '../src/lib/engine/glyphs';
+import { matchStarsToAnchors } from '../src/lib/engine/matcher';
+import * as fs from 'fs';
+const stars = JSON.parse(fs.readFileSync('src/lib/data/stars.json', 'utf-8'));
+const graph = textToGraph('HELLO');
+const t0 = performance.now();
+const result = matchStarsToAnchors(stars, graph);
+const t1 = performance.now();
+console.log(`Time: ${(t1-t0).toFixed(0)}ms`);
+console.log(`Cost: ${result.cost.toFixed(4)}, Scale: ${result.transform.scale.toFixed(4)}`);

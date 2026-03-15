@@ -1,0 +1,30 @@
+/**
+ * Shared types for the star-matching engine.
+ */
+
+export interface Star {
+  id: number;
+  ra: number;   // radians, 0 to 2π
+  dec: number;  // radians, -π/2 to π/2
+  mag: number;
+  name?: string;
+}
+
+export interface AnchorPoint {
+  x: number;
+  y: number;
+  letterIndex: number;
+  strokeIndex: number;
+}
+
+export interface GlyphGraph {
+  nodes: AnchorPoint[];
+  edges: [number, number][];  // pairs of node indices
+}
+
+export interface MatchResult {
+  pairs: { star: Star; nodeIndex: number }[];
+  cost: number;
+  transform: { x: number; y: number; scale: number };
+  graph: GlyphGraph;
+}
