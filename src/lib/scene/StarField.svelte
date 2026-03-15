@@ -294,16 +294,35 @@
 		const targetFov = Math.min(120, Math.max(20, THREE.MathUtils.radToDeg(maxAngle) * 2.5 + 10));
 		const target = centroidDir.clone().multiplyScalar(0.001);
 
+		// Compute local "north" (declination-increasing) direction at centroid.
+		// This is the tangent vector d(raDecToXYZ)/d(dec) at the centroid's
+		// RA/Dec, so text aligned with Dec appears upright on screen.
+		const centroidRa = Math.atan2(-centroidDir.z, centroidDir.x);
+		const centroidDec = Math.asin(Math.max(-1, Math.min(1, centroidDir.y)));
+		const localNorth = new THREE.Vector3(
+			-Math.sin(centroidDec) * Math.cos(centroidRa),
+			Math.cos(centroidDec),
+			Math.sin(centroidDec) * Math.sin(centroidRa)
+		).normalize();
+
 		const startTarget = controlsRef.target.clone();
+		const startUp = cameraRef.up.clone();
 		const startFov = cameraRef.fov;
 		const duration = 1200;
 		const startTime = performance.now();
+
+		const Y_UP = new THREE.Vector3(0, 1, 0);
 
 		function animate() {
 			const elapsed = performance.now() - startTime;
 			const t = Math.min(1, elapsed / duration);
 			const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 			controlsRef!.target.lerpVectors(startTarget, target, ease);
+			cameraRef!.up.lerpVectors(startUp, localNorth, ease).normalize();
+			// OrbitControls caches the up-to-Y quaternion at construction time.
+			// Update it each frame so the new up vector is respected.
+			(controlsRef as any)._quat.setFromUnitVectors(cameraRef!.up, Y_UP);
+			(controlsRef as any)._quatInverse.copy((controlsRef as any)._quat).invert();
 			cameraRef!.fov = startFov + (targetFov - startFov) * ease;
 			cameraRef!.updateProjectionMatrix();
 			controlsRef!.update();
@@ -315,16 +334,23 @@
 	export function resetView() {
 		if (!controlsRef || !cameraRef) return;
 		const startTarget = controlsRef.target.clone();
+		const startUp = cameraRef.up.clone();
+		const defaultUp = new THREE.Vector3(0, 1, 0);
 		const startFov = cameraRef.fov;
 		const endTarget = new THREE.Vector3(0, 0, -0.001);
 		const duration = 800;
 		const startTime = performance.now();
+
+		const Y_UP = new THREE.Vector3(0, 1, 0);
 
 		function animate() {
 			const elapsed = performance.now() - startTime;
 			const t = Math.min(1, elapsed / duration);
 			const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 			controlsRef!.target.lerpVectors(startTarget, endTarget, ease);
+			cameraRef!.up.lerpVectors(startUp, defaultUp, ease).normalize();
+			(controlsRef as any)._quat.setFromUnitVectors(cameraRef!.up, Y_UP);
+			(controlsRef as any)._quatInverse.copy((controlsRef as any)._quat).invert();
 			cameraRef!.fov = startFov + (DEFAULT_FOV - startFov) * ease;
 			cameraRef!.updateProjectionMatrix();
 			controlsRef!.update();
