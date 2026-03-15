@@ -5,7 +5,7 @@
 	import starData from '$lib/data/stars.json';
 	import type { Star, MatchResult } from '$lib/engine/types';
 
-	const stars: Star[] = starData as Star[];
+	const stars: Star[] = (starData as Star[]).filter(s => s.mag > -10);
 
 	let inputText = $state('');
 	let matchResult: MatchResult | null = $state(null);
