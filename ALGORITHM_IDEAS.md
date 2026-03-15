@@ -79,83 +79,147 @@ Pre-compute a density map and skip regions that are obviously too sparse. One pa
 the star grid, cheap to compute.
 
 ## 8. Adaptive Multi-Start Perturbations
-**Status:** Implemented — perturbSize = max(0.003, gnoScaleInit × 0.15)
+**Status:** Superseded by CMA-ES (#13) — perturbation sizing concept absorbed
 **Effort:** Trivial
 **Impact:** Improved quality for larger glyphs (ORION -12%, CONSTELLATION -22%)
 
 Fixed perturbations at ±0.005 were too small for large glyphs and too large for small
 ones. Scaling proportionally to glyph size allows NM multi-starts to explore the right
-neighborhood radius, improving convergence for larger words.
+neighborhood radius, improving convergence for larger words. Now superseded by CMA-ES
+which adaptively scales its search covariance.
 
-## 9. Powell's Method (Alternative Local Optimizer)
-**Status:** Not started
-**Effort:** Medium (~60 lines)
-**Impact:** Small — potentially faster convergence than Nelder-Mead for 3D
+## 9. CMA-ES Optimizer (Replace Nelder-Mead Multi-Start)
+**Status:** Implemented — 2× seeded CMA-ES(350 evals each) replaces 5× NM multi-start
+**Effort:** Medium (~120 lines)
+**Impact:** -21% total cost across all test words, faster execution
 
-Uses line searches along coordinate directions. Often outperforms NM in low dimensions.
-Not a priority since local optimizer choice matters less than global search strategy.
+CMA-ES (Covariance Matrix Adaptation Evolution Strategy) with separable covariance and
+seeded PRNG (deterministic per candidate). Two independent runs per candidate with
+different seeds for broader exploration. Population size λ=7, μ=3 parents.
+
+Tested variants:
+- **Pure CMA-ES (600 evals):** Best single-seed results but non-deterministic. Median
+  -16% total cost, but ORION SKY had high variance (occasionally worse than baseline).
+- **CMA-ES + NM polish:** NM polish didn't reliably help; added time.
+- **CMA-ES + NM hybrid (split budget):** Budget split weakened both optimizers.
+- **2× seeded CMA-ES (350 each):** Best overall — deterministic, -21% total cost,
+  all words improved, all times under 2s.
+
+Key insight: CMA-ES's population-based search explores beyond NM's local basins.
+The 5-start NM was essentially 5 local searches; CMA-ES samples more broadly while
+naturally concentrating on promising regions via covariance adaptation.
+
+Seeded PRNG uses xoshiro128** seeded from a hash of the start parameters, ensuring
+deterministic results while still exploring different trajectories per candidate.
+
+## 10. Hungarian Optimal Assignment
+**Status:** Implemented — Munkres algorithm replaces greedy+swap in Phase 3
+**Effort:** Low (~50 lines)
+**Impact:** Optimal 1-to-1 assignment — visual quality improvement (not reflected in NM cost metric)
+
+Hungarian algorithm finds the globally optimal minimum-distance 1-to-1 matching of
+glyph nodes to stars. Uses top-5 candidate stars per node to keep the cost matrix
+small (≤ 325×325 for CONSTELLATION). O(n³) execution time is negligible.
+
+Replaces the previous greedy closest-first + iterative swap refinement heuristic.
+The cost metric from `bench-multi.ts` is unchanged because it reports the Phase 2
+(NM/CMA-ES) cost, not the Phase 3 assignment quality. Visual verification needed.
 
 ---
 
-## Research-Backed Ideas (from star tracker / point pattern matching literature)
+## Benchmarks
 
-### 10. K-Vector Star-Pair Index + Hough Voting
+### NM Multi-Start Baseline (2026-03-15)
+
+| Word          | Nodes | Edges | Time (avg) | Cost   |
+|---------------|-------|-------|------------|--------|
+| HI            | 8     | 6     | 289ms      | 0.2615 |
+| STAR          | 24    | 21    | 674ms      | 1.0614 |
+| HELLO         | 26    | 22    | 641ms      | 0.8084 |
+| ORION SKY     | 47    | 41    | 1167ms     | 1.4536 |
+| CONSTELLATION | 65    | 55    | 1671ms     | 2.1377 |
+| **Total**     |       |       |            | **5.72** |
+
+### CMA-ES + Hungarian (current, 2026-03-15)
+
+| Word          | Nodes | Edges | Time (avg) | Cost   | Δ Cost |
+|---------------|-------|-------|------------|--------|--------|
+| HI            | 8     | 6     | 298ms      | 0.2475 | -5%    |
+| STAR          | 24    | 21    | 561ms      | 0.6287 | -41%   |
+| HELLO         | 26    | 22    | 662ms      | 0.7600 | -6%    |
+| ORION SKY     | 47    | 41    | 1280ms     | 1.2147 | -16%   |
+| CONSTELLATION | 65    | 55    | 1607ms     | 1.6432 | -23%   |
+| **Total**     |       |       |            | **4.49** | **-21%** |
+
+---
+
+## Not Yet Implemented
+
+### 11. Var-Trimmed / Adaptive Trimmed Cost
+**Status:** Tested — node cost cap had zero effect on benchmark words
+**Effort:** Low
+**Impact:** None observed — winning placements already have all per-node costs below tested thresholds
+
+Tested truncated quadratic cost (cap at 2.0 and 0.5). No change to winning costs because
+the best placements don't have extreme outlier nodes — the cost is dominated by edge
+distortion and duplicate penalties, not individual node outliers. The outlier-domination
+problem that killed Geman-McClure (#2) may have been an artifact of the earlier cost
+function balance, not the current one.
+
+Still worth revisiting if future cost function changes reintroduce outlier sensitivity.
+
+### 12. Partial Hausdorff Distance Cost
+**Status:** Subsumed by Var-Trimmed testing above
+**Effort:** Low
+**Impact:** Likely none based on Var-Trimmed results
+
+### 13. DIRECT Optimizer (Replace Coarse Grid)
+**Status:** Not started
+**Effort:** Medium (~80 lines)
+**Impact:** Adaptive grid replacement — focuses evaluations on promising regions
+
+DIRECT (Dividing Rectangles) adaptively subdivides the (tx, ty, scale) search box.
+Could replace the 40×40 coarse grid + fine refinement with a single adaptive pass.
+Risk: cost function evaluations aren't cheap, and DIRECT may need many of them.
+
+Refs: Jones et al. (1993).
+
+### 14. 1-Point RANSAC Scale Decomposition
+**Status:** Not started
+**Effort:** Medium
+**Impact:** Potentially cleaner candidate generation than current 2-point RANSAC
+
+Decompose the 3-DOF transform: first estimate scale via line-vector ratios, then
+each single star votes independently for translation. Our current 2-point RANSAC
+already works well, but the decomposition might find additional candidates.
+
+Refs: Li et al. (2021).
+
+### 15. Powell's Method (Alternative Local Optimizer)
+**Status:** Superseded by CMA-ES
+**Effort:** Medium (~60 lines)
+**Impact:** Moot — CMA-ES provides a stronger upgrade over NM than Powell would have.
+
+### — Previously Tested (Not Helpful) —
+
+### K-Vector Star-Pair Index + Hough Voting
 **Status:** Tested — k-vector Y-band search was slower than sampled RANSAC with worse quality
 **Effort:** High
 **Impact:** Theoretical advantage didn't materialize for this problem size
 
-The Pyramid algorithm (Mortari) and astrometry.net use indexed star-pair angular distances
-for O(1) range queries. This is the structured version of our RANSAC (#6).
-
 Tested approach: sorted stars by Y, binary search for all S2 candidates whose Y-delta
 implies valid scale. Issues: (1) iterating all 9000 stars as S1 was slower than sampling
-1500, (2) the per-pair overhead (binary search + band scan + X verification) exceeded
-the simple grid-lookup verification in RANSAC, (3) full-coverage (all 9000 stars) actually
-produced worse results than 1500-sample — likely because worstBestCost ceiling dynamics
-favor faster evaluation of fewer high-quality candidates.
+1500, (2) the per-pair overhead exceeded RANSAC's grid-lookup verification, (3) full-
+coverage actually produced worse results — worstBestCost ceiling dynamics favor faster
+evaluation of fewer high-quality candidates.
 
-The k-vector approach is designed for problems with unknown rotation (star trackers),
-where you MUST index by angular distance. Since we have no rotation, the directional
-RANSAC approach (checking a specific expected position) is more efficient.
-
-Refs: Mortari "Pyramid Star Identification Technique", Lang et al. "Astrometry.net" (2010),
-ESA tetra3 implementation.
-
-### 11. Hungarian Optimal Assignment
-**Status:** Not started
-**Effort:** Low (~40 lines)
-**Impact:** Better match quality in cost evaluation — prevents node-stealing
-
-Current cost function uses greedy nearest-star assignment with a duplicate penalty.
-Hungarian algorithm finds the globally optimal 1-to-1 assignment minimizing total cost.
-With n=10-65 nodes, O(n³) is <1ms. Could replace the duplicate penalty entirely.
-
-Use in cost function during NM refinement (too expensive for coarse grid).
-
-Refs: Kuhn "Hungarian Algorithm" (1955), standard assignment problem.
-
-### 12. Partial Hausdorff Distance Cost
-**Status:** Not started
-**Effort:** Low
-**Impact:** More robust matching in sparse sky regions
-
-Instead of penalizing every node equally, use the k-th percentile of node-to-star
-distances. Allows some nodes to "miss" gracefully when the local sky is sparse.
-Prevents a single bad node from dominating the cost and pulling the optimizer away
-from an otherwise excellent placement.
-
-Refs: Huttenlocher et al. "Comparing images using the Hausdorff distance" (1993).
-
-### 13. Quad Hashing (Astrometry.net style)
-**Status:** Not started
+### Quad Hashing / Geometric Verification (Astrometry.net style)
+**Status:** Tested — multiple variants, none improved on grid+RANSAC baseline
 **Effort:** Very high
-**Impact:** O(1) candidate generation — the gold standard for blind plate solving
+**Impact:** Does not help for our 3-DOF problem (translation + scale, no rotation)
 
-Select 4-star groups from catalog, hash their geometry into a scale/rotation-invariant
-code. At query time, hash glyph sub-quads and look up matching catalog quads instantly.
-Since we don't need rotation invariance, the hash is simpler (lower-dimensional).
-
-This is the nuclear option — proven to solve millions of images, but requires significant
-offline index construction. Only worth it if k-vector Hough voting (#10) proves insufficient.
+**Root cause**: Quad hashing solves a 5-DOF problem. Our problem is 3-DOF — a single
+star pair already fully constrains the transform. Extra verification nodes provide
+filtering, not new geometric information.
 
 Refs: Lang, Hogg, Mierle, Blanton "Astrometry.net" (2010), TETRA star identification.

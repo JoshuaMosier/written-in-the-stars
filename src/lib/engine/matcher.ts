@@ -15,7 +15,7 @@
 // @ts-ignore - CJS module
 import kdTreePkg from 'kd-tree-javascript';
 const { kdTree } = kdTreePkg;
-import { nelderMead } from './optimizer';
+import { nelderMead, cmaes } from './optimizer';
 import type { Star, AnchorPoint, MatchResult, GlyphGraph } from './types';
 
 // ---------------------------------------------------------------------------
@@ -812,24 +812,19 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph): MatchResu
         gnoProjX, gnoProjY, gnoNearIdx, gnoNearX, gnoNearY, usedGen, gnoGen, bestResult.cost);
     };
 
-    // Multi-start: original + spatial perturbations to escape local minima
-    // Perturbation size scales with glyph size so small/large glyphs explore proportionally
-    const perturbSize = Math.max(0.003, gnoScaleInit * 0.15);
-    const starts = [
-      [offX0, offY0, gnoScaleInit],
-      [offX0 + perturbSize, offY0, gnoScaleInit],
-      [offX0 - perturbSize, offY0, gnoScaleInit],
-      [offX0, offY0 + perturbSize, gnoScaleInit],
-      [offX0, offY0 - perturbSize, gnoScaleInit],
+    const searchRadius = Math.max(0.003, gnoScaleInit * 0.15);
+    const startPoint = [offX0, offY0, gnoScaleInit];
+    // Two CMA-ES runs with different seeds for broader exploration.
+    const cmaStarts = [
+      startPoint,
+      [offX0 + searchRadius * 0.01, offY0 + searchRadius * 0.01, gnoScaleInit],
     ];
-
-    for (const start of starts) {
-      const optimized = nelderMead(
+    for (const cmaStart of cmaStarts) {
+      const optimized = cmaes(
         costFn,
-        start,
-        { tolerance: 1e-8, maxIterations: 1000, initialScale: 0.01 },
+        cmaStart,
+        { sigma: searchRadius, maxEvals: 350 },
       );
-
       const cost = costFn(optimized);
       if (cost < bestResult.cost) {
         bestResult = { params: optimized, cost, ra0: gridRa0, dec0: gridDec0 };
