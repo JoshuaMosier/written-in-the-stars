@@ -21,7 +21,7 @@ import type { Star, MatchResult } from "../src/lib/engine/types";
 import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const starsPath = path.resolve(__dirname, "../src/lib/data/stars.json");
+const starsPath = path.resolve(__dirname, "../static/stars.json");
 const stars: Star[] = JSON.parse(fs.readFileSync(starsPath, "utf-8"));
 
 const text = process.argv[2] || "HELLO";

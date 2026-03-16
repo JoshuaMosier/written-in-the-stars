@@ -1,14 +1,28 @@
 <script lang="ts">
-	import StarField from '$lib/scene/StarField.svelte';
 	import { encodeAllToHash, decodeHashToResults } from '$lib/engine/sharing';
-	import starData from '$lib/data/stars.json';
 	import type { Star, MatchResult } from '$lib/engine/types';
 	import { CONSTELLATIONS } from '$lib/data/constellations';
 	import MatchWorker from '$lib/engine/match.worker?worker';
 
-	const stars: Star[] = (starData as Star[]).filter(s => s.mag > -10);
-	const starByIdx = new Map<number, Star>();
-	for (const s of stars) starByIdx.set(s.idx, s);
+	// Lazy-load StarField (pulls in Three.js tree)
+	const StarFieldPromise = import('$lib/scene/StarField.svelte');
+
+	// Fetch star catalog at runtime instead of bundling it
+	// Keep a plain (non-proxy) reference for worker postMessage
+	let starsRaw: Star[] = [];
+	let stars: Star[] = $state([]);
+	let starByIdx = new Map<number, Star>();
+	let starsReady = $state(false);
+
+	const starsPromise = fetch('/stars.json')
+		.then(r => r.json())
+		.then((data: Star[]) => {
+			starsRaw = data.filter(s => s.mag > -10);
+			stars = starsRaw;
+			for (const s of starsRaw) starByIdx.set(s.idx, s);
+			initAfterStarsLoaded();
+			starsReady = true;
+		});
 
 	interface ConstellationEntry {
 		text: string;
@@ -64,7 +78,7 @@
 	let isRerolling = $state(false);
 	let matchProgress = $state(0);
 	let showInput = $state(true);
-	let starField: StarField;
+	let starField = $state<any>(null);
 	let constellations: ConstellationEntry[] = $state([]);
 	let focusedIndex = $state(-1);
 	let rerollBlacklist: number[] = [];  // accumulates stars from previous re-rolls
@@ -97,11 +111,16 @@
 
 	// --- Check URL hash on load ---
 	let pendingHashResults: { text: string; result: MatchResult }[] = [];
-	let hashWasPresent = false;
+	let hashWasPresent = typeof window !== 'undefined' && window.location.hash.length > 1;
 
-	if (typeof window !== 'undefined' && window.location.hash.length > 1) {
-		hashWasPresent = true;
-		pendingHashResults = decodeHashToResults(window.location.hash.slice(1), starByIdx);
+	// Initialize web worker and decode hash after stars are fetched
+	const worker = new MatchWorker();
+
+	function initAfterStarsLoaded() {
+		worker.postMessage({ type: 'init', payload: { stars: starsRaw } });
+		if (hashWasPresent) {
+			pendingHashResults = decodeHashToResults(window.location.hash.slice(1), starByIdx);
+		}
 	}
 
 	function handleStarFieldReady() {
@@ -126,10 +145,6 @@
 			setTimeout(() => (errorMessage = ''), 4000);
 		}
 	}
-
-	// Initialize web worker for off-thread matching
-	const worker = new MatchWorker();
-	worker.postMessage({ type: 'init', payload: { stars } });
 
 	let errorMessage = $state('');
 	const MATCH_TIMEOUT_MS = 30_000;
@@ -514,11 +529,14 @@
 		}
 	}
 
-	// Build search index of named stars
-	const namedStars = stars.filter(s => s.name);
+	// Build search index of named stars (derived from reactive stars)
+	let namedStars = $derived(stars.filter(s => s.name));
 	// Build HIP lookup for constellation star resolution
-	const starByHip = new Map<number, Star>();
-	for (const s of stars) if (s.hip) starByHip.set(s.hip, s);
+	let starByHip = $derived.by(() => {
+		const map = new Map<number, Star>();
+		for (const s of stars) if (s.hip) map.set(s.hip, s);
+		return map;
+	});
 
 	// Build HIP → constellation(s) reverse lookup
 	const hipToConstellations = new Map<number, typeof CONSTELLATIONS[number][]>();
@@ -705,7 +723,11 @@
 <svelte:window onkeydown={handleGlobalKeydown} />
 
 <div class="app" role="application" aria-label="Written in the Stars - constellation creator" onpointerdown={handleClickOutsideSettings}>
-	<StarField {stars} bind:this={starField} onReady={handleStarFieldReady} onVertexDrag={handleVertexDrag} onStarClick={handleStarClick} />
+	{#await StarFieldPromise then StarFieldModule}
+		{#if starsReady}
+			<StarFieldModule.default {stars} bind:this={starField} onReady={handleStarFieldReady} onVertexDrag={handleVertexDrag} onStarClick={handleStarClick} />
+		{/if}
+	{/await}
 
 	<!-- Top-left toolbar: settings, info, search -->
 	<div class="top-bar">
@@ -811,7 +833,7 @@
 			</button>
 		</div>
 
-		<div class="star-search-container" onpointerdown={(e) => e.stopPropagation()}>
+		<div class="star-search-container" role="search" onpointerdown={(e) => e.stopPropagation()}>
 		<div class="star-search-input-wrap">
 			<svg class="star-search-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 				<circle cx="11" cy="11" r="7" />
@@ -906,7 +928,7 @@
 
 	<!-- Left-side info panel -->
 	{#if selectedStar || selectedConstellation}
-		<div class="star-panel" onpointerdown={(e) => e.stopPropagation()}>
+		<div class="star-panel" role="region" aria-label="Star info" onpointerdown={(e) => e.stopPropagation()}>
 			<button class="star-panel-close" onclick={() => { selectedStar = null; selectedConstellation = null; selectionHistory = []; starField?.clearStarHighlight(); starField?.clearTempConstellation(); }} aria-label="Close info panel">
 				<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 					<line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
@@ -995,8 +1017,8 @@
 
 	<!-- About modal -->
 	{#if aboutOpen}
-		<div class="about-backdrop" onpointerdown={() => aboutOpen = false}>
-			<div class="about-modal" role="dialog" aria-modal="true" aria-label="About Written in the Stars" onpointerdown={(e) => e.stopPropagation()}>
+		<div class="about-backdrop" role="presentation" onpointerdown={() => aboutOpen = false}>
+			<div class="about-modal" role="dialog" aria-modal="true" aria-label="About Written in the Stars" tabindex="-1" onpointerdown={(e) => e.stopPropagation()}>
 				<button class="about-close" onclick={() => aboutOpen = false} aria-label="Close">
 					<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 						<line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />

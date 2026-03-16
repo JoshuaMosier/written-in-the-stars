@@ -13,7 +13,7 @@ import { matchStarsToAnchors } from '../src/lib/engine/matcher';
 import type { Star, MatchResult } from '../src/lib/engine/types';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const starsPath = path.resolve(__dirname, '../src/lib/data/stars.json');
+const starsPath = path.resolve(__dirname, '../static/stars.json');
 const stars: Star[] = JSON.parse(fs.readFileSync(starsPath, 'utf-8'));
 
 const WORDS = ['HELLO', 'ORION', 'DREAM'];

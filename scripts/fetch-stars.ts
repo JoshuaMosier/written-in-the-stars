@@ -16,7 +16,7 @@ interface Star {
   name?: string;
 }
 
-const OUTPUT_PATH = join(__dirname, "..", "src", "lib", "data", "stars.json");
+const OUTPUT_PATH = join(__dirname, "..", "static", "stars.json");
 
 function parseCSVLine(line: string): string[] {
   const result: string[] = [];
