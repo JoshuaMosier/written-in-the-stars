@@ -191,11 +191,16 @@
 		if (pendingHashResults.length > 0) {
 			const results = pendingHashResults;
 			pendingHashResults = [];
-			// Show all constellations from the URL
 			requestAnimationFrame(() => {
+				// Build all constellation entries without triggering individual animations
 				for (const { text, result } of results) {
-					showResult(text, result);
+					constellations = [...constellations, makeEntry(text, result)];
 				}
+				focusedIndex = constellations.length - 1;
+				showInput = false;
+				// Use refocusConstellation to draw all and animate camera to the last one
+				const allResults = constellations.map(c => c.result);
+				starField?.refocusConstellation(allResults, focusedIndex);
 			});
 		}
 	}
@@ -260,10 +265,16 @@
 		worker.postMessage({ type: 'match', payload: { text, usedStarIndices } });
 	}
 
+	let rerollIndex = -1;  // which constellation is being re-rolled
+
 	function handleRerollResult(text: string, result: MatchResult) {
 		const entry = makeEntry(text, result);
-		constellations = [...constellations.slice(0, -1), entry];
-		focusedIndex = constellations.length - 1;
+		constellations = [
+			...constellations.slice(0, rerollIndex),
+			entry,
+			...constellations.slice(rerollIndex + 1),
+		];
+		focusedIndex = rerollIndex;
 		isRerolling = false;
 		stopMatchingPhrases();
 		isMatching = false;
@@ -271,30 +282,32 @@
 
 		history.replaceState(null, '', '#' + encodeAllToHash(constellations));
 
-		starField?.clearLastConstellation();
-		starField?.animateToMatch(result);
+		// Redraw all constellations with focus on the re-rolled one
+		const allResults = constellations.map(c => c.result);
+		starField?.refocusConstellation(allResults, focusedIndex);
 	}
 
 	function handleReroll() {
-		if (constellations.length === 0) return;
+		if (constellations.length === 0 || focusedIndex < 0) return;
 
-		const lastEntry = constellations[constellations.length - 1];
+		const targetEntry = constellations[focusedIndex];
+		rerollIndex = focusedIndex;
 		isRerolling = true;
 		isMatching = true;
 		matchProgress = 0;
 		showInput = true;
-		inputText = lastEntry.text;
+		inputText = targetEntry.text;
 		startMatchingPhrases();
-		pendingText = lastEntry.text;
+		pendingText = targetEntry.text;
 
 		// Add the current result's stars to the accumulated re-roll blacklist
-		for (const pair of lastEntry.result.pairs) {
+		for (const pair of targetEntry.result.pairs) {
 			rerollBlacklist.push(pair.star.idx);
 		}
 
 		// Combine all active constellation stars + accumulated re-roll history
 		const usedStarIndices = [...getUsedStarIndices(), ...rerollBlacklist];
-		worker.postMessage({ type: 'match', payload: { text: lastEntry.text, usedStarIndices } });
+		worker.postMessage({ type: 'match', payload: { text: targetEntry.text, usedStarIndices } });
 	}
 
 	function handleFocusConstellation(index: number) {
@@ -302,6 +315,24 @@
 		focusedIndex = index;
 		const allResults = constellations.map(c => c.result);
 		starField?.refocusConstellation(allResults, index);
+	}
+
+	function handleDeleteConstellation(index: number, event: MouseEvent) {
+		event.stopPropagation();
+		constellations = constellations.filter((_, i) => i !== index);
+		if (constellations.length === 0) {
+			handleReset();
+			return;
+		}
+		// Adjust focusedIndex
+		if (focusedIndex >= constellations.length) {
+			focusedIndex = constellations.length - 1;
+		} else if (focusedIndex > index) {
+			focusedIndex--;
+		}
+		history.replaceState(null, '', '#' + encodeAllToHash(constellations));
+		const allResults = constellations.map(c => c.result);
+		starField?.refocusConstellation(allResults, focusedIndex);
 	}
 
 	function handleAddAnother() {
@@ -490,6 +521,8 @@
 	{#if constellations.length > 0}
 		<div class="result-overlay" class:dimmed={showInput} role="region" aria-label="Your constellations">
 			{#each constellations as entry, i}
+				<div class="constellation-card" class:focused={i === focusedIndex && !showInput}>
+				<div class="delete-spacer" aria-hidden="true"></div>
 				<button
 					class="constellation-entry"
 					class:focused={i === focusedIndex && !showInput}
@@ -503,6 +536,22 @@
 						<span class="star-count">{entry.starCount} stars</span>
 					</div>
 				</button>
+				{#if !showInput && !isMatching}
+					<button
+						class="delete-btn"
+						onclick={(e) => handleDeleteConstellation(i, e)}
+						aria-label="Delete {entry.name}"
+					>
+						<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+							<polyline points="3 6 5 6 21 6" />
+							<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+							<path d="M10 11v6" />
+							<path d="M14 11v6" />
+							<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+						</svg>
+					</button>
+				{/if}
+			</div>
 			{/each}
 			{#if !showInput}
 				<div class="result-actions" role="toolbar" aria-label="Constellation actions">
@@ -654,6 +703,12 @@
 		pointer-events: none;
 	}
 
+	.constellation-card {
+		position: relative;
+		display: flex;
+		align-items: center;
+	}
+
 	.constellation-entry {
 		display: flex;
 		flex-direction: column;
@@ -679,6 +734,43 @@
 
 	.constellation-entry.focused {
 		opacity: 1;
+	}
+
+	.delete-spacer {
+		width: 26px;
+		flex-shrink: 0;
+	}
+
+	.delete-btn {
+		background: rgba(255, 255, 255, 0.06);
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		color: rgba(255, 255, 255, 0.35);
+		cursor: pointer;
+		padding: 5px;
+		border-radius: 4px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: color 0.2s, background 0.2s, border-color 0.2s, opacity 0.2s;
+		opacity: 0;
+		margin-left: 4px;
+		flex-shrink: 0;
+	}
+
+	.constellation-card:hover .delete-btn,
+	.delete-btn:focus-visible {
+		opacity: 1;
+	}
+
+	.delete-btn:hover {
+		color: rgba(255, 100, 100, 0.85);
+		background: rgba(255, 100, 100, 0.1);
+		border-color: rgba(255, 100, 100, 0.25);
+	}
+
+	.delete-btn:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 2px rgba(255, 100, 100, 0.4);
 	}
 
 	.constellation-name {
