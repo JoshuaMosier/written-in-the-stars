@@ -411,6 +411,7 @@
 	let brightness = $state(1.0);
 	let monoColor = $state(false);
 	let settingsOpen = $state(false);
+	let aboutOpen = $state(false);
 
 	function handleToggleAutoRotate() {
 		autoRotate = !autoRotate;
@@ -524,14 +525,60 @@
 	let selectedConstellation = $state<typeof CONSTELLATIONS[0] | null>(null);
 	let searchQuery = $state('');
 	let searchOpen = $state(false);
+	let searchHighlight = $state(0);
 	let searchInputEl: HTMLInputElement;
 	let starClickedThisTick = false;
+
+	// Selection history for back navigation
+	interface SelectionState { star: Star | null; constellation: typeof CONSTELLATIONS[0] | null; }
+	let selectionHistory = $state<SelectionState[]>([]);
+
+	function pushSelection() {
+		if (selectedStar || selectedConstellation) {
+			selectionHistory = [...selectionHistory, { star: selectedStar, constellation: selectedConstellation }];
+		}
+	}
+
+	function popSelection() {
+		if (selectionHistory.length === 0) return;
+		const prev = selectionHistory[selectionHistory.length - 1];
+		selectionHistory = selectionHistory.slice(0, -1);
+		selectedStar = prev.star;
+		selectedConstellation = prev.constellation;
+		starField?.clearStarHighlight();
+		if (prev.star) {
+			starField?.clearTempConstellation();
+			starField?.highlightStar(prev.star);
+			starField?.panToRaDec(prev.star.ra, prev.star.dec, 30);
+		} else if (prev.constellation) {
+			// Constellation lines may already be drawn; redraw to be safe
+			starField?.drawTempConstellation(prev.constellation.name);
+			starField?.panToIAUConstellation(prev.constellation.name);
+		}
+	}
 
 	// Build search index of named stars
 	const namedStars = stars.filter(s => s.name);
 	// Build HIP lookup for constellation star resolution
 	const starByHip = new Map<number, Star>();
 	for (const s of stars) if (s.hip) starByHip.set(s.hip, s);
+
+	// Build HIP → constellation(s) reverse lookup
+	const hipToConstellations = new Map<number, typeof CONSTELLATIONS[number][]>();
+	for (const c of CONSTELLATIONS) {
+		for (const [a, b] of c.lines) {
+			for (const hip of [a, b]) {
+				const list = hipToConstellations.get(hip);
+				if (list) { if (!list.includes(c)) list.push(c); }
+				else hipToConstellations.set(hip, [c]);
+			}
+		}
+	}
+
+	function getStarConstellations(star: Star): typeof CONSTELLATIONS[number][] {
+		if (!star.hip) return [];
+		return hipToConstellations.get(star.hip) || [];
+	}
 
 	interface SearchResult {
 		type: 'star' | 'constellation';
@@ -658,6 +705,7 @@
 		if ((selectedStar || selectedConstellation) && !starClickedThisTick && !target.closest('.star-panel') && !target.closest('.star-search-container')) {
 			selectedStar = null;
 			selectedConstellation = null;
+			selectionHistory = [];
 			starField?.clearStarHighlight();
 			starField?.clearTempConstellation();
 		}
@@ -672,93 +720,171 @@
 <div class="app" role="application" aria-label="Written in the Stars - constellation creator" onclick={handleClickOutsideSettings}>
 	<StarField {stars} bind:this={starField} onReady={handleStarFieldReady} onVertexDrag={handleVertexDrag} onStarClick={handleStarClick} />
 
-	<div class="settings-container">
-		<button
-			class="settings-hamburger"
-			class:open={settingsOpen}
-			onclick={() => settingsOpen = !settingsOpen}
-			aria-label={settingsOpen ? 'Close settings' : 'Open settings'}
-			aria-expanded={settingsOpen}
-		>
-			<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-				{#if settingsOpen}
-					<line x1="6" y1="6" x2="18" y2="18" />
-					<line x1="18" y1="6" x2="6" y2="18" />
-				{:else}
-					<line x1="4" y1="7" x2="20" y2="7" />
-					<line x1="4" y1="12" x2="20" y2="12" />
-					<line x1="4" y1="17" x2="20" y2="17" />
-				{/if}
-			</svg>
-		</button>
+	<!-- Top-left toolbar: settings, info, search -->
+	<div class="top-bar">
+		<div class="top-bar-buttons">
+			<div class="settings-container">
+				<button
+					class="top-bar-btn"
+					class:open={settingsOpen}
+					onclick={() => settingsOpen = !settingsOpen}
+					aria-label={settingsOpen ? 'Close settings' : 'Open settings'}
+					aria-expanded={settingsOpen}
+				>
+					<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+						{#if settingsOpen}
+							<line x1="6" y1="6" x2="18" y2="18" />
+							<line x1="18" y1="6" x2="6" y2="18" />
+						{:else}
+							<line x1="4" y1="7" x2="20" y2="7" />
+							<line x1="4" y1="12" x2="20" y2="12" />
+							<line x1="4" y1="17" x2="20" y2="17" />
+						{/if}
+					</svg>
+				</button>
 
-		{#if settingsOpen}
-			<div class="settings-panel" role="menu">
-				<button class="settings-item" class:active={autoRotate} onclick={handleToggleAutoRotate} role="menuitemcheckbox" aria-checked={autoRotate}>
-					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-						<path d="M21 12a9 9 0 1 1-3-6.7" />
-						<polyline points="21 3 21 9 15 9" />
+				{#if settingsOpen}
+					<div class="settings-panel" role="menu">
+						<button class="settings-item" class:active={autoRotate} onclick={handleToggleAutoRotate} role="menuitemcheckbox" aria-checked={autoRotate}>
+							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+								<path d="M21 12a9 9 0 1 1-3-6.7" />
+								<polyline points="21 3 21 9 15 9" />
+							</svg>
+							<span>Auto-rotate</span>
+						</button>
+						<button class="settings-item" class:active={iauOverlay} onclick={handleToggleIAU} role="menuitemcheckbox" aria-checked={iauOverlay}>
+							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+								<circle cx="5" cy="5" r="1.5" fill="currentColor" stroke="none"/>
+								<circle cx="19" cy="4" r="1.5" fill="currentColor" stroke="none"/>
+								<circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+								<line x1="5" y1="5" x2="12" y2="12" />
+								<line x1="19" y1="4" x2="12" y2="12" />
+							</svg>
+							<span>Constellations</span>
+						</button>
+						<button class="settings-item" class:active={starLabels} onclick={handleToggleStarLabels} role="menuitemcheckbox" aria-checked={starLabels}>
+							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+								<polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
+							</svg>
+							<span>Star names</span>
+						</button>
+						<button class="settings-item" class:active={coordGrid} onclick={handleToggleCoordGrid} role="menuitemcheckbox" aria-checked={coordGrid}>
+							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+								<circle cx="12" cy="12" r="9" />
+								<line x1="12" y1="3" x2="12" y2="21" />
+								<line x1="3" y1="12" x2="21" y2="12" />
+								<ellipse cx="12" cy="12" rx="4" ry="9" />
+							</svg>
+							<span>Coordinates</span>
+						</button>
+						<button class="settings-item" class:active={shootingStars} onclick={handleToggleShootingStars} role="menuitemcheckbox" aria-checked={shootingStars}>
+							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+								<line x1="4" y1="20" x2="18" y2="6" />
+								<polyline points="18 14 18 6 10 6" />
+							</svg>
+							<span>Shooting stars</span>
+						</button>
+						<button class="settings-item" class:active={!monoColor} onclick={handleToggleMonoColor} role="menuitemcheckbox" aria-checked={!monoColor}>
+							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+								<circle cx="12" cy="12" r="9" />
+								<circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" />
+							</svg>
+							<span>Star color</span>
+						</button>
+						<div class="settings-item slider-row">
+							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+								<circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
+								<circle cx="12" cy="12" r="6" />
+								<circle cx="12" cy="12" r="9" opacity="0.4" />
+							</svg>
+							<label for="mag-slider">Brightness</label>
+							<input
+								id="mag-slider"
+								type="range"
+								min="0.2"
+								max="2.0"
+								step="0.1"
+								value={brightness}
+								oninput={handleBrightnessChange}
+							/>
+						</div>
+					</div>
+				{/if}
+			</div>
+			<button
+				class="top-bar-btn"
+				onclick={() => aboutOpen = !aboutOpen}
+				aria-label="About this site"
+			>
+				<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+					<circle cx="12" cy="12" r="9" />
+					<line x1="12" y1="11" x2="12" y2="16" />
+					<circle cx="12" cy="8" r="0.5" fill="currentColor" stroke="none" />
+				</svg>
+			</button>
+		</div>
+
+		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<div class="star-search-container" onclick={(e) => e.stopPropagation()}>
+		<div class="star-search-input-wrap">
+			<svg class="star-search-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+				<circle cx="11" cy="11" r="7" />
+				<line x1="16.5" y1="16.5" x2="21" y2="21" />
+			</svg>
+			<input
+				class="star-search-input"
+				type="text"
+				role="combobox"
+				aria-expanded={searchOpen && !!searchQuery.trim()}
+				aria-autocomplete="list"
+				bind:value={searchQuery}
+				bind:this={searchInputEl}
+				onfocus={() => searchOpen = true}
+				oninput={() => { searchOpen = true; searchHighlight = 0; }}
+				onkeydown={(e) => {
+					const results = getSearchResults(searchQuery);
+					if (e.key === 'ArrowDown') { e.preventDefault(); searchHighlight = Math.min(searchHighlight + 1, results.length - 1); }
+					else if (e.key === 'ArrowUp') { e.preventDefault(); searchHighlight = Math.max(searchHighlight - 1, 0); }
+					else if (e.key === 'Enter' && results.length > 0) { handleSearchSelect(results[searchHighlight]); searchInputEl?.blur(); }
+					else if (e.key === 'Escape') { searchOpen = false; searchInputEl?.blur(); }
+				}}
+				placeholder="Search stars & constellations..."
+				autocomplete="off"
+			/>
+			{#if searchQuery}
+				<button class="star-search-clear" onclick={() => { searchQuery = ''; searchOpen = false; }} aria-label="Clear search">
+					<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+						<line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
 					</svg>
-					<span>Auto-rotate</span>
 				</button>
-				<button class="settings-item" class:active={iauOverlay} onclick={handleToggleIAU} role="menuitemcheckbox" aria-checked={iauOverlay}>
-					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-						<circle cx="5" cy="5" r="1.5" fill="currentColor" stroke="none"/>
-						<circle cx="19" cy="4" r="1.5" fill="currentColor" stroke="none"/>
-						<circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
-						<line x1="5" y1="5" x2="12" y2="12" />
-						<line x1="19" y1="4" x2="12" y2="12" />
-					</svg>
-					<span>Constellations</span>
-				</button>
-				<button class="settings-item" class:active={starLabels} onclick={handleToggleStarLabels} role="menuitemcheckbox" aria-checked={starLabels}>
-					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-						<polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
-					</svg>
-					<span>Star names</span>
-				</button>
-				<button class="settings-item" class:active={coordGrid} onclick={handleToggleCoordGrid} role="menuitemcheckbox" aria-checked={coordGrid}>
-					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-						<circle cx="12" cy="12" r="9" />
-						<line x1="12" y1="3" x2="12" y2="21" />
-						<line x1="3" y1="12" x2="21" y2="12" />
-						<ellipse cx="12" cy="12" rx="4" ry="9" />
-					</svg>
-					<span>Coordinates</span>
-				</button>
-				<button class="settings-item" class:active={shootingStars} onclick={handleToggleShootingStars} role="menuitemcheckbox" aria-checked={shootingStars}>
-					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-						<line x1="4" y1="20" x2="18" y2="6" />
-						<polyline points="18 14 18 6 10 6" />
-					</svg>
-					<span>Shooting stars</span>
-				</button>
-				<button class="settings-item" class:active={!monoColor} onclick={handleToggleMonoColor} role="menuitemcheckbox" aria-checked={!monoColor}>
-					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-						<circle cx="12" cy="12" r="9" />
-						<circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" />
-					</svg>
-					<span>Star color</span>
-				</button>
-				<div class="settings-item slider-row">
-					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-						<circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
-						<circle cx="12" cy="12" r="6" />
-						<circle cx="12" cy="12" r="9" opacity="0.4" />
-					</svg>
-					<label for="mag-slider">Brightness</label>
-					<input
-						id="mag-slider"
-						type="range"
-						min="0.2"
-						max="2.0"
-						step="0.1"
-						value={brightness}
-						oninput={handleBrightnessChange}
-					/>
-				</div>
+			{/if}
+		</div>
+		{#if searchOpen && searchQuery.trim()}
+			{@const results = getSearchResults(searchQuery)}
+			<div class="star-search-dropdown" role="listbox">
+				{#if results.length === 0}
+					<div class="star-search-empty">No results</div>
+				{:else}
+					{#each results as result, i}
+						<button
+							class="star-search-result"
+							class:star-search-result-active={i === searchHighlight}
+							role="option"
+							aria-selected={i === searchHighlight}
+							onclick={() => handleSearchSelect(result)}
+							onpointerenter={() => { searchHighlight = i; }}
+						>
+							<span class="star-search-result-type">{result.type === 'star' ? 'Star' : 'IAU'}</span>
+							<span class="star-search-result-name">{result.name}</span>
+							{#if result.type === 'star' && result.star}
+								<span class="star-search-result-mag">mag {result.star.mag.toFixed(1)}</span>
+							{/if}
+						</button>
+					{/each}
+				{/if}
 			</div>
 		{/if}
+	</div>
 	</div>
 
 	{#if showInput}
@@ -769,7 +895,6 @@
 				type="text"
 				bind:value={inputText}
 				onkeydown={handleKeydown}
-
 				placeholder="Search the stars..."
 				maxlength={30}
 				disabled={isMatching}
@@ -790,61 +915,23 @@
 		<div class="error-toast" role="alert">{errorMessage}</div>
 	{/if}
 
-	<!-- Star search bar (top left) -->
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div class="star-search-container" onclick={(e) => e.stopPropagation()}>
-		<div class="star-search-input-wrap">
-			<svg class="star-search-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-				<circle cx="11" cy="11" r="7" />
-				<line x1="16.5" y1="16.5" x2="21" y2="21" />
-			</svg>
-			<input
-				class="star-search-input"
-				type="text"
-				bind:value={searchQuery}
-				bind:this={searchInputEl}
-				onfocus={() => searchOpen = true}
-				oninput={() => searchOpen = true}
-				placeholder="Search stars & constellations..."
-				autocomplete="off"
-			/>
-			{#if searchQuery}
-				<button class="star-search-clear" onclick={() => { searchQuery = ''; searchOpen = false; }} aria-label="Clear search">
-					<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-						<line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
-					</svg>
-				</button>
-			{/if}
-		</div>
-		{#if searchOpen && searchQuery.trim()}
-			{@const results = getSearchResults(searchQuery)}
-			<div class="star-search-dropdown">
-				{#if results.length === 0}
-					<div class="star-search-empty">No results</div>
-				{:else}
-					{#each results as result}
-						<button class="star-search-result" onclick={() => handleSearchSelect(result)}>
-							<span class="star-search-result-type">{result.type === 'star' ? 'Star' : 'IAU'}</span>
-							<span class="star-search-result-name">{result.name}</span>
-							{#if result.type === 'star' && result.star}
-								<span class="star-search-result-mag">mag {result.star.mag.toFixed(1)}</span>
-							{/if}
-						</button>
-					{/each}
-				{/if}
-			</div>
-		{/if}
-	</div>
-
 	<!-- Left-side info panel -->
 	{#if selectedStar || selectedConstellation}
 		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 		<div class="star-panel" onclick={(e) => e.stopPropagation()}>
-			<button class="star-panel-close" onclick={() => { selectedStar = null; selectedConstellation = null; starField?.clearStarHighlight(); starField?.clearTempConstellation(); }} aria-label="Close info panel">
+			<button class="star-panel-close" onclick={() => { selectedStar = null; selectedConstellation = null; selectionHistory = []; starField?.clearStarHighlight(); starField?.clearTempConstellation(); }} aria-label="Close info panel">
 				<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 					<line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
 				</svg>
 			</button>
+			{#if selectionHistory.length > 0}
+				<button class="star-panel-back" onclick={popSelection} aria-label="Go back">
+					<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+						<polyline points="15 18 9 12 15 6" />
+					</svg>
+					{selectionHistory[selectionHistory.length - 1].constellation?.name || selectionHistory[selectionHistory.length - 1].star?.name || 'Back'}
+				</button>
+			{/if}
 
 			{#if selectedStar}
 				<div class="star-panel-name">{selectedStar.name || `HIP ${selectedStar.hip || selectedStar.id}`}</div>
@@ -877,6 +964,15 @@
 						{selectedStar.name ? 'Wikipedia' : 'SIMBAD'} &rarr;
 					</a>
 				{/if}
+				{@const starConsts = getStarConstellations(selectedStar)}
+				{#if starConsts.length > 0}
+					<div class="star-panel-constellations">
+						<span class="star-panel-label">In</span>
+						{#each starConsts as c, i}
+							<button class="star-panel-constellation-link" onclick={() => { pushSelection(); selectedConstellation = c; selectedStar = null; starField?.clearStarHighlight(); starField?.drawTempConstellation(c.name); starField?.panToIAUConstellation(c.name); }}>{c.name}</button>{#if i < starConsts.length - 1},&nbsp;{/if}
+						{/each}
+					</div>
+				{/if}
 			{:else if selectedConstellation}
 				{@const cStars = getConstellationStars(selectedConstellation)}
 				<div class="star-panel-name">{selectedConstellation.name}</div>
@@ -900,12 +996,49 @@
 				<div class="star-panel-star-list">
 					<div class="star-panel-list-title">Notable stars</div>
 					{#each cStars.filter((s: Star) => s.name).slice(0, 8) as s}
-						<button class="star-panel-star-btn" onclick={() => { selectedStar = s; selectedConstellation = null; starField?.clearTempConstellation(); starField?.highlightStar(s); starField?.panToRaDec(s.ra, s.dec, 30); }}>
+						<button class="star-panel-star-btn" onclick={() => { pushSelection(); selectedStar = s; selectedConstellation = null; starField?.highlightStar(s); starField?.panToRaDec(s.ra, s.dec, 30); }}>
 							{s.name} <span class="star-panel-star-mag">({s.mag.toFixed(1)})</span>
 						</button>
 					{/each}
 				</div>
 			{/if}
+		</div>
+	{/if}
+
+	<!-- About modal -->
+	{#if aboutOpen}
+		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<div class="about-backdrop" onclick={() => aboutOpen = false}>
+			<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+			<div class="about-modal" onclick={(e) => e.stopPropagation()}>
+				<button class="about-close" onclick={() => aboutOpen = false} aria-label="Close">
+					<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+						<line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
+					</svg>
+				</button>
+
+				<h2 class="about-title">Starspelled</h2>
+				<p class="about-text">
+					Type anything and it becomes a constellation made from real stars. There are ~9,000 stars in here from an actual star catalog, so your constellations are mapped to real positions in the sky.
+				</p>
+
+				<div class="about-section">
+					<h3 class="about-heading">How to use</h3>
+					<ul class="about-list">
+						<li>Type any word or phrase to create your constellation</li>
+						<li>Drag vertices to snap them to nearby stars</li>
+						<li>Search for real stars and IAU constellations</li>
+						<li>Click any star to see its details</li>
+						<li>Share your creation via the generated link</li>
+					</ul>
+				</div>
+
+				<div class="about-footer">
+					<span>Made by <a href="https://x.com/joshrmosier" target="_blank" rel="noopener noreferrer">Josh Mosier</a></span>
+					<span class="about-divider">&middot;</span>
+					<span>Inspired by <a href="https://neal.fun/constellation-draw/" target="_blank" rel="noopener noreferrer">neal.fun</a></span>
+				</div>
+			</div>
 		</div>
 	{/if}
 
@@ -1314,18 +1447,28 @@
 		width: auto;
 	}
 
-	.settings-container {
+	.top-bar {
 		position: absolute;
 		top: 16px;
-		right: 16px;
-		z-index: 10;
+		left: 16px;
+		z-index: 15;
 		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		gap: 6px;
+		align-items: center;
+		gap: 8px;
 	}
 
-	.settings-hamburger {
+	.top-bar-buttons {
+		display: flex;
+		gap: 6px;
+		flex-shrink: 0;
+	}
+
+	.settings-container {
+		position: relative;
+		z-index: 10;
+	}
+
+	.top-bar-btn {
 		background: rgba(255, 255, 255, 0.06);
 		border: 1px solid rgba(255, 255, 255, 0.12);
 		color: rgba(255, 255, 255, 0.4);
@@ -1339,24 +1482,27 @@
 		backdrop-filter: blur(4px);
 	}
 
-	.settings-hamburger:hover {
+	.top-bar-btn:hover {
 		background: rgba(255, 255, 255, 0.1);
 		color: rgba(255, 255, 255, 0.7);
 		border-color: rgba(255, 255, 255, 0.25);
 	}
 
-	.settings-hamburger.open {
+	.top-bar-btn.open {
 		background: rgba(255, 255, 255, 0.1);
 		color: rgba(255, 255, 255, 0.7);
 		border-color: rgba(255, 255, 255, 0.25);
 	}
 
-	.settings-hamburger:focus-visible {
+	.top-bar-btn:focus-visible {
 		outline: none;
 		box-shadow: 0 0 0 2px rgba(170, 200, 255, 0.5);
 	}
 
 	.settings-panel {
+		position: absolute;
+		top: calc(100% + 6px);
+		left: 0;
 		background: rgba(0, 0, 0, 0.5);
 		backdrop-filter: blur(12px);
 		border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1366,6 +1512,7 @@
 		flex-direction: column;
 		gap: 2px;
 		animation: panel-in 0.15s ease-out;
+		white-space: nowrap;
 	}
 
 	@keyframes panel-in {
@@ -1484,9 +1631,9 @@
 			bottom: 32px;
 		}
 
-		.settings-container {
+		.top-bar {
 			top: env(safe-area-inset-top, 16px);
-			right: env(safe-area-inset-right, 16px);
+			left: env(safe-area-inset-left, 16px);
 		}
 	}
 
@@ -1506,11 +1653,9 @@
 		}
 	}
 
-	/* Star search bar (top left) */
+	/* Star search bar (inside top-bar) */
 	.star-search-container {
-		position: absolute;
-		top: 16px;
-		left: 16px;
+		position: relative;
 		z-index: 15;
 		width: 260px;
 	}
@@ -1524,23 +1669,26 @@
 	.star-search-icon {
 		position: absolute;
 		left: 10px;
+		z-index: 1;
 		color: rgba(255, 255, 255, 0.3);
 		pointer-events: none;
 	}
 
 	.star-search-input {
 		width: 100%;
-		background: rgba(0, 0, 0, 0.35);
-		backdrop-filter: blur(8px);
-		border: 1px solid rgba(255, 255, 255, 0.1);
+		height: 36px;
+		box-sizing: border-box;
+		background: rgba(255, 255, 255, 0.06);
+		backdrop-filter: blur(4px);
+		border: 1px solid rgba(255, 255, 255, 0.12);
 		border-radius: 8px;
 		color: #fff;
 		font-size: 13px;
 		font-family: inherit;
-		padding: 8px 30px 8px 30px;
+		padding: 0 28px 0 30px;
 		letter-spacing: 0.5px;
 		outline: none;
-		transition: border-color 0.2s;
+		transition: border-color 0.2s, background 0.2s;
 	}
 
 	.star-search-input::placeholder {
@@ -1607,8 +1755,14 @@
 		transition: background 0.1s;
 	}
 
-	.star-search-result:hover {
+	.star-search-result:hover,
+	.star-search-result-active {
 		background: rgba(255, 255, 255, 0.06);
+	}
+
+	.star-search-result-active {
+		outline: 1px solid rgba(255, 215, 0, 0.3);
+		outline-offset: -1px;
 	}
 
 	.star-search-result:first-child {
@@ -1649,7 +1803,7 @@
 	/* Left-side info panel */
 	.star-panel {
 		position: absolute;
-		top: 60px;
+		top: 56px;
 		left: 16px;
 		z-index: 14;
 		width: 260px;
@@ -1679,6 +1833,26 @@
 
 	.star-panel-close:hover {
 		color: rgba(255, 255, 255, 0.7);
+	}
+
+	.star-panel-back {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		background: none;
+		border: none;
+		color: rgba(170, 200, 255, 0.5);
+		font-family: inherit;
+		font-size: 11px;
+		letter-spacing: 0.5px;
+		cursor: pointer;
+		padding: 0;
+		margin-bottom: 8px;
+		transition: color 0.15s;
+	}
+
+	.star-panel-back:hover {
+		color: rgba(170, 200, 255, 0.9);
 	}
 
 	.star-panel-name {
@@ -1740,6 +1914,30 @@
 		color: rgba(170, 200, 255, 1);
 	}
 
+	.star-panel-constellations {
+		display: flex;
+		align-items: baseline;
+		flex-wrap: wrap;
+		gap: 2px;
+		margin-top: 10px;
+	}
+
+	.star-panel-constellation-link {
+		background: none;
+		border: none;
+		color: rgba(170, 200, 255, 0.7);
+		font-family: inherit;
+		font-size: 12px;
+		letter-spacing: 0.5px;
+		cursor: pointer;
+		padding: 0;
+		transition: color 0.15s;
+	}
+
+	.star-panel-constellation-link:hover {
+		color: rgba(170, 200, 255, 1);
+	}
+
 	.star-panel-star-list {
 		margin-top: 12px;
 		border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -1779,16 +1977,133 @@
 
 	/* Mobile: collapse search and panel */
 	@media (max-width: 480px) {
+		.top-bar {
+			top: 12px;
+			left: 12px;
+			gap: 6px;
+		}
+
 		.star-search-container {
 			width: 200px;
-			top: env(safe-area-inset-top, 12px);
-			left: 12px;
 		}
 
 		.star-panel {
 			width: 200px;
 			left: 12px;
-			top: 52px;
+			top: 48px;
+		}
+	}
+
+	/* About modal */
+	.about-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 100;
+		background: rgba(0, 0, 0, 0.5);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.about-modal {
+		position: relative;
+		background: rgba(6, 8, 16, 0.92);
+		border: 1px solid rgba(255, 255, 255, 0.06);
+		border-radius: 4px;
+		padding: 28px 30px 24px;
+		max-width: 400px;
+		width: calc(100% - 40px);
+		color: rgba(255, 255, 255, 0.65);
+		font-size: 13px;
+		line-height: 1.65;
+	}
+
+	.about-close {
+		position: absolute;
+		top: 12px;
+		right: 12px;
+		background: none;
+		border: none;
+		color: rgba(255, 255, 255, 0.25);
+		cursor: pointer;
+		padding: 4px;
+		display: flex;
+	}
+
+	.about-close:hover {
+		color: rgba(255, 255, 255, 0.6);
+	}
+
+	.about-title {
+		font-size: 14px;
+		letter-spacing: 2px;
+		text-transform: uppercase;
+		color: rgba(255, 255, 255, 0.55);
+		margin: 0 0 16px;
+		font-weight: 400;
+	}
+
+	.about-text {
+		margin: 0 0 14px;
+	}
+
+	.about-section {
+		margin-top: 16px;
+		padding-top: 14px;
+		border-top: 1px solid rgba(255, 255, 255, 0.05);
+	}
+
+	.about-heading {
+		font-size: 11px;
+		letter-spacing: 1.5px;
+		text-transform: uppercase;
+		color: rgba(255, 255, 255, 0.35);
+		margin: 0 0 10px;
+		font-weight: 400;
+	}
+
+	.about-list {
+		margin: 0;
+		padding-left: 16px;
+		color: rgba(255, 255, 255, 0.55);
+	}
+
+	.about-list li {
+		margin-bottom: 3px;
+	}
+
+	.about-list li::marker {
+		color: rgba(255, 255, 255, 0.15);
+	}
+
+	.about-footer {
+		margin-top: 18px;
+		padding-top: 14px;
+		border-top: 1px solid rgba(255, 255, 255, 0.05);
+		font-size: 12px;
+		color: rgba(255, 255, 255, 0.4);
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		flex-wrap: wrap;
+	}
+
+	.about-footer a {
+		color: rgba(255, 255, 255, 0.55);
+		text-decoration: none;
+	}
+
+	.about-footer a:hover {
+		color: rgba(255, 255, 255, 0.7);
+	}
+
+	.about-divider {
+		color: rgba(255, 255, 255, 0.1);
+	}
+
+	@media (max-width: 480px) {
+		.about-modal {
+			padding: 22px 20px 18px;
 		}
 	}
 
