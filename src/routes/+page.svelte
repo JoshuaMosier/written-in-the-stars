@@ -162,6 +162,7 @@
 		clearMatchTimeout();
 		matchTimeoutId = setTimeout(() => {
 			if (!isMatching) return;
+			matchRequestId++; // invalidate the in-flight request
 			stopMatchingPhrases();
 			if (isRerolling) showInput = false;
 			isMatching = false;
@@ -313,6 +314,11 @@
 	}
 
 	function handleReset() {
+		matchRequestId++; // invalidate any in-flight request
+		clearMatchTimeout();
+		isMatching = false;
+		isRerolling = false;
+		stopMatchingPhrases();
 		constellations = [];
 		focusedIndex = -1;
 		rerollBlacklist = [];
@@ -475,22 +481,7 @@
 		}
 	}
 
-	// Global undo/redo listener — skip when focus is in an editable element
-	// so native input undo/redo still works
-	if (typeof window !== 'undefined') {
-		window.addEventListener('keydown', (e: KeyboardEvent) => {
-			const tag = (document.activeElement as HTMLElement)?.tagName;
-			if (tag === 'INPUT' || tag === 'TEXTAREA' || (document.activeElement as HTMLElement)?.isContentEditable) return;
-			if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-				e.preventDefault();
-				handleUndo();
-			}
-			if ((e.ctrlKey || e.metaKey) && ((e.key === 'z' && e.shiftKey) || e.key === 'y')) {
-				e.preventDefault();
-				handleRedo();
-			}
-		});
-	}
+
 
 	// --- Star search + info panel ---
 	let selectedStar = $state<Star | null>(null);
@@ -715,6 +706,18 @@
 			if (showInput) {
 				const el = document.getElementById('constellation-input') as HTMLInputElement | null;
 				el?.focus();
+			}
+		}
+
+		// Undo/redo — skip when focus is in an editable element
+		if (!isInput && !(e.target as HTMLElement)?.isContentEditable) {
+			if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+				e.preventDefault();
+				handleUndo();
+			}
+			if ((e.ctrlKey || e.metaKey) && ((e.key === 'z' && e.shiftKey) || e.key === 'y')) {
+				e.preventDefault();
+				handleRedo();
 			}
 		}
 	}
