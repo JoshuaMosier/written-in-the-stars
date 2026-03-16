@@ -1964,10 +1964,10 @@
 		testCam.position.set(0, 0, 0.0001);
 		testCam.up.copy(localNorth);
 		testCam.lookAt(centroidDir.clone().multiplyScalar(10));
-		const fitMargin = 0.9; // stars must land within ±90% of NDC
+		const fitMargin = 0.7; // stars must land within ±70% of NDC
 
 		// Allow higher max FOV on portrait viewports to fit wide constellations
-		const maxFov = cameraRef.aspect < 0.8 ? 110 : 80;
+		const maxFov = cameraRef.aspect < 0.8 ? 120 : 80;
 		let lo = 5, hi = maxFov + 10;
 		for (let i = 0; i < 16; i++) {
 			const mid = (lo + hi) / 2;
@@ -2637,6 +2637,11 @@
 		renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
 
 		// --- Pinch-to-zoom touch support ---
+		// Disable OrbitControls rotation during pinch and add a grace period
+		// so that a slightly staggered two-finger touch isn't read as a drag.
+		let isPinching = false;
+		let touchGraceTimer: ReturnType<typeof setTimeout> | null = null;
+
 		function getTouchDistance(t1: Touch, t2: Touch): number {
 			const dx = t1.clientX - t2.clientX;
 			const dy = t1.clientY - t2.clientY;
@@ -2644,14 +2649,25 @@
 		}
 
 		const onTouchStart = (e: TouchEvent) => {
+			if (e.touches.length === 1) {
+				// First finger down — pause OrbitControls briefly in case
+				// a second finger is about to land (staggered pinch).
+				controls.enableRotate = false;
+				touchGraceTimer = setTimeout(() => {
+					if (!isPinching) controls.enableRotate = true;
+				}, 120);
+			}
 			if (e.touches.length === 2) {
+				if (touchGraceTimer) { clearTimeout(touchGraceTimer); touchGraceTimer = null; }
+				isPinching = true;
+				controls.enableRotate = false;
 				pinchStartDist = getTouchDistance(e.touches[0], e.touches[1]);
 				pinchStartFov = camera.fov;
 			}
 		};
 
 		const onTouchMove = (e: TouchEvent) => {
-			if (e.touches.length === 2) {
+			if (e.touches.length === 2 && isPinching) {
 				e.preventDefault();
 				const currentDist = getTouchDistance(e.touches[0], e.touches[1]);
 				const scale = pinchStartDist / currentDist;
@@ -2661,8 +2677,15 @@
 			}
 		};
 
-		const onTouchEnd = (_e: TouchEvent) => {
-			pinchStartDist = 0;
+		const onTouchEnd = (e: TouchEvent) => {
+			if (e.touches.length < 2) {
+				isPinching = false;
+				pinchStartDist = 0;
+				// Re-enable rotation after all fingers lift
+				if (e.touches.length === 0) {
+					controls.enableRotate = true;
+				}
+			}
 		};
 
 		renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: true });
