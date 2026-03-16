@@ -34,7 +34,7 @@
 		mesh: THREE.Line;
 	}
 
-	const MAX_METEORS = 3;
+	const MAX_METEORS = 10;
 	const METEOR_TRAIL_POINTS = 20;
 	let activeMeteors: Meteor[] = [];
 	let meteorTimerId: ReturnType<typeof setTimeout> | null = null;
@@ -82,8 +82,8 @@
 		// Meteor properties — most are faint, occasional bright ones
 		const isBright = Math.random() < 0.2;
 		const brightness = isBright ? 0.6 + Math.random() * 0.4 : 0.15 + Math.random() * 0.25;
-		const speed = (0.8 + Math.random() * 1.5); // radians per second
-		const lifetime = 0.3 + Math.random() * 0.5; // 0.3-0.8 seconds
+		const speed = (0.27 + Math.random() * 0.5); // radians per second (3x slower)
+		const lifetime = 0.9 + Math.random() * 1.5; // 0.9-2.4 seconds (3x longer)
 		const trailLength = 0.03 + Math.random() * 0.04; // angular trail length
 
 		// Create trail geometry with vertex colors for fading
@@ -122,7 +122,7 @@
 
 	function scheduleMeteor() {
 		if (!meteorsEnabled) return;
-		const delay = 5000 + Math.random() * 10000; // 5-15 seconds
+		const delay = 200 + Math.random() * 400; // ~200-600ms
 		meteorTimerId = setTimeout(spawnMeteor, delay);
 	}
 
@@ -214,7 +214,6 @@
 	let rendererSize = new THREE.Vector2(1, 1);
 
 	// Touch support state
-	let isTouchDevice = false;
 	let pinchStartDist = 0;
 	let pinchStartFov = DEFAULT_FOV;
 
@@ -1311,7 +1310,6 @@
 		}
 
 		const onTouchStart = (e: TouchEvent) => {
-			isTouchDevice = true;
 			if (e.touches.length === 2) {
 				pinchStartDist = getTouchDistance(e.touches[0], e.touches[1]);
 				pinchStartFov = camera.fov;
@@ -1411,9 +1409,9 @@
 		let hoveredIdx = -1;
 		const projected = new THREE.Vector3();
 
-		const onMouseMove = (e: MouseEvent) => {
-			// Suppress hover tooltips on touch devices
-			if (isTouchDevice) return;
+		const onMouseMove = (e: PointerEvent) => {
+			// Suppress hover tooltips on touch/pen devices
+			if (e.pointerType !== 'mouse') return;
 
 			const rect = container.getBoundingClientRect();
 			const mx = e.clientX - rect.left;
@@ -1464,7 +1462,16 @@
 			}
 		};
 
-		renderer.domElement.addEventListener('mousemove', onMouseMove);
+		renderer.domElement.addEventListener('pointermove', onMouseMove);
+
+		const onPointerLeave = () => {
+			if (hoveredIdx >= 0) {
+				hoveredIdx = -1;
+				uniforms.uHoveredIndex.value = -1.0;
+				tooltip.style.opacity = '0';
+			}
+		};
+		renderer.domElement.addEventListener('pointerleave', onPointerLeave);
 
 		// Render loop
 		let animId: number;
@@ -1518,7 +1525,8 @@
 			stopMeteors();
 			window.removeEventListener('resize', onResize);
 			renderer.domElement.removeEventListener('wheel', onWheel);
-			renderer.domElement.removeEventListener('mousemove', onMouseMove);
+			renderer.domElement.removeEventListener('pointermove', onMouseMove);
+			renderer.domElement.removeEventListener('pointerleave', onPointerLeave);
 			renderer.domElement.removeEventListener('touchstart', onTouchStart);
 			renderer.domElement.removeEventListener('touchmove', onTouchMove);
 			renderer.domElement.removeEventListener('touchend', onTouchEnd);
