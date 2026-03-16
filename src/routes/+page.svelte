@@ -97,8 +97,10 @@
 
 	// --- Check URL hash on load ---
 	let pendingHashResults: { text: string; result: MatchResult }[] = [];
+	let hashWasPresent = false;
 
 	if (typeof window !== 'undefined' && window.location.hash.length > 1) {
+		hashWasPresent = true;
 		pendingHashResults = decodeHashToResults(window.location.hash.slice(1), starByIdx);
 	}
 
@@ -117,6 +119,11 @@
 				const allResults = constellations.map(c => c.result);
 				starField?.refocusConstellation(allResults, focusedIndex);
 			});
+		} else if (hashWasPresent) {
+			// Hash was in the URL but nothing decoded — show error and clean up URL
+			history.replaceState(null, '', window.location.pathname);
+			errorMessage = 'This shared link appears to be invalid or corrupted.';
+			setTimeout(() => (errorMessage = ''), 4000);
 		}
 	}
 
@@ -125,12 +132,35 @@
 	worker.postMessage({ type: 'init', payload: { stars } });
 
 	let errorMessage = $state('');
+	const MATCH_TIMEOUT_MS = 30_000;
+	let matchTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+	function clearMatchTimeout() {
+		if (matchTimeoutId !== null) {
+			clearTimeout(matchTimeoutId);
+			matchTimeoutId = null;
+		}
+	}
+
+	function startMatchTimeout() {
+		clearMatchTimeout();
+		matchTimeoutId = setTimeout(() => {
+			if (!isMatching) return;
+			stopMatchingPhrases();
+			if (isRerolling) showInput = false;
+			isMatching = false;
+			isRerolling = false;
+			errorMessage = 'Star matching timed out. Try a shorter word or try again.';
+			setTimeout(() => (errorMessage = ''), 4000);
+		}, MATCH_TIMEOUT_MS);
+	}
 
 	worker.onmessage = (e: MessageEvent) => {
 		const { type, payload } = e.data;
 		if (type === 'progress') {
 			matchProgress = payload as number;
 		} else if (type === 'result') {
+			clearMatchTimeout();
 			matchProgress = 1;
 			if (isRerolling) {
 				handleRerollResult(pendingText, payload as MatchResult);
@@ -138,6 +168,7 @@
 				showResult(pendingText, payload as MatchResult);
 			}
 		} else if (type === 'error') {
+			clearMatchTimeout();
 			if (isRerolling) showInput = false;
 			isMatching = false;
 			isRerolling = false;
@@ -147,6 +178,7 @@
 	};
 
 	worker.onerror = () => {
+		clearMatchTimeout();
 		stopMatchingPhrases();
 		if (isRerolling) showInput = false;
 		isMatching = false;
@@ -177,6 +209,7 @@
 		startMatchingPhrases();
 		pendingText = text;
 		const usedStarIndices = getUsedStarIndices();
+		startMatchTimeout();
 		worker.postMessage({ type: 'match', payload: { text, usedStarIndices } });
 	}
 
@@ -224,6 +257,7 @@
 
 		// Combine all active constellation stars + accumulated re-roll history
 		const usedStarIndices = [...getUsedStarIndices(), ...rerollBlacklist];
+		startMatchTimeout();
 		worker.postMessage({ type: 'match', payload: { text: targetEntry.text, usedStarIndices } });
 	}
 
