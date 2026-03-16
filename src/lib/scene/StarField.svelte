@@ -1020,6 +1020,15 @@
 			sceneRef.add(group);
 			iauOverlayGroup = group;
 
+			// If user constellations are already active, dim the IAU overlay
+			if (constellationGroups.length > 0) {
+				iauOverlayGroup.traverse((child) => {
+					if ((child as any).material && (child as any).material.opacity !== undefined) {
+						(child as any).material.opacity *= 0.12;
+					}
+				});
+			}
+
 			// Create HTML labels for each constellation
 			iauLabelData = [];
 			iauOverlayLabels = [];
@@ -1483,6 +1492,21 @@
 		};
 		window.addEventListener('resize', onResize);
 
+		// Handle WebGL context loss
+		const onContextLost = (e: Event) => {
+			e.preventDefault();
+			cancelAnimationFrame(animId);
+			stopAmbientCycle();
+			stopMeteors();
+		};
+		const onContextRestored = () => {
+			render();
+			startAmbientCycle();
+			scheduleMeteor();
+		};
+		renderer.domElement.addEventListener('webglcontextlost', onContextLost);
+		renderer.domElement.addEventListener('webglcontextrestored', onContextRestored);
+
 		onReady();
 
 		// Start ambient constellation cycling
@@ -1499,6 +1523,8 @@
 			renderer.domElement.removeEventListener('touchmove', onTouchMove);
 			renderer.domElement.removeEventListener('touchend', onTouchEnd);
 			renderer.domElement.removeEventListener('gesturestart', onGestureStart);
+			renderer.domElement.removeEventListener('webglcontextlost', onContextLost);
+			renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored);
 			renderer.dispose();
 			if (renderer.domElement.parentNode) {
 				renderer.domElement.parentNode.removeChild(renderer.domElement);
@@ -1507,9 +1533,9 @@
 	});
 </script>
 
-<div bind:this={container} class="star-field"></div>
-<div bind:this={labelContainer} class="ambient-labels"></div>
-<div bind:this={tooltip} class="star-tooltip"></div>
+<div bind:this={container} class="star-field" role="img" aria-label="Interactive 3D star field. Drag to rotate, scroll to zoom."></div>
+<div bind:this={labelContainer} class="ambient-labels" aria-hidden="true"></div>
+<div bind:this={tooltip} class="star-tooltip" role="tooltip" aria-hidden="true"></div>
 
 <style>
 	.star-field {
