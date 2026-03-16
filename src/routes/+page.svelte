@@ -356,6 +356,9 @@
 	let copied = $state(false);
 	let iauOverlay = $state(false);
 	let autoRotate = $state(true);
+	let starLabels = $state(false);
+	let coordGrid = $state(false);
+	let settingsOpen = $state(false);
 
 	function handleToggleAutoRotate() {
 		autoRotate = !autoRotate;
@@ -365,6 +368,16 @@
 	function handleToggleIAU() {
 		iauOverlay = !iauOverlay;
 		starField?.toggleIAUOverlay(iauOverlay);
+	}
+
+	function handleToggleStarLabels() {
+		starLabels = !starLabels;
+		starField?.toggleStarLabels(starLabels);
+	}
+
+	function handleToggleCoordGrid() {
+		coordGrid = !coordGrid;
+		starField?.toggleCoordinateGrid(coordGrid);
 	}
 
 	async function handleShare() {
@@ -405,46 +418,80 @@
 		}
 	}
 
+	function handleClickOutsideSettings(e: MouseEvent) {
+		if (!settingsOpen) return;
+		const target = e.target as HTMLElement;
+		if (!target.closest('.settings-container')) {
+			settingsOpen = false;
+		}
+	}
+
 	function autoFocus(node: HTMLInputElement) {
 		requestAnimationFrame(() => node.focus());
 	}
 </script>
 
-<div class="app" role="application" aria-label="Written in the Stars - constellation creator">
+<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
+<div class="app" role="application" aria-label="Written in the Stars - constellation creator" onclick={handleClickOutsideSettings}>
 	<StarField {stars} bind:this={starField} onReady={handleStarFieldReady} />
 
-	<button
-		class="iau-toggle"
-		class:active={iauOverlay}
-		onclick={handleToggleIAU}
-		aria-label={iauOverlay ? 'Hide IAU constellations' : 'Show IAU constellations'}
-		aria-pressed={iauOverlay}
-	>
-		<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-			<circle cx="5" cy="5" r="1.5" fill="currentColor" stroke="none"/>
-			<circle cx="19" cy="4" r="1.5" fill="currentColor" stroke="none"/>
-			<circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
-			<circle cx="4" cy="19" r="1.5" fill="currentColor" stroke="none"/>
-			<circle cx="20" cy="18" r="1.5" fill="currentColor" stroke="none"/>
-			<line x1="5" y1="5" x2="12" y2="12" />
-			<line x1="19" y1="4" x2="12" y2="12" />
-			<line x1="12" y1="12" x2="4" y2="19" />
-			<line x1="12" y1="12" x2="20" y2="18" />
-		</svg>
-	</button>
+	<div class="settings-container">
+		<button
+			class="settings-hamburger"
+			class:open={settingsOpen}
+			onclick={() => settingsOpen = !settingsOpen}
+			aria-label={settingsOpen ? 'Close settings' : 'Open settings'}
+			aria-expanded={settingsOpen}
+		>
+			<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+				{#if settingsOpen}
+					<line x1="6" y1="6" x2="18" y2="18" />
+					<line x1="18" y1="6" x2="6" y2="18" />
+				{:else}
+					<line x1="4" y1="7" x2="20" y2="7" />
+					<line x1="4" y1="12" x2="20" y2="12" />
+					<line x1="4" y1="17" x2="20" y2="17" />
+				{/if}
+			</svg>
+		</button>
 
-	<button
-		class="iau-toggle rotate-toggle"
-		class:active={autoRotate}
-		onclick={handleToggleAutoRotate}
-		aria-label={autoRotate ? 'Stop auto-rotate' : 'Start auto-rotate'}
-		aria-pressed={autoRotate}
-	>
-		<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-			<path d="M21 12a9 9 0 1 1-3-6.7" />
-			<polyline points="21 3 21 9 15 9" />
-		</svg>
-	</button>
+		{#if settingsOpen}
+			<div class="settings-panel" role="menu">
+				<button class="settings-item" class:active={autoRotate} onclick={handleToggleAutoRotate} role="menuitemcheckbox" aria-checked={autoRotate}>
+					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+						<path d="M21 12a9 9 0 1 1-3-6.7" />
+						<polyline points="21 3 21 9 15 9" />
+					</svg>
+					<span>Auto-rotate</span>
+				</button>
+				<button class="settings-item" class:active={iauOverlay} onclick={handleToggleIAU} role="menuitemcheckbox" aria-checked={iauOverlay}>
+					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+						<circle cx="5" cy="5" r="1.5" fill="currentColor" stroke="none"/>
+						<circle cx="19" cy="4" r="1.5" fill="currentColor" stroke="none"/>
+						<circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+						<line x1="5" y1="5" x2="12" y2="12" />
+						<line x1="19" y1="4" x2="12" y2="12" />
+					</svg>
+					<span>Constellations</span>
+				</button>
+				<button class="settings-item" class:active={starLabels} onclick={handleToggleStarLabels} role="menuitemcheckbox" aria-checked={starLabels}>
+					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+						<polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
+					</svg>
+					<span>Star names</span>
+				</button>
+				<button class="settings-item" class:active={coordGrid} onclick={handleToggleCoordGrid} role="menuitemcheckbox" aria-checked={coordGrid}>
+					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+						<circle cx="12" cy="12" r="9" />
+						<line x1="12" y1="3" x2="12" y2="21" />
+						<line x1="3" y1="12" x2="21" y2="12" />
+						<ellipse cx="12" cy="12" rx="4" ry="9" />
+					</svg>
+					<span>Coordinates</span>
+				</button>
+			</div>
+		{/if}
+	</div>
 
 	{#if showInput}
 		<div class="input-overlay" class:matching={isMatching}>
@@ -880,11 +927,18 @@
 		width: auto;
 	}
 
-	.iau-toggle {
+	.settings-container {
 		position: absolute;
 		top: 16px;
 		right: 16px;
 		z-index: 10;
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: 6px;
+	}
+
+	.settings-hamburger {
 		background: rgba(255, 255, 255, 0.06);
 		border: 1px solid rgba(255, 255, 255, 0.12);
 		color: rgba(255, 255, 255, 0.4);
@@ -898,25 +952,69 @@
 		backdrop-filter: blur(4px);
 	}
 
-	.iau-toggle:hover {
+	.settings-hamburger:hover {
 		background: rgba(255, 255, 255, 0.1);
 		color: rgba(255, 255, 255, 0.7);
 		border-color: rgba(255, 255, 255, 0.25);
 	}
 
-	.iau-toggle:focus-visible {
+	.settings-hamburger.open {
+		background: rgba(255, 255, 255, 0.1);
+		color: rgba(255, 255, 255, 0.7);
+		border-color: rgba(255, 255, 255, 0.25);
+	}
+
+	.settings-hamburger:focus-visible {
 		outline: none;
 		box-shadow: 0 0 0 2px rgba(170, 200, 255, 0.5);
 	}
 
-	.iau-toggle.active {
-		background: rgba(170, 200, 255, 0.12);
-		border-color: rgba(170, 200, 255, 0.3);
-		color: rgba(170, 200, 255, 0.8);
+	.settings-panel {
+		background: rgba(0, 0, 0, 0.5);
+		backdrop-filter: blur(12px);
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		border-radius: 10px;
+		padding: 6px;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		animation: panel-in 0.15s ease-out;
 	}
 
-	.rotate-toggle {
-		top: 54px;
+	@keyframes panel-in {
+		from { opacity: 0; transform: translateY(-4px); }
+		to { opacity: 1; transform: translateY(0); }
+	}
+
+	.settings-item {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		background: none;
+		border: none;
+		border-radius: 6px;
+		padding: 8px 14px 8px 10px;
+		cursor: pointer;
+		font-family: inherit;
+		font-size: 13px;
+		letter-spacing: 0.5px;
+		color: rgba(255, 255, 255, 0.4);
+		transition: all 0.15s;
+		white-space: nowrap;
+	}
+
+	.settings-item:hover {
+		background: rgba(255, 255, 255, 0.06);
+		color: rgba(255, 255, 255, 0.7);
+	}
+
+	.settings-item.active {
+		color: rgba(170, 200, 255, 0.85);
+	}
+
+	.settings-item:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 2px rgba(170, 200, 255, 0.4);
 	}
 
 	/* Mobile adjustments */
@@ -955,7 +1053,7 @@
 			bottom: 32px;
 		}
 
-		.iau-toggle {
+		.settings-container {
 			top: env(safe-area-inset-top, 16px);
 			right: env(safe-area-inset-right, 16px);
 		}

@@ -27,6 +27,17 @@
 	const projectedLabelPos = new THREE.Vector3();
 	const overlayCameraDir = new THREE.Vector3();
 
+	// --- Named star labels ---
+	let starLabelsActive = false;
+	let starLabelData: { label: Text; pos: THREE.Vector3; mag: number }[] = [];
+	const STAR_LABEL_MAG_LIMIT = 4.0; // Only label stars brighter than this
+
+	// --- Coordinate grid (RA/Dec) ---
+	let coordGridActive = $state(false);
+	let coordGridGroup: THREE.Group | null = null;
+	let coordGridLabels: Text[] = [];
+	let cameraHeading = $state({ ra: '', dec: '' });
+
 	// --- Shooting stars (meteors) ---
 	interface Meteor {
 		head: THREE.Vector3;       // current head position on unit sphere
@@ -649,20 +660,56 @@
 			}
 		}
 
-		if (!iauOverlayActive) return;
+		if (iauOverlayActive) {
+			for (const { label, centroid } of iauLabelData) {
+				const dot = centroid.dot(overlayCameraDir);
+				if (dot <= 0.2) {
+					setOverlayLabelOpacity(label, 0);
+					continue;
+				}
 
-		for (const { label, centroid } of iauLabelData) {
-			const dot = centroid.dot(overlayCameraDir);
-			if (dot <= 0.2) {
-				setOverlayLabelOpacity(label, 0);
-				continue;
+				if (updateOverlayLabelPosition(label, centroid, 0)) {
+					const fade = Math.min(1, (dot - 0.2) / 0.3);
+					setOverlayLabelOpacity(label, fade * 0.6);
+				} else {
+					setOverlayLabelOpacity(label, 0);
+				}
 			}
+		}
 
-			if (updateOverlayLabelPosition(label, centroid, 0)) {
-				const fade = Math.min(1, (dot - 0.2) / 0.3);
-				setOverlayLabelOpacity(label, fade * 0.6);
-			} else {
-				setOverlayLabelOpacity(label, 0);
+		if (starLabelsActive) {
+			for (const sl of starLabelData) {
+				const dot = sl.pos.dot(overlayCameraDir);
+				if (dot <= 0.15) {
+					setOverlayLabelOpacity(sl.label, 0);
+					continue;
+				}
+				if (updateOverlayLabelPosition(sl.label, sl.pos, -14)) {
+					// Brighter stars (lower mag) get more opaque labels
+					const magFade = Math.max(0.3, 1 - sl.mag / STAR_LABEL_MAG_LIMIT);
+					const angleFade = Math.min(1, (dot - 0.15) / 0.3);
+					setOverlayLabelOpacity(sl.label, angleFade * magFade * 0.75);
+				} else {
+					setOverlayLabelOpacity(sl.label, 0);
+				}
+			}
+		}
+
+		if (coordGridActive) {
+			for (const label of coordGridLabels) {
+				const worldPos = (label as any)._gridWorldPos as THREE.Vector3;
+				if (!worldPos) continue;
+				const dot = worldPos.dot(overlayCameraDir);
+				if (dot <= 0.1) {
+					setOverlayLabelOpacity(label, 0);
+					continue;
+				}
+				if (updateOverlayLabelPosition(label, worldPos, 0)) {
+					const fade = Math.min(1, (dot - 0.1) / 0.3);
+					setOverlayLabelOpacity(label, fade * 0.4);
+				} else {
+					setOverlayLabelOpacity(label, 0);
+				}
 			}
 		}
 	}
@@ -1762,6 +1809,213 @@
 		if (controlsRef) controlsRef.autoRotate = on;
 	}
 
+	export function toggleStarLabels(show: boolean) {
+		if (show === starLabelsActive) return;
+		starLabelsActive = show;
+
+		if (show) {
+			// Create labels for named stars brighter than the limit
+			for (const s of stars) {
+				if (!s.name || s.mag > STAR_LABEL_MAG_LIMIT) continue;
+				const pos = raDecToXYZ(s.ra, s.dec);
+				const label = new Text();
+				label.text = s.name;
+				label.anchorX = 'center';
+				label.anchorY = 'middle';
+				label.fontSize = 10;
+				label.letterSpacing = 0.08;
+				label.color = 0xddeeff;
+				label.fillOpacity = 0;
+				label.outlineColor = LABEL_OUTLINE_COLOR;
+				label.outlineWidth = '8%';
+				label.outlineBlur = '35%';
+				label.outlineOpacity = 0;
+				label.sdfGlyphSize = 64;
+				label.frustumCulled = false;
+				label.renderOrder = 10;
+				label.position.z = 0;
+				overlaySceneRef?.add(label);
+				label.sync();
+				starLabelData.push({ label, pos, mag: s.mag });
+			}
+		} else {
+			for (const sl of starLabelData) {
+				sl.label.removeFromParent();
+				sl.label.dispose();
+			}
+			starLabelData = [];
+		}
+	}
+
+	export function toggleCoordinateGrid(show: boolean) {
+		if (show === coordGridActive) return;
+		coordGridActive = show;
+
+		if (show) {
+			if (!sceneRef) return;
+			const group = new THREE.Group();
+			const SPHERE_R = 1.0;
+			const SEGMENTS = 120;
+
+			// RA lines (every 2h = 30°) — great circles from pole to pole
+			for (let h = 0; h < 24; h += 2) {
+				const ra = (h / 24) * Math.PI * 2;
+				const points: number[] = [];
+				for (let i = 0; i <= SEGMENTS; i++) {
+					const dec = -Math.PI / 2 + (Math.PI * i) / SEGMENTS;
+					const x = Math.cos(dec) * Math.cos(ra) * SPHERE_R;
+					const y = Math.sin(dec) * SPHERE_R;
+					const z = -Math.cos(dec) * Math.sin(ra) * SPHERE_R;
+					points.push(x, y, z);
+				}
+				const lineGeom = new THREE.BufferGeometry();
+				lineGeom.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+				const lineMat = new THREE.LineBasicMaterial({
+					color: 0x4488cc,
+					transparent: true,
+					opacity: 0.12,
+					depthTest: false,
+					blending: THREE.AdditiveBlending,
+				});
+				const line = new THREE.Line(lineGeom, lineMat);
+				line.renderOrder = 0;
+				group.add(line);
+
+				// RA label at equator
+				const labelPos = raDecToXYZ(ra, 0);
+				const label = new Text();
+				label.text = `${h}h`;
+				label.anchorX = 'center';
+				label.anchorY = 'middle';
+				label.fontSize = 11;
+				label.letterSpacing = 0.05;
+				label.color = 0x4488cc;
+				label.fillOpacity = 0;
+				label.outlineColor = LABEL_OUTLINE_COLOR;
+				label.outlineWidth = '10%';
+				label.outlineBlur = '40%';
+				label.outlineOpacity = 0;
+				label.sdfGlyphSize = 64;
+				label.frustumCulled = false;
+				label.renderOrder = 10;
+				label.position.z = 0;
+				(label as any)._gridWorldPos = labelPos;
+				overlaySceneRef?.add(label);
+				label.sync();
+				coordGridLabels.push(label);
+			}
+
+			// Dec lines (every 30°, skip poles) — small circles at constant declination
+			for (let d = -60; d <= 60; d += 30) {
+				if (d === 0) continue; // we'll draw the equator separately
+				const dec = (d * Math.PI) / 180;
+				const points: number[] = [];
+				for (let i = 0; i <= SEGMENTS; i++) {
+					const ra = (i / SEGMENTS) * Math.PI * 2;
+					const x = Math.cos(dec) * Math.cos(ra) * SPHERE_R;
+					const y = Math.sin(dec) * SPHERE_R;
+					const z = -Math.cos(dec) * Math.sin(ra) * SPHERE_R;
+					points.push(x, y, z);
+				}
+				const lineGeom = new THREE.BufferGeometry();
+				lineGeom.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+				const lineMat = new THREE.LineBasicMaterial({
+					color: 0x4488cc,
+					transparent: true,
+					opacity: 0.1,
+					depthTest: false,
+					blending: THREE.AdditiveBlending,
+				});
+				const line = new THREE.Line(lineGeom, lineMat);
+				line.renderOrder = 0;
+				group.add(line);
+
+				// Dec label
+				const labelPos = raDecToXYZ(0, dec);
+				const label = new Text();
+				label.text = `${d > 0 ? '+' : ''}${d}°`;
+				label.anchorX = 'center';
+				label.anchorY = 'middle';
+				label.fontSize = 11;
+				label.letterSpacing = 0.05;
+				label.color = 0x4488cc;
+				label.fillOpacity = 0;
+				label.outlineColor = LABEL_OUTLINE_COLOR;
+				label.outlineWidth = '10%';
+				label.outlineBlur = '40%';
+				label.outlineOpacity = 0;
+				label.sdfGlyphSize = 64;
+				label.frustumCulled = false;
+				label.renderOrder = 10;
+				label.position.z = 0;
+				(label as any)._gridWorldPos = labelPos;
+				overlaySceneRef?.add(label);
+				label.sync();
+				coordGridLabels.push(label);
+			}
+
+			// Celestial equator — brighter
+			{
+				const points: number[] = [];
+				for (let i = 0; i <= SEGMENTS; i++) {
+					const ra = (i / SEGMENTS) * Math.PI * 2;
+					const x = Math.cos(ra) * SPHERE_R;
+					const y = 0;
+					const z = -Math.sin(ra) * SPHERE_R;
+					points.push(x, y, z);
+				}
+				const lineGeom = new THREE.BufferGeometry();
+				lineGeom.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+				const lineMat = new THREE.LineBasicMaterial({
+					color: 0x6699dd,
+					transparent: true,
+					opacity: 0.2,
+					depthTest: false,
+					blending: THREE.AdditiveBlending,
+				});
+				const line = new THREE.Line(lineGeom, lineMat);
+				line.renderOrder = 0;
+				group.add(line);
+
+				// 0° label on equator
+				const labelPos = raDecToXYZ(0, 0);
+				const label = new Text();
+				label.text = '0°';
+				label.anchorX = 'center';
+				label.anchorY = 'middle';
+				label.fontSize = 11;
+				label.letterSpacing = 0.05;
+				label.color = 0x6699dd;
+				label.fillOpacity = 0;
+				label.outlineColor = LABEL_OUTLINE_COLOR;
+				label.outlineWidth = '10%';
+				label.outlineBlur = '40%';
+				label.outlineOpacity = 0;
+				label.sdfGlyphSize = 64;
+				label.frustumCulled = false;
+				label.renderOrder = 10;
+				label.position.z = 0;
+				(label as any)._gridWorldPos = labelPos;
+				overlaySceneRef?.add(label);
+				label.sync();
+				coordGridLabels.push(label);
+			}
+
+			sceneRef.add(group);
+			coordGridGroup = group;
+		} else {
+			if (coordGridGroup && sceneRef) {
+				sceneRef.remove(coordGridGroup);
+				coordGridGroup = null;
+			}
+			for (const label of coordGridLabels) {
+				label.removeFromParent();
+				label.dispose();
+			}
+			coordGridLabels = [];
+		}
+	}
+
 	export function captureImage(): Promise<Blob> {
 		return new Promise((resolve, reject) => {
 			const canvas = container?.querySelector('canvas');
@@ -2026,6 +2280,27 @@
 			// Stars grow as you zoom in (lower FOV)
 			uniforms.uFovScale.value = DEFAULT_FOV / camera.fov;
 			debugFov = camera.fov;
+			// Update camera heading readout when grid is active
+			if (coordGridActive) {
+				const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+				const dec = Math.asin(Math.max(-1, Math.min(1, dir.y)));
+				let ra = Math.atan2(-dir.z, dir.x);
+				if (ra < 0) ra += Math.PI * 2;
+				// Format RA as Xh Xm
+				const raHours = (ra / (Math.PI * 2)) * 24;
+				const raH = Math.floor(raHours);
+				const raM = Math.floor((raHours - raH) * 60);
+				// Format Dec as ±X° X′
+				const decDeg = (dec * 180) / Math.PI;
+				const decSign = decDeg >= 0 ? '+' : '\u2212';
+				const decAbs = Math.abs(decDeg);
+				const decD = Math.floor(decAbs);
+				const decMn = Math.floor((decAbs - decD) * 60);
+				cameraHeading = {
+					ra: `${raH}h ${String(raM).padStart(2, '0')}m`,
+					dec: `${decSign}${decD}\u00b0 ${String(decMn).padStart(2, '0')}\u2032`,
+				};
+			}
 			// Update shooting stars and comets
 			updateMeteors(dt);
 			updateComets(dt);
@@ -2085,6 +2360,16 @@
 				disposeOverlayLabel(label);
 			}
 			iauLabelData = [];
+			for (const sl of starLabelData) {
+				sl.label.removeFromParent();
+				sl.label.dispose();
+			}
+			starLabelData = [];
+			for (const label of coordGridLabels) {
+				label.removeFromParent();
+				label.dispose();
+			}
+			coordGridLabels = [];
 			stopMeteors();
 			stopComets();
 			window.removeEventListener('resize', onResize);
@@ -2110,6 +2395,13 @@
 <div bind:this={container} class="star-field" role="img" aria-label="Interactive 3D star field. Drag to rotate, scroll to zoom."></div>
 <div bind:this={tooltip} class="star-tooltip" role="tooltip" aria-hidden="true"></div>
 <div class="debug-fov">FOV: {debugFov.toFixed(1)}</div>
+{#if coordGridActive}
+	<div class="camera-heading" aria-live="polite">
+		<span class="heading-label">RA</span> <span class="heading-value">{cameraHeading.ra}</span>
+		<span class="heading-sep"></span>
+		<span class="heading-label">Dec</span> <span class="heading-value">{cameraHeading.dec}</span>
+	</div>
+{/if}
 
 <style>
 	.debug-fov {
@@ -2129,6 +2421,42 @@
 		width: 100%;
 		height: 100%;
 		touch-action: none;
+	}
+
+	.camera-heading {
+		position: fixed;
+		bottom: 16px;
+		right: 16px;
+		z-index: 100;
+		pointer-events: none;
+		font-family: monospace;
+		font-size: 13px;
+		letter-spacing: 0.5px;
+		color: rgba(255, 255, 255, 0.5);
+		background: rgba(0, 0, 0, 0.35);
+		backdrop-filter: blur(4px);
+		padding: 6px 12px;
+		border-radius: 6px;
+		border: 1px solid rgba(68, 136, 204, 0.2);
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.heading-label {
+		color: rgba(68, 136, 204, 0.6);
+		font-size: 11px;
+	}
+
+	.heading-value {
+		color: rgba(200, 220, 255, 0.7);
+	}
+
+	.heading-sep {
+		width: 1px;
+		height: 12px;
+		background: rgba(255, 255, 255, 0.15);
+		margin: 0 2px;
 	}
 
 	.star-tooltip {
