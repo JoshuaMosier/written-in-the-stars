@@ -433,7 +433,7 @@
 		if (iauOverlayActive && iauOverlayGroup) {
 			iauOverlayGroup.traverse((child) => {
 				if ((child as any).material && (child as any).material.opacity !== undefined) {
-					(child as any).material.opacity *= 0.3;
+					(child as any).material.opacity *= 0.12;
 				}
 			});
 		}
