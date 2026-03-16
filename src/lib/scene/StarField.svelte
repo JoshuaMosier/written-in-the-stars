@@ -1490,8 +1490,8 @@
 		testCam.position.set(0, 0, 0.0001);
 		testCam.up.copy(localNorth);
 		testCam.lookAt(centroidDir.clone().multiplyScalar(10));
-		const fitMargin = 0.9;
-		const maxFov = cameraRef.aspect < 0.8 ? 110 : 80;
+		const fitMargin = 0.7;
+		const maxFov = cameraRef.aspect < 0.8 ? 120 : 80;
 		let lo = 5, hi = maxFov + 10;
 		for (let i = 0; i < 16; i++) {
 			const mid = (lo + hi) / 2;
@@ -1513,7 +1513,8 @@
 		const lookDir = controlsRef.target.clone().sub(startPos).normalize();
 		const endDir = centroidDir.clone();
 		const startUp = cameraRef.up.clone();
-		const startFov = cameraRef.fov;
+		// Never zoom in tighter than what's already fitting
+		const startFov = Math.max(cameraRef.fov, targetFov);
 		const angularDist = Math.acos(Math.min(1, Math.max(-1, lookDir.dot(endDir))));
 		const duration = 300 + 500 * Math.min(1, angularDist / Math.PI);
 		const startTime = performance.now();
