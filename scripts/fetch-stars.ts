@@ -1,4 +1,4 @@
-import { writeFileSync, mkdirSync } from "fs";
+import { writeFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -140,10 +140,6 @@ async function main() {
   console.log(`Brightest: ${JSON.stringify(stars[0])}`);
   console.log(`Faintest: ${JSON.stringify(stars[stars.length - 1])}`);
   console.log(`Named stars: ${stars.filter((s) => s.name).length}`);
-
-  // Ensure output directory exists
-  const outDir = join(__dirname, "..", "src", "lib", "data");
-  mkdirSync(outDir, { recursive: true });
 
   writeFileSync(OUTPUT_PATH, JSON.stringify(stars));
   const sizeMB = (Buffer.byteLength(JSON.stringify(stars)) / 1e6).toFixed(2);

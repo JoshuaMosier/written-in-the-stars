@@ -39,7 +39,10 @@ export function encodeSingleResult(text: string, result: MatchResult): string {
 	let b64 = '';
 	for (let i = 0; i < buf.length; i++) b64 += String.fromCharCode(buf[i]);
 	b64 = btoa(b64).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-	const textB64 = btoa(unescape(encodeURIComponent(text))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+	const textBytes = new TextEncoder().encode(text);
+	let textBin = '';
+	for (let i = 0; i < textBytes.length; i++) textBin += String.fromCharCode(textBytes[i]);
+	const textB64 = btoa(textBin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 	return textB64 + '~' + b64;
 }
 
@@ -60,7 +63,10 @@ export function decodeSingleResult(
 
 		let textB64 = segment.slice(0, sepIdx).replace(/-/g, '+').replace(/_/g, '/');
 		while (textB64.length % 4) textB64 += '=';
-		const text = decodeURIComponent(escape(atob(textB64)));
+		const textBin = atob(textB64);
+		const textBytes = new Uint8Array(textBin.length);
+		for (let i = 0; i < textBin.length; i++) textBytes[i] = textBin.charCodeAt(i);
+		const text = new TextDecoder().decode(textBytes);
 		const graph = textToGraph(text);
 
 		let b64 = segment.slice(sepIdx + 1).replace(/-/g, '+').replace(/_/g, '/');

@@ -14,14 +14,22 @@
 	let starByIdx = new Map<number, Star>();
 	let starsReady = $state(false);
 
+	let starsError = $state('');
+
 	const starsPromise = fetch('/stars.json')
-		.then(r => r.json())
+		.then(r => {
+			if (!r.ok) throw new Error(`Failed to load star catalog (${r.status})`);
+			return r.json();
+		})
 		.then((data: Star[]) => {
 			starsRaw = data.filter(s => s.mag > -10);
 			stars = starsRaw;
 			for (const s of starsRaw) starByIdx.set(s.idx, s);
 			initAfterStarsLoaded();
 			starsReady = true;
+		})
+		.catch((err) => {
+			starsError = err instanceof Error ? err.message : 'Failed to load star catalog';
 		});
 
 	interface ConstellationEntry {
@@ -114,7 +122,22 @@
 	let hashWasPresent = typeof window !== 'undefined' && window.location.hash.length > 1;
 
 	// Initialize web worker and decode hash after stars are fetched
-	const worker = new MatchWorker();
+	let worker = newWorker();
+
+	function newWorker(): InstanceType<typeof MatchWorker> {
+		const w = new MatchWorker();
+		w.onmessage = handleWorkerMessage;
+		w.onerror = handleWorkerError;
+		return w;
+	}
+
+	function respawnWorker() {
+		worker.terminate();
+		worker = newWorker();
+		if (starsReady) {
+			worker.postMessage({ type: 'init', payload: { stars: starsRaw } });
+		}
+	}
 
 	function initAfterStarsLoaded() {
 		worker.postMessage({ type: 'init', payload: { stars: starsRaw } });
@@ -163,6 +186,7 @@
 		matchTimeoutId = setTimeout(() => {
 			if (!isMatching) return;
 			matchRequestId++; // invalidate the in-flight request
+			respawnWorker(); // kill the blocked worker so the next request isn't queued behind it
 			stopMatchingPhrases();
 			if (isRerolling) showInput = false;
 			isMatching = false;
@@ -172,7 +196,7 @@
 		}, MATCH_TIMEOUT_MS);
 	}
 
-	worker.onmessage = (e: MessageEvent) => {
+	function handleWorkerMessage(e: MessageEvent) {
 		const { type, payload, requestId } = e.data;
 		if (requestId !== undefined && requestId !== matchRequestId) return;
 		if (type === 'progress') {
@@ -193,9 +217,9 @@
 			errorMessage = 'Something went wrong matching stars. Please try again.';
 			setTimeout(() => (errorMessage = ''), 4000);
 		}
-	};
+	}
 
-	worker.onerror = () => {
+	function handleWorkerError() {
 		clearMatchTimeout();
 		stopMatchingPhrases();
 		if (isRerolling) showInput = false;
@@ -203,7 +227,7 @@
 		isRerolling = false;
 		errorMessage = 'Something went wrong. Please try again.';
 		setTimeout(() => (errorMessage = ''), 4000);
-	};
+	}
 
 	let pendingText = '';
 
@@ -219,7 +243,7 @@
 
 	function handleSubmit() {
 		const text = inputText.trim();
-		if (!text) return;
+		if (!text || !starsReady) return;
 
 		rerollBlacklist = [];
 		isMatching = true;
@@ -467,6 +491,11 @@
 
 		// Skip if same star (no-op drag)
 		if (oldStar.idx === newStar.idx) return;
+
+		// Reject if the star is already used by any constellation (preserves uniqueness invariant)
+		for (const c of constellations) {
+			if (c.result.pairs.some(p => p.star.idx === newStar.idx)) return;
+		}
 
 		// Push to undo stack, clear redo
 		undoStack.push({ constellationIndex, nodeIndex, oldStar, newStar });
@@ -911,7 +940,7 @@
 				onkeydown={handleKeydown}
 				placeholder="Search the stars..."
 				maxlength={30}
-				disabled={isMatching}
+				disabled={isMatching || !starsReady}
 				autocomplete="off"
 				aria-describedby={isMatching ? 'matching-status' : undefined}
 				use:autoFocus
@@ -925,7 +954,9 @@
 		</div>
 	{/if}
 
-	{#if errorMessage}
+	{#if starsError}
+		<div class="error-toast error-toast-persistent" role="alert">{starsError}</div>
+	{:else if errorMessage}
 		<div class="error-toast" role="alert">{errorMessage}</div>
 	{/if}
 
@@ -1263,6 +1294,10 @@
 		letter-spacing: 0.5px;
 		backdrop-filter: blur(8px);
 		animation: toast-in 0.3s ease-out;
+	}
+
+	.error-toast-persistent {
+		animation: none;
 	}
 
 	@keyframes toast-in {
