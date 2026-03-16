@@ -15,7 +15,7 @@
 import kdTreePkg from 'kd-tree-javascript';
 const { kdTree } = kdTreePkg;
 import { cmaes } from './optimizer';
-import type { Star, AnchorPoint, MatchResult, GlyphGraph } from './types';
+import type { Star, MatchResult, GlyphGraph } from './types';
 
 // ---------------------------------------------------------------------------
 // Projection helpers

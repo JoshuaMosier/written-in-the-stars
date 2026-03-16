@@ -13,7 +13,7 @@ Type any word or phrase and discover real stars in the night sky whose positions
 
 ## How it works
 
-Text is converted into constellation-style graphs using vector font data (Hershey Simplex). A matching engine then searches the entire sky to find the region where real star positions best align with the letterforms. The search combines a coarse spatial grid, RANSAC-style geometric sampling, CMA-ES optimization, and Hungarian optimal assignment to produce clean, readable results — typically in under two seconds.
+Text is converted into constellation-style graphs using vector font data (Hershey Simplex). A matching engine then searches the entire sky to find the region where real star positions best align with the letterforms. The search combines a coarse spatial grid, RANSAC-style geometric sampling, CMA-ES optimization, and greedy assignment with iterative swap refinement to produce clean, readable results — typically in under two seconds.
 
 The result is rendered on an interactive 3D celestial sphere. You can orbit, zoom, and explore the sky around your constellation. Each result is encoded into a shareable URL so you can send your star-spelled message to anyone.
 
@@ -34,7 +34,7 @@ The result is rendered on an interactive 3D celestial sphere. You can orbit, zoo
 - **Three.js** for the 3D celestial sphere
 - **Web Workers** for off-thread star matching
 - **CMA-ES** optimizer with RANSAC candidate generation
-- **Hungarian algorithm** for optimal star assignment
+- **Greedy + swap refinement** with KD-tree for star assignment
 
 ## Development
 
