@@ -5,7 +5,7 @@
  * space. Returns the parameter vector that yields the lowest cost found.
  */
 
-export interface NelderMeadOptions {
+interface NelderMeadOptions {
   tolerance?: number;
   maxIterations?: number;
   initialScale?: number;
@@ -104,7 +104,7 @@ export function nelderMead(
  * Returns the best parameter vector found within the evaluation budget.
  */
 
-export interface CmaesOptions {
+interface CmaesOptions {
   /** Initial step size (search radius) */
   sigma?: number;
   /** Maximum function evaluations */
