@@ -4,3 +4,17 @@ build/
 scripts/output/
 .claude/
 CLAUDE.md
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Environment
+.env*
+
+# Logs
+*.log
