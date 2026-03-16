@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#000005"/>
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="60%">
+      <stop offset="0%" stop-color="#0a0a1a"/>
+      <stop offset="100%" stop-color="#000005"/>
+    </radialGradient>
+    <radialGradient id="star-glow">
+      <stop offset="0%" stop-color="rgba(200,220,255,0.6)"/>
+      <stop offset="100%" stop-color="rgba(200,220,255,0)"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Scattered stars -->
+  <circle cx="120" cy="80" r="1.2" fill="rgba(200,220,255,0.8)"/>
+  <circle cx="250" cy="150" r="0.8" fill="rgba(200,220,255,0.5)"/>
+  <circle cx="380" cy="60" r="1.0" fill="rgba(200,220,255,0.7)"/>
+  <circle cx="520" cy="120" r="0.6" fill="rgba(200,220,255,0.4)"/>
+  <circle cx="700" cy="90" r="1.4" fill="rgba(200,220,255,0.9)"/>
+  <circle cx="850" cy="140" r="0.7" fill="rgba(200,220,255,0.5)"/>
+  <circle cx="950" cy="70" r="1.1" fill="rgba(200,220,255,0.7)"/>
+  <circle cx="1080" cy="110" r="0.9" fill="rgba(200,220,255,0.6)"/>
+  <circle cx="180" cy="200" r="0.5" fill="rgba(200,220,255,0.3)"/>
+  <circle cx="450" cy="180" r="0.8" fill="rgba(200,220,255,0.5)"/>
+  <circle cx="780" cy="200" r="0.6" fill="rgba(200,220,255,0.4)"/>
+  <circle cx="1020" cy="190" r="1.0" fill="rgba(200,220,255,0.6)"/>
+  <circle cx="60" cy="300" r="0.7" fill="rgba(200,220,255,0.4)"/>
+  <circle cx="300" cy="350" r="0.5" fill="rgba(200,220,255,0.3)"/>
+  <circle cx="900" cy="320" r="0.8" fill="rgba(200,220,255,0.5)"/>
+  <circle cx="1140" cy="280" r="0.6" fill="rgba(200,220,255,0.4)"/>
+  <circle cx="150" cy="450" r="0.9" fill="rgba(200,220,255,0.5)"/>
+  <circle cx="500" cy="500" r="0.7" fill="rgba(200,220,255,0.4)"/>
+  <circle cx="750" cy="480" r="1.0" fill="rgba(200,220,255,0.6)"/>
+  <circle cx="1050" cy="520" r="0.5" fill="rgba(200,220,255,0.3)"/>
+  <circle cx="350" cy="550" r="0.8" fill="rgba(200,220,255,0.5)"/>
+  <circle cx="650" cy="570" r="0.6" fill="rgba(200,220,255,0.4)"/>
+  <circle cx="1100" cy="450" r="0.7" fill="rgba(200,220,255,0.4)"/>
+  <circle cx="80" cy="550" r="0.5" fill="rgba(200,220,255,0.3)"/>
+
+  <!-- Constellation-style connected stars spelling concept -->
+  <!-- "Star" nodes with connecting lines in gold -->
+  <g opacity="0.25" stroke="rgba(255,215,0,0.6)" stroke-width="1">
+    <line x1="340" y1="260" x2="420" y2="300"/>
+    <line x1="420" y1="300" x2="500" y2="270"/>
+    <line x1="500" y1="270" x2="560" y2="310"/>
+    <line x1="560" y1="310" x2="640" y2="280"/>
+    <line x1="640" y1="280" x2="700" y2="320"/>
+    <line x1="700" y1="320" x2="780" y2="290"/>
+    <line x1="780" y1="290" x2="860" y2="330"/>
+  </g>
+  <g fill="rgba(255,230,128,0.6)">
+    <circle cx="340" cy="260" r="2.5"/>
+    <circle cx="420" cy="300" r="2"/>
+    <circle cx="500" cy="270" r="2.5"/>
+    <circle cx="560" cy="310" r="1.8"/>
+    <circle cx="640" cy="280" r="2.5"/>
+    <circle cx="700" cy="320" r="2"/>
+    <circle cx="780" cy="290" r="2.5"/>
+    <circle cx="860" cy="330" r="2"/>
+  </g>
+
+  <!-- Title -->
+  <text x="600" y="300" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="64" letter-spacing="8" fill="#ffe680" opacity="0.9">WRITTEN IN THE STARS</text>
+
+  <!-- Subtitle -->
+  <text x="600" y="370" text-anchor="middle" font-family="'Inter', 'Segoe UI', system-ui, sans-serif" font-size="20" letter-spacing="4" fill="rgba(255,255,255,0.45)">YOUR WORDS, MAPPED TO REAL STARS</text>
+
+  <!-- Domain -->
+  <text x="600" y="580" text-anchor="middle" font-family="'Inter', 'Segoe UI', system-ui, sans-serif" font-size="16" letter-spacing="6" fill="rgba(255,255,255,0.25)">STARSPELLED.COM</text>
+</svg>
