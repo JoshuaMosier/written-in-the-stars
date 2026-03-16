@@ -2,6 +2,9 @@
  * Shared types for the star-matching engine.
  */
 
+import type { AnchorPoint, GlyphGraph } from './glyphs';
+export type { AnchorPoint, GlyphGraph };
+
 export interface Star {
   idx: number;  // compact sequential index (0..N-1), used for URL encoding
   id: number;
@@ -11,18 +14,6 @@ export interface Star {
   mag: number;
   ci?: number;  // B-V color index (blue=-0.3, white=0, yellow=0.6, red=2.0)
   name?: string;
-}
-
-export interface AnchorPoint {
-  x: number;
-  y: number;
-  letterIndex: number;
-  strokeIndex: number;
-}
-
-export interface GlyphGraph {
-  nodes: AnchorPoint[];
-  edges: [number, number][];  // pairs of node indices
 }
 
 export interface MatchResult {
