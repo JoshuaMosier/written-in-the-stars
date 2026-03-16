@@ -402,11 +402,14 @@
 	}
 
 	let copied = $state(false);
+	const reducedMotion = typeof window !== 'undefined'
+		? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+		: false;
 	let iauOverlay = $state(false);
-	let autoRotate = $state(true);
+	let autoRotate = $state(!reducedMotion);
 	let starLabels = $state(false);
 	let coordGrid = $state(false);
-	let shootingStars = $state(true);
+	let shootingStars = $state(!reducedMotion);
 	let brightness = $state(1.0);
 	let monoColor = $state(false);
 	let settingsOpen = $state(false);
@@ -1547,6 +1550,13 @@
 	@keyframes panel-in {
 		from { opacity: 0; transform: translateY(-4px); }
 		to { opacity: 1; transform: translateY(0); }
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		*, *::before, *::after {
+			animation-duration: 0.01ms !important;
+			transition-duration: 0.01ms !important;
+		}
 	}
 
 	.settings-item {

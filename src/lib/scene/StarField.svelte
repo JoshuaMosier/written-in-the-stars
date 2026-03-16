@@ -16,6 +16,11 @@
 		onStarClick?: (star: Star, screenPos: { x: number; y: number }) => void;
 	} = $props();
 
+	// Respect prefers-reduced-motion
+	const reducedMotion = typeof window !== 'undefined'
+		? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+		: false;
+
 	let container: HTMLDivElement;
 	let tooltip: HTMLDivElement;
 	let sceneRef: THREE.Scene | null = null;
@@ -733,7 +738,7 @@
 	let rendererSize = new THREE.Vector2(1, 1);
 
 	// --- Auto-rotate (landing page drift) ---
-	let autoRotateActive = true;
+	let autoRotateActive = !reducedMotion;
 
 	// Touch support state
 	let pinchStartDist = 0;
@@ -1459,6 +1464,12 @@
 	export function panToConstellation(allResults: MatchResult[], focusIndex: number) {
 		if (!controlsRef || !cameraRef) return;
 
+		// Reduced motion: jump instantly
+		if (reducedMotion) {
+			refocusConstellation(allResults, focusIndex);
+			return;
+		}
+
 		// Redraw everything instantly first (non-focused stay, focused will be redrawn animated on arrival)
 		clearAllConstellations();
 		currentResults = [...allResults];
@@ -1925,6 +1936,12 @@
 		}
 
 		prepareForConstellation();
+
+		// Reduced motion: skip camera animation, draw instantly
+		if (reducedMotion) {
+			refocusConstellation(currentResults, currentResults.indexOf(result));
+			return;
+		}
 
 		let cx = 0, cy = 0, cz = 0;
 		const positions: THREE.Vector3[] = [];
@@ -2486,6 +2503,21 @@
 		).normalize();
 
 		const targetFov = fov ?? Math.min(60, cameraRef.fov);
+		const Y_UP = new THREE.Vector3(0, 1, 0);
+
+		// Reduced motion: jump instantly
+		if (reducedMotion) {
+			cameraRef.position.set(0, 0, 0.0001);
+			controlsRef.target.copy(cameraRef.position).addScaledVector(targetDir, 0.001);
+			cameraRef.up.copy(localNorth);
+			(controlsRef as any)._quat.setFromUnitVectors(cameraRef.up, Y_UP);
+			(controlsRef as any)._quatInverse.copy((controlsRef as any)._quat).invert();
+			cameraRef.fov = targetFov;
+			cameraRef.updateProjectionMatrix();
+			controlsRef.update();
+			return;
+		}
+
 		const startPos = cameraRef.position.clone();
 		const lookDir = controlsRef.target.clone().sub(startPos).normalize();
 		const startUp = cameraRef.up.clone();
@@ -2499,7 +2531,6 @@
 		const qSlerp = new THREE.Quaternion();
 		const slerpedDir = new THREE.Vector3();
 		const origin = new THREE.Vector3(0, 0, 0.0001);
-		const Y_UP = new THREE.Vector3(0, 1, 0);
 
 		function animate() {
 			const elapsed = performance.now() - startTime;
