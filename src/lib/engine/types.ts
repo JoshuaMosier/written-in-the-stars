@@ -3,7 +3,9 @@
  */
 
 export interface Star {
+  idx: number;  // compact sequential index (0..N-1), used for URL encoding
   id: number;
+  hip?: number; // Hipparcos catalog number
   ra: number;   // radians, 0 to 2π
   dec: number;  // radians, -π/2 to π/2
   mag: number;
