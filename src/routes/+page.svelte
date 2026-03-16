@@ -649,7 +649,7 @@
 		return null;
 	}
 
-	function handleClickOutsideSettings(e: MouseEvent) {
+	function handleClickOutsideSettings(e: PointerEvent) {
 		const target = e.target as HTMLElement;
 		if (settingsOpen && !target.closest('.settings-container')) {
 			settingsOpen = false;
@@ -704,8 +704,7 @@
 
 <svelte:window onkeydown={handleGlobalKeydown} />
 
-<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
-<div class="app" role="application" aria-label="Written in the Stars - constellation creator" onclick={handleClickOutsideSettings}>
+<div class="app" role="application" aria-label="Written in the Stars - constellation creator" onpointerdown={handleClickOutsideSettings}>
 	<StarField {stars} bind:this={starField} onReady={handleStarFieldReady} onVertexDrag={handleVertexDrag} onStarClick={handleStarClick} />
 
 	<!-- Top-left toolbar: settings, info, search -->
@@ -812,8 +811,7 @@
 			</button>
 		</div>
 
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-		<div class="star-search-container" onclick={(e) => e.stopPropagation()}>
+		<div class="star-search-container" onpointerdown={(e) => e.stopPropagation()}>
 		<div class="star-search-input-wrap">
 			<svg class="star-search-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 				<circle cx="11" cy="11" r="7" />
@@ -825,6 +823,8 @@
 				role="combobox"
 				aria-expanded={searchOpen && !!searchQuery.trim()}
 				aria-autocomplete="list"
+				aria-controls="star-search-listbox"
+				aria-activedescendant={searchOpen && searchQuery.trim() ? `star-search-option-${searchHighlight}` : undefined}
 				bind:value={searchQuery}
 				bind:this={searchInputEl}
 				onfocus={() => searchOpen = true}
@@ -849,7 +849,7 @@
 		</div>
 		{#if searchOpen && searchQuery.trim()}
 			{@const results = getSearchResults(searchQuery)}
-			<div class="star-search-dropdown" role="listbox">
+			<div class="star-search-dropdown" role="listbox" id="star-search-listbox">
 				{#if results.length === 0}
 					<div class="star-search-empty">No results</div>
 				{:else}
@@ -857,6 +857,7 @@
 						<button
 							class="star-search-result"
 							class:star-search-result-active={i === searchHighlight}
+							id={`star-search-option-${i}`}
 							role="option"
 							aria-selected={i === searchHighlight}
 							onclick={() => handleSearchSelect(result)}
@@ -905,8 +906,7 @@
 
 	<!-- Left-side info panel -->
 	{#if selectedStar || selectedConstellation}
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-		<div class="star-panel" onclick={(e) => e.stopPropagation()}>
+		<div class="star-panel" onpointerdown={(e) => e.stopPropagation()}>
 			<button class="star-panel-close" onclick={() => { selectedStar = null; selectedConstellation = null; selectionHistory = []; starField?.clearStarHighlight(); starField?.clearTempConstellation(); }} aria-label="Close info panel">
 				<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 					<line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
@@ -995,10 +995,8 @@
 
 	<!-- About modal -->
 	{#if aboutOpen}
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-		<div class="about-backdrop" onclick={() => aboutOpen = false}>
-			<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-			<div class="about-modal" onclick={(e) => e.stopPropagation()}>
+		<div class="about-backdrop" onpointerdown={() => aboutOpen = false}>
+			<div class="about-modal" role="dialog" aria-modal="true" aria-label="About Written in the Stars" onpointerdown={(e) => e.stopPropagation()}>
 				<button class="about-close" onclick={() => aboutOpen = false} aria-label="Close">
 					<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 						<line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
