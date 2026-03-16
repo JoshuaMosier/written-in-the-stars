@@ -728,7 +728,7 @@
 	let ambientPaused = false;
 	let uniformsRef: { uDim: THREE.Uniform<number>; uTime: THREE.Uniform<number>; uFovScale: THREE.Uniform<number>; uHoveredIndex: THREE.Uniform<number>; uBrightness: THREE.Uniform<number>; uMonochrome: THREE.Uniform<number> } | null = null;
 	const DEFAULT_FOV = 90;
-	let debugFov = $state(DEFAULT_FOV);
+
 	let rendererSize = new THREE.Vector2(1, 1);
 
 	// --- Auto-rotate (landing page drift) ---
@@ -1431,6 +1431,100 @@
 		for (const result of allResults) {
 			drawConstellationInstant(result);
 		}
+	}
+
+	/** Smooth pan to focused constellation, then draw it animated; others stay instant */
+	export function panToConstellation(allResults: MatchResult[], focusIndex: number) {
+		if (!controlsRef || !cameraRef) return;
+
+		// Redraw everything instantly first (non-focused stay, focused will be redrawn animated on arrival)
+		clearAllConstellations();
+		currentResults = [...allResults];
+		for (let i = 0; i < allResults.length; i++) {
+			if (i !== focusIndex) drawConstellationInstant(allResults[i]);
+		}
+
+		const result = allResults[focusIndex];
+		let cx = 0, cy = 0, cz = 0;
+		const positions: THREE.Vector3[] = [];
+		for (const pair of result.pairs) {
+			const pos = raDecToXYZ(pair.star.ra, pair.star.dec);
+			positions.push(pos);
+			cx += pos.x; cy += pos.y; cz += pos.z;
+		}
+		const len = Math.sqrt(cx * cx + cy * cy + cz * cz) || 1;
+		const centroidDir = new THREE.Vector3(cx / len, cy / len, cz / len);
+
+		const centroidRa = Math.atan2(-centroidDir.z, centroidDir.x);
+		const centroidDec = Math.asin(Math.max(-1, Math.min(1, centroidDir.y)));
+		const localNorth = new THREE.Vector3(
+			-Math.sin(centroidDec) * Math.cos(centroidRa),
+			Math.cos(centroidDec),
+			Math.sin(centroidDec) * Math.sin(centroidRa)
+		).normalize();
+
+		// Binary search for FOV that fits all stars
+		const testCam = new THREE.PerspectiveCamera(60, cameraRef.aspect, 0.1, 10);
+		testCam.position.set(0, 0, 0.0001);
+		testCam.up.copy(localNorth);
+		testCam.lookAt(centroidDir.clone().multiplyScalar(10));
+		const fitMargin = 0.9;
+		const maxFov = cameraRef.aspect < 0.8 ? 110 : 80;
+		let lo = 5, hi = maxFov + 10;
+		for (let i = 0; i < 16; i++) {
+			const mid = (lo + hi) / 2;
+			testCam.fov = mid;
+			testCam.updateProjectionMatrix();
+			let fits = true;
+			for (const pos of positions) {
+				const ndc = pos.clone().project(testCam);
+				if (Math.abs(ndc.x) > fitMargin || Math.abs(ndc.y) > fitMargin) {
+					fits = false;
+					break;
+				}
+			}
+			if (fits) hi = mid; else lo = mid;
+		}
+		const targetFov = Math.min(maxFov, Math.max(15, hi));
+
+		const startPos = cameraRef.position.clone();
+		const lookDir = controlsRef.target.clone().sub(startPos).normalize();
+		const endDir = centroidDir.clone();
+		const startUp = cameraRef.up.clone();
+		const startFov = cameraRef.fov;
+		const angularDist = Math.acos(Math.min(1, Math.max(-1, lookDir.dot(endDir))));
+		const duration = 300 + 500 * Math.min(1, angularDist / Math.PI);
+		const startTime = performance.now();
+
+		const qStart = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), lookDir);
+		const qEnd = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), endDir);
+		const qSlerp = new THREE.Quaternion();
+		const slerpedDir = new THREE.Vector3();
+		const origin = new THREE.Vector3(0, 0, 0.0001);
+		const Y_UP = new THREE.Vector3(0, 1, 0);
+
+		function animate() {
+			const elapsed = performance.now() - startTime;
+			const t = Math.min(1, elapsed / duration);
+			const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+			cameraRef!.position.lerpVectors(startPos, origin, ease);
+			qSlerp.slerpQuaternions(qStart, qEnd, ease);
+			slerpedDir.set(0, 0, -1).applyQuaternion(qSlerp);
+			controlsRef!.target.copy(cameraRef!.position).addScaledVector(slerpedDir, 0.001);
+			cameraRef!.up.lerpVectors(startUp, localNorth, ease).normalize();
+			(controlsRef as any)._quat.setFromUnitVectors(cameraRef!.up, Y_UP);
+			(controlsRef as any)._quatInverse.copy((controlsRef as any)._quat).invert();
+			cameraRef!.fov = startFov + (targetFov - startFov) * ease;
+			cameraRef!.updateProjectionMatrix();
+			controlsRef!.update();
+			if (t < 1) {
+				requestAnimationFrame(animate);
+			} else {
+				// Camera arrived — draw the focused constellation with animation
+				drawConstellationAnimated(result, true);
+			}
+		}
+		animate();
 	}
 
 	// --- Ambient constellation cycling ---
@@ -2401,7 +2495,37 @@
 		let hoveredIdx = -1;
 		const projected = new THREE.Vector3();
 
-		// --- Vertex drag handlers ---
+		// --- Vertex drag handlers (mouse + touch) ---
+		let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+		const LONG_PRESS_MS = 400;
+
+		function commitDrag() {
+			if (!dragState || dragState.committed) return;
+			dragState.committed = true;
+			controls.enabled = false;
+			hoveredIdx = -1;
+			uniforms.uHoveredIndex.value = -1.0;
+			tooltip.style.opacity = '0';
+			container.style.cursor = 'grabbing';
+		}
+
+		function cancelLongPress() {
+			if (longPressTimer) {
+				clearTimeout(longPressTimer);
+				longPressTimer = null;
+			}
+		}
+
+		function cleanupDrag() {
+			cancelLongPress();
+			if (dragState?.dragGroup && sceneRef) {
+				sceneRef.remove(dragState.dragGroup);
+			}
+			dragState = null;
+			controls.enabled = true;
+			container.style.cursor = '';
+		}
+
 		const onDragPointerDown = (e: PointerEvent) => {
 			if (e.button !== 0 || currentResults.length === 0) return;
 			const rect = container.getBoundingClientRect();
@@ -2419,7 +2543,25 @@
 					candidateStar: null,
 					dragGroup: null,
 				};
-				// Don't prevent default yet — let OrbitControls handle if it's not a drag
+
+				// For touch: start long-press timer to commit drag
+				if (e.pointerType === 'touch') {
+					longPressTimer = setTimeout(() => {
+						longPressTimer = null;
+						if (dragState && !dragState.committed) {
+							commitDrag();
+							// Show initial snap candidate at the press location
+							const r = container.getBoundingClientRect();
+							const candidate = findNearestStarToScreen(
+								mx, my, camera, r.width, r.height
+							);
+							if (dragState) {
+								dragState.candidateStar = candidate;
+								updateDragVisual(candidate);
+							}
+						}
+					}, LONG_PRESS_MS);
+				}
 			}
 		};
 
@@ -2430,15 +2572,17 @@
 			const dist = Math.sqrt(dx * dx + dy * dy);
 
 			if (!dragState.committed) {
+				if (e.pointerType === 'touch') {
+					// For touch: if finger moves too far before long-press fires, cancel
+					if (dist > 10) {
+						cancelLongPress();
+						dragState = null;
+					}
+					return;
+				}
+				// For mouse: commit after small movement
 				if (dist < DRAG_COMMIT_THRESHOLD) return;
-				// Commit to drag — disable orbit controls
-				dragState.committed = true;
-				controls.enabled = false;
-				// Hide hover tooltip
-				hoveredIdx = -1;
-				uniforms.uHoveredIndex.value = -1.0;
-				tooltip.style.opacity = '0';
-				container.style.cursor = 'grabbing';
+				commitDrag();
 			}
 
 			const rect = container.getBoundingClientRect();
@@ -2465,28 +2609,16 @@
 		};
 
 		const onDragPointerUp = (_e: PointerEvent) => {
+			cancelLongPress();
 			if (!dragState || !dragState.active) return;
 
 			if (dragState.committed && dragState.candidateStar) {
-				// Clean up drag visual
-				if (dragState.dragGroup && sceneRef) {
-					sceneRef.remove(dragState.dragGroup);
-				}
 				const { constellationIndex, nodeIndex, candidateStar } = dragState;
-				dragState = null;
-				controls.enabled = true;
-				container.style.cursor = '';
+				cleanupDrag();
 				tooltip.style.opacity = '0';
-				// Fire callback to parent
 				onVertexDrag({ constellationIndex, nodeIndex, newStar: candidateStar });
 			} else {
-				// Clean up without action
-				if (dragState.dragGroup && sceneRef) {
-					sceneRef.remove(dragState.dragGroup);
-				}
-				dragState = null;
-				controls.enabled = true;
-				container.style.cursor = '';
+				cleanupDrag();
 			}
 		};
 
@@ -2580,7 +2712,7 @@
 			uniforms.uTime.value = elapsedTime;
 			// Stars grow as you zoom in (lower FOV)
 			uniforms.uFovScale.value = DEFAULT_FOV / camera.fov;
-			debugFov = camera.fov;
+
 			// Update camera heading readout when grid is active
 			if (coordGridActive) {
 				const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
@@ -2698,7 +2830,7 @@
 
 <div bind:this={container} class="star-field" role="img" aria-label="Interactive 3D star field. Drag to rotate, scroll to zoom."></div>
 <div bind:this={tooltip} class="star-tooltip" role="tooltip" aria-hidden="true"></div>
-<div class="debug-fov">FOV: {debugFov.toFixed(1)}</div>
+
 {#if coordGridActive}
 	<div class="camera-heading" aria-live="polite">
 		<span class="heading-label">RA</span> <span class="heading-value">{cameraHeading.ra}</span>
@@ -2708,17 +2840,6 @@
 {/if}
 
 <style>
-	.debug-fov {
-		position: fixed;
-		top: 8px;
-		right: 8px;
-		color: rgba(255, 255, 255, 0.6);
-		font-family: monospace;
-		font-size: 12px;
-		z-index: 100;
-		pointer-events: none;
-	}
-
 	.star-field {
 		position: absolute;
 		inset: 0;

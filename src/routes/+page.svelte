@@ -289,6 +289,8 @@
 
 	function handleReroll() {
 		if (constellations.length === 0 || focusedIndex < 0) return;
+		undoStack = [];
+		redoStack = [];
 
 		const targetEntry = constellations[focusedIndex];
 		rerollIndex = focusedIndex;
@@ -312,13 +314,16 @@
 
 	function handleFocusConstellation(index: number) {
 		if (showInput || isMatching) return;
+		if (index === focusedIndex) return;
 		focusedIndex = index;
 		const allResults = constellations.map(c => c.result);
-		starField?.refocusConstellation(allResults, index);
+		starField?.panToConstellation(allResults, index);
 	}
 
 	function handleDeleteConstellation(index: number, event: MouseEvent) {
 		event.stopPropagation();
+		undoStack = [];
+		redoStack = [];
 		constellations = constellations.filter((_, i) => i !== index);
 		if (constellations.length === 0) {
 			handleReset();
@@ -344,6 +349,8 @@
 		constellations = [];
 		focusedIndex = -1;
 		rerollBlacklist = [];
+		undoStack = [];
+		redoStack = [];
 		showInput = true;
 		inputText = '';
 		// Clear hash
@@ -351,6 +358,47 @@
 		starField?.resetView();
 		autoRotate = true;
 		starField?.toggleAutoRotate(true);
+	}
+
+	// --- Undo/redo for vertex drags ---
+	interface DragAction {
+		constellationIndex: number;
+		nodeIndex: number;
+		oldStar: Star;
+		newStar: Star;
+	}
+	let undoStack: DragAction[] = [];
+	let redoStack: DragAction[] = [];
+
+	function applyDragAction(action: DragAction, star: Star) {
+		const entry = constellations[action.constellationIndex];
+		if (!entry) return;
+		const newPairs = entry.result.pairs.map(p =>
+			p.nodeIndex === action.nodeIndex ? { ...p, star } : { ...p }
+		);
+		const newResult: MatchResult = { ...entry.result, pairs: newPairs };
+		const newEntry: ConstellationEntry = { ...entry, result: newResult };
+		constellations = [
+			...constellations.slice(0, action.constellationIndex),
+			newEntry,
+			...constellations.slice(action.constellationIndex + 1),
+		];
+		history.replaceState(null, '', '#' + encodeAllToHash(constellations));
+		starField?.redrawConstellations(constellations.map(c => c.result));
+	}
+
+	function handleUndo() {
+		const action = undoStack.pop();
+		if (!action) return;
+		redoStack.push(action);
+		applyDragAction(action, action.oldStar);
+	}
+
+	function handleRedo() {
+		const action = redoStack.pop();
+		if (!action) return;
+		undoStack.push(action);
+		applyDragAction(action, action.newStar);
 	}
 
 	let copied = $state(false);
@@ -435,36 +483,39 @@
 		const entry = constellations[constellationIndex];
 		if (!entry) return;
 
-		// Clone the result with the updated star
-		const newPairs = entry.result.pairs.map(p =>
-			p.nodeIndex === nodeIndex ? { ...p, star: newStar } : { ...p }
-		);
-		const newResult: MatchResult = {
-			...entry.result,
-			pairs: newPairs,
-		};
-		const newEntry: ConstellationEntry = {
-			...entry,
-			result: newResult,
-		};
-		constellations = [
-			...constellations.slice(0, constellationIndex),
-			newEntry,
-			...constellations.slice(constellationIndex + 1),
-		];
+		// Find the old star for undo
+		const oldPair = entry.result.pairs.find(p => p.nodeIndex === nodeIndex);
+		if (!oldPair) return;
+		const oldStar = oldPair.star;
 
-		// Update URL hash
-		history.replaceState(null, '', '#' + encodeAllToHash(constellations));
+		// Skip if same star (no-op drag)
+		if (oldStar.idx === newStar.idx) return;
 
-		// Redraw all constellations instantly (camera is already in place)
-		const allResults = constellations.map(c => c.result);
-		starField?.redrawConstellations(allResults);
+		// Push to undo stack, clear redo
+		undoStack.push({ constellationIndex, nodeIndex, oldStar, newStar });
+		redoStack = [];
+
+		applyDragAction({ constellationIndex, nodeIndex, oldStar, newStar }, newStar);
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter') {
 			handleSubmit();
 		}
+	}
+
+	// Global undo/redo listener
+	if (typeof window !== 'undefined') {
+		window.addEventListener('keydown', (e: KeyboardEvent) => {
+			if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+				e.preventDefault();
+				handleUndo();
+			}
+			if ((e.ctrlKey || e.metaKey) && ((e.key === 'z' && e.shiftKey) || e.key === 'y')) {
+				e.preventDefault();
+				handleRedo();
+			}
+		});
 	}
 
 	function handleClickOutsideSettings(e: MouseEvent) {
