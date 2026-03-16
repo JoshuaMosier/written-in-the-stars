@@ -713,7 +713,38 @@
 	function autoFocus(node: HTMLInputElement) {
 		requestAnimationFrame(() => node.focus());
 	}
+
+	function handleGlobalKeydown(e: KeyboardEvent) {
+		const tag = (e.target as HTMLElement)?.tagName;
+		const isInput = tag === 'INPUT' || tag === 'TEXTAREA';
+
+		// Escape: dismiss overlays in order of priority
+		if (e.key === 'Escape') {
+			if (aboutOpen) { aboutOpen = false; return; }
+			if (searchOpen) { searchOpen = false; searchInputEl?.blur(); return; }
+			if (selectedStar || selectedConstellation) {
+				selectedStar = null;
+				selectedConstellation = null;
+				selectionHistory = [];
+				starField?.clearStarHighlight();
+				starField?.clearTempConstellation();
+				return;
+			}
+			if (settingsOpen) { settingsOpen = false; return; }
+		}
+
+		// "/" to focus the main input (only when not already typing)
+		if (e.key === '/' && !isInput) {
+			e.preventDefault();
+			if (showInput) {
+				const el = document.getElementById('constellation-input') as HTMLInputElement | null;
+				el?.focus();
+			}
+		}
+	}
 </script>
+
+<svelte:window onkeydown={handleGlobalKeydown} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
 <div class="app" role="application" aria-label="Written in the Stars - constellation creator" onclick={handleClickOutsideSettings}>
