@@ -80,6 +80,34 @@ const GLYPHS: Record<string, GlyphDef> = {
   'X': { width: 20, data: [3,21,17,0,-1,-1,17,21,3,0] },
   'Y': { width: 18, data: [1,21,9,11,9,0,-1,-1,17,21,9,11] },
   'Z': { width: 20, data: [17,21,3,0,-1,-1,3,21,17,21,-1,-1,3,0,17,0] },
+
+  // Hershey Simplex Roman lowercase (characters 599-624)
+  'a': { width: 19, data: [15,14, 15,11, 15,14, 14,10, 12,9, 9,9, 7,10, 6,11, 5,14, 5,15, 6,18, 8,19, 10,19, 12,18, 15,14] },
+  'b': { width: 19, data: [4,5, 4,19, -1,-1, 4,14, 5,10, 7,9, 9,9, 11,10, 12,11, 13,14, 13,15, 12,18, 10,19, 8,19, 6,18, 4,14] },
+  'c': { width: 18, data: [15,14, 14,10, 12,9, 10,9, 8,10, 7,11, 6,14, 6,15, 7,18, 9,19, 11,19, 13,18, 15,17] },
+  'd': { width: 19, data: [15,5, 15,19, -1,-1, 15,14, 14,10, 12,9, 10,9, 8,10, 7,11, 6,14, 6,15, 7,18, 9,19, 11,19, 13,18, 15,14] },
+  'e': { width: 18, data: [6,15, 15,15, 15,14, 14,11, 13,10, 11,9, 9,9, 7,10, 6,11, 5,14, 5,15, 6,18, 8,19, 10,19, 12,18, 14,17] },
+  'f': { width: 12, data: [10,5, 8,5, 7,6, 6,9, 6,19, -1,-1, 3,9, 10,9] },
+  'g': { width: 19, data: [15,9, 15,22, 14,24, 12,25, 10,25, 8,24, -1,-1, 15,14, 14,10, 12,9, 10,9, 8,10, 7,11, 6,14, 6,15, 7,18, 9,19, 11,19, 13,18, 15,14] },
+  'h': { width: 19, data: [4,5, 4,19, -1,-1, 4,14, 6,10, 8,9, 10,9, 12,10, 13,14, 13,19] },
+  'i': { width: 8, data: [3,5, 4,6, 5,5, 4,4, 3,5, -1,-1, 4,9, 4,19] },
+  'j': { width: 10, data: [5,5, 6,6, 7,5, 6,4, 5,5, -1,-1, 6,9, 6,22, 5,24, 3,25, 1,25] },
+  'k': { width: 17, data: [4,5, 4,19, -1,-1, 14,9, 4,15, -1,-1, 7,13, 15,19] },
+  'l': { width: 8, data: [4,5, 4,19] },
+  'm': { width: 30, data: [4,9, 4,19, -1,-1, 4,14, 6,10, 8,9, 10,9, 12,10, 13,14, 13,19, -1,-1, 13,14, 15,10, 17,9, 19,9, 21,10, 22,14, 22,19] },
+  'n': { width: 19, data: [4,9, 4,19, -1,-1, 4,14, 6,10, 8,9, 10,9, 12,10, 13,14, 13,19] },
+  'o': { width: 19, data: [9,9, 7,10, 6,11, 5,14, 5,15, 6,18, 8,19, 10,19, 12,18, 13,17, 14,14, 14,13, 13,10, 11,9, 9,9] },
+  'p': { width: 19, data: [4,9, 4,25, -1,-1, 4,14, 5,10, 7,9, 9,9, 11,10, 12,11, 13,14, 13,15, 12,18, 10,19, 8,19, 6,18, 4,14] },
+  'q': { width: 19, data: [15,9, 15,25, -1,-1, 15,14, 14,10, 12,9, 10,9, 8,10, 7,11, 6,14, 6,15, 7,18, 9,19, 11,19, 13,18, 15,14] },
+  'r': { width: 13, data: [4,9, 4,19, -1,-1, 4,14, 5,11, 7,9, 9,9, 11,10] },
+  's': { width: 17, data: [14,10, 12,9, 9,9, 7,10, 8,12, 11,13, 13,14, 14,16, 14,17, 12,19, 9,19, 7,18] },
+  't': { width: 12, data: [5,5, 5,17, 6,19, 8,19, 10,18, -1,-1, 2,9, 9,9] },
+  'u': { width: 19, data: [4,9, 4,15, 5,18, 7,19, 9,19, 11,18, 15,14, -1,-1, 15,9, 15,19] },
+  'v': { width: 16, data: [2,9, 8,19, -1,-1, 14,9, 8,19] },
+  'w': { width: 22, data: [3,9, 7,19, -1,-1, 11,9, 7,19, -1,-1, 11,9, 15,19, -1,-1, 19,9, 15,19] },
+  'x': { width: 17, data: [3,9, 14,19, -1,-1, 14,9, 3,19] },
+  'y': { width: 16, data: [2,9, 8,19, -1,-1, 14,9, 8,19, 6,22, 4,24, 2,25, 1,25] },
+  'z': { width: 17, data: [14,9, 3,19, -1,-1, 3,9, 14,9, -1,-1, 3,19, 14,19] },
 };
 
 // ---------------------------------------------------------------------------
@@ -143,17 +171,14 @@ export interface GlyphGraph {
  * the Hershey font glyph widths.
  */
 export function textToStrokes(text: string): { x: number; y: number }[][] {
-  const upper = text.toUpperCase();
-
   // Collect all raw strokes with character offsets applied
   const allStrokes: { x: number; y: number }[][] = [];
   let cursorX = 0;
 
-  for (let i = 0; i < upper.length; i++) {
-    const ch = upper[i];
-    if (!SUPPORTED_CHARS.has(ch)) continue;
-
-    const glyph = GLYPHS[ch];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const glyph = GLYPHS[ch] ?? GLYPHS[ch.toUpperCase()];
+    if (!glyph) continue;
     const strokes = parseStrokes(glyph.data);
 
     for (const stroke of strokes) {
@@ -211,18 +236,15 @@ export function textToStrokes(text: string): { x: number; y: number }[][] {
  * Points are derived from the Hershey Simplex Roman vector font.
  */
 export function textToAnchors(text: string): AnchorPoint[] {
-  const upper = text.toUpperCase();
-
   // First pass: collect raw points with metadata
   const rawPoints: { x: number; y: number; letterIndex: number; strokeIndex: number }[] = [];
   let cursorX = 0;
   let letterIndex = 0;
 
-  for (let i = 0; i < upper.length; i++) {
-    const ch = upper[i];
-    if (!SUPPORTED_CHARS.has(ch)) continue;
-
-    const glyph = GLYPHS[ch];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const glyph = GLYPHS[ch] ?? GLYPHS[ch.toUpperCase()];
+    if (!glyph) continue;
     const strokes = parseStrokes(glyph.data);
 
     for (let si = 0; si < strokes.length; si++) {
@@ -362,19 +384,16 @@ function rdpSimplify(points: Pt[], epsilon: number): number[] {
  * - Produces connected constellation-style networks per letter
  */
 export function textToGraph(text: string, simplifyEpsilon = 2.0): GlyphGraph {
-  const upper = text.toUpperCase();
-
   // Phase 1: collect raw strokes per letter with cursor offsets
   interface Stroke { points: Pt[] }
   const letterStrokes: { letterIndex: number; strokes: Stroke[] }[] = [];
   let cursorX = 0;
   let letterIndex = 0;
 
-  for (let i = 0; i < upper.length; i++) {
-    const ch = upper[i];
-    if (!SUPPORTED_CHARS.has(ch)) continue;
-
-    const glyph = GLYPHS[ch];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const glyph = GLYPHS[ch] ?? GLYPHS[ch.toUpperCase()];
+    if (!glyph) continue;
     const rawStrokes = parseStrokes(glyph.data);
     const strokes: Stroke[] = rawStrokes.map(s =>
       ({ points: s.map(p => ({ x: p.x + cursorX, y: p.y })) })
