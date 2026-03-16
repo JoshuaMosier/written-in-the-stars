@@ -2,11 +2,14 @@
 	import { onMount } from 'svelte';
 	import * as THREE from 'three';
 	import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+	import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+	import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+	import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 	import type { Star, MatchResult } from '$lib/engine/types';
+	import { CONSTELLATIONS } from '$lib/data/constellations';
 
-	let { stars, matchResult = $bindable(null), onReady = () => {} }: {
+	let { stars, onReady = () => {} }: {
 		stars: Star[];
-		matchResult: MatchResult | null;
 		onReady?: () => void;
 	} = $props();
 
@@ -15,10 +18,30 @@
 	let sceneRef: THREE.Scene | null = null;
 	let cameraRef: THREE.PerspectiveCamera | null = null;
 	let controlsRef: OrbitControls | null = null;
-	let constellationGroup: THREE.Group | null = null;
+	let constellationGroups: THREE.Group[] = [];
+	let drawAnimationIds: number[] = [];
 	let starPointsRef: THREE.Points | null = null;
+
+	// Ambient constellation cycling
+	interface AmbientConstellation {
+		name: string;
+		group: THREE.Group;
+		label: HTMLDivElement;
+		edges: { posA: THREE.Vector3; posB: THREE.Vector3 }[];
+		hlPositions: THREE.Vector3[];
+		startTime: number;
+		phase: 'draw' | 'hold' | 'fade';
+		phaseStart: number;
+		animId: number | null;
+	}
+	let ambientConstellations: AmbientConstellation[] = [];
+	let ambientQueue: number[] = [];
+	let ambientTimerId: ReturnType<typeof setTimeout> | null = null;
+	let ambientPaused = false;
+	let labelContainer: HTMLDivElement;
 	let uniformsRef: { uDim: THREE.Uniform<number>; uTime: THREE.Uniform<number>; uFovScale: THREE.Uniform<number>; uHoveredIndex: THREE.Uniform<number> } | null = null;
 	const DEFAULT_FOV = 60;
+	let rendererSize = new THREE.Vector2(1, 1);
 
 	// Convert B-V color index to RGB using Ballesteros' formula (2012)
 	// Maps stellar temperature to perceptually accurate color
@@ -75,16 +98,22 @@
 		attribute float aMag;
 		attribute float aColorIndex;
 		attribute float aIndex;
+		attribute float aNamed;
 		uniform float uFovScale;
 		uniform float uHoveredIndex;
 		varying float vMag;
 		varying float vColorIndex;
 		varying float vHover;
+		varying float vNamed;
+		varying float vSeed;
 
 		void main() {
 			vMag = aMag;
 			vColorIndex = aColorIndex;
+			vNamed = aNamed;
 			vHover = (uHoveredIndex >= 0.0 && abs(aIndex - uHoveredIndex) < 0.5) ? 1.0 : 0.0;
+			// Unique per-star seed derived from index
+			vSeed = aIndex * 137.035999;
 
 			vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
 			gl_Position = projectionMatrix * mvPosition;
@@ -105,6 +134,8 @@
 		varying float vMag;
 		varying float vColorIndex;
 		varying float vHover;
+		varying float vNamed;
+		varying float vSeed;
 
 		// B-V color index to RGB (Ballesteros 2012 approximation)
 		// Exaggerated saturation for visual punch
@@ -175,105 +206,561 @@
 			alpha *= 1.0 + vHover * 1.2;
 			finalColor = mix(finalColor, vec3(1.0), vHover * 0.1);
 
-			// Subtle scintillation for bright stars
-			if (vMag < 3.0) {
-				float rate = 2.0 + vMag * 0.5;
+			// Scintillation
+			if (vNamed > 0.5) {
+				// Named stars: 20% multi-frequency twinkle
+				float shimmer = 0.80
+					+ 0.10 * (sin(uTime * 1.3 + vSeed) * 0.5 + 0.5)
+					+ 0.06 * (sin(uTime * 3.1 + vSeed * 0.7) * 0.5 + 0.5)
+					+ 0.04 * (sin(uTime * 6.7 + vSeed * 1.3) * 0.5 + 0.5);
+				alpha *= shimmer;
+			} else {
+				// All other stars: 15% scintillation
 				float seed = gl_FragCoord.x * 12.9898 + gl_FragCoord.y * 78.233;
-				alpha *= 0.92 + 0.08 * sin(uTime * rate + seed);
+				float rate = 2.0 + vMag * 0.5;
+				alpha *= 0.85 + 0.15 * sin(uTime * rate + seed);
 			}
 
 			gl_FragColor = vec4(finalColor * alpha, alpha);
 		}
 	`;
 
-	function updateConstellation(result: MatchResult | null) {
+	function clearAllConstellations() {
+		for (const id of drawAnimationIds) {
+			cancelAnimationFrame(id);
+		}
+		drawAnimationIds = [];
+		for (const group of constellationGroups) {
+			if (group.parent) sceneRef?.remove(group);
+		}
+		constellationGroups = [];
+	}
+
+	function prepareForConstellation() {
 		if (!sceneRef) return;
 
-		// Remove old
-		if (constellationGroup) {
-			sceneRef.remove(constellationGroup);
-			constellationGroup = null;
-		}
+		// Stop ambient constellations when showing user's result
+		if (!ambientPaused) stopAmbientCycle();
 
-		if (!result) {
-			if (uniformsRef) uniformsRef.uDim.value = 1.0;
-			return;
-		}
+		// Dim background stars
+		if (uniformsRef) uniformsRef.uDim.value = 0.55;
+	}
 
-		constellationGroup = new THREE.Group();
+	function drawConstellationAnimated(result: MatchResult) {
+		if (!sceneRef) return;
+
+		const constellationGroup = new THREE.Group();
+		constellationGroups.push(constellationGroup);
+		sceneRef.add(constellationGroup);
 
 		const nodeToPos = new Map<number, THREE.Vector3>();
 		for (const pair of result.pairs) {
 			nodeToPos.set(pair.nodeIndex, raDecToXYZ(pair.star.ra, pair.star.dec).multiplyScalar(0.999));
 		}
 
-		// Constellation lines - thin, elegant
-		const linePositions: number[] = [];
+		// Collect valid edges with positions
+		const edgeData: { posA: THREE.Vector3; posB: THREE.Vector3 }[] = [];
+		const connectedNodes = new Set<number>();
 		for (const [nA, nB] of result.graph.edges) {
 			const posA = nodeToPos.get(nA);
 			const posB = nodeToPos.get(nB);
 			if (!posA || !posB) continue;
-			linePositions.push(posA.x, posA.y, posA.z, posB.x, posB.y, posB.z);
+			edgeData.push({ posA: posA.clone(), posB: posB.clone() });
+			connectedNodes.add(nA);
+			connectedNodes.add(nB);
 		}
 
-		if (linePositions.length > 0) {
-			const lineGeom = new THREE.BufferGeometry();
-			lineGeom.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
-			const lineMat = new THREE.LineBasicMaterial({
-				color: 0x88bbff,
-				transparent: true,
-				opacity: 0.35,
-				depthTest: false,
-			});
-			const lines = new THREE.LineSegments(lineGeom, lineMat);
-			lines.renderOrder = 1;
-			constellationGroup.add(lines);
-		}
-
-		// Highlighted star points - circular glow shader
-		const hlPositions: number[] = [];
+		// Collect highlighted star positions
+		const hlPositions: THREE.Vector3[] = [];
 		for (const pair of result.pairs) {
 			const pos = nodeToPos.get(pair.nodeIndex);
-			if (pos) hlPositions.push(pos.x, pos.y, pos.z);
+			if (pos) hlPositions.push(pos.clone());
 		}
 
-		if (hlPositions.length > 0) {
-			const hlGeom = new THREE.BufferGeometry();
-			hlGeom.setAttribute('position', new THREE.Float32BufferAttribute(hlPositions, 3));
-			const hlMat = new THREE.ShaderMaterial({
-				vertexShader: `
-					void main() {
-						vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-						gl_Position = projectionMatrix * mvPosition;
-						gl_PointSize = 12.0;
-					}
-				`,
-				fragmentShader: `
-					void main() {
-						float d = length(gl_PointCoord - 0.5) * 2.0;
-						if (d > 1.0) discard;
-						float alpha = exp(-d * d * 4.0) * 0.9;
-						vec3 color = vec3(0.85, 0.92, 1.0);
-						gl_FragColor = vec4(color * alpha, alpha);
-					}
-				`,
-				transparent: true,
-				depthTest: false,
-				blending: THREE.AdditiveBlending,
-			});
-			const points = new THREE.Points(hlGeom, hlMat);
-			points.renderOrder = 2;
-			constellationGroup.add(points);
+		// Find isolated nodes (no edges) — e.g. periods/dots
+		const isolatedPositions: THREE.Vector3[] = [];
+		for (const pair of result.pairs) {
+			if (!connectedNodes.has(pair.nodeIndex)) {
+				const pos = nodeToPos.get(pair.nodeIndex);
+				if (pos) isolatedPositions.push(pos.clone());
+			}
 		}
 
-		sceneRef.add(constellationGroup);
+		// Track which stars have been revealed (by position key)
+		const revealedStars = new Set<string>();
+		const starKey = (v: THREE.Vector3) => `${v.x.toFixed(6)},${v.y.toFixed(6)},${v.z.toFixed(6)}`;
 
-		// Dim background stars (keep them visible)
-		if (uniformsRef) uniformsRef.uDim.value = 0.55;
+		const hlMat = new THREE.ShaderMaterial({
+			vertexShader: `
+				void main() {
+					vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+					gl_Position = projectionMatrix * mvPosition;
+					gl_PointSize = 12.0;
+				}
+			`,
+			fragmentShader: `
+				void main() {
+					float d = length(gl_PointCoord - 0.5) * 2.0;
+					if (d > 1.0) discard;
+					float alpha = exp(-d * d * 4.0) * 0.9;
+					vec3 color = vec3(1.0, 1.0, 1.0);
+					gl_FragColor = vec4(color * alpha, alpha);
+				}
+			`,
+			transparent: true,
+			depthTest: false,
+			blending: THREE.AdditiveBlending,
+		});
+
+		// Ring shader for isolated nodes (periods/dots)
+		const ringMat = new THREE.ShaderMaterial({
+			vertexShader: `
+				void main() {
+					vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+					gl_Position = projectionMatrix * mvPosition;
+					gl_PointSize = 28.0;
+				}
+			`,
+			fragmentShader: `
+				void main() {
+					float d = length(gl_PointCoord - 0.5) * 2.0;
+					if (d > 1.0) discard;
+					// Ring profile: bright at radius ~0.65, fading inward and outward
+					float ring = smoothstep(0.35, 0.55, d) * smoothstep(0.95, 0.7, d);
+					// Soft inner glow
+					float glow = exp(-d * d * 6.0) * 0.15;
+					float alpha = (ring * 0.7 + glow);
+					vec3 color = vec3(1.0, 1.0, 1.0);
+					gl_FragColor = vec4(color * alpha, alpha);
+				}
+			`,
+			transparent: true,
+			depthTest: false,
+			blending: THREE.AdditiveBlending,
+		});
+
+		const drawDuration = 300; // ms per edge to draw
+		const stagger = 60; // ms between starting each edge
+		const startTime = performance.now();
+
+		function animateDraw() {
+			if (!constellationGroup) return;
+
+			const now = performance.now();
+			const elapsed = now - startTime;
+
+			// Remove old lines/points and rebuild
+			while (constellationGroup.children.length > 0) {
+				constellationGroup.remove(constellationGroup.children[0]);
+			}
+
+			const linePositions: number[] = [];
+			const newStarsThisFrame: THREE.Vector3[] = [];
+
+			for (let i = 0; i < edgeData.length; i++) {
+				const edgeStart = i * stagger;
+				const t = Math.min(1, Math.max(0, (elapsed - edgeStart) / drawDuration));
+				if (t <= 0) continue;
+
+				const { posA, posB } = edgeData[i];
+
+				// Interpolate endpoint for drawing effect
+				const currentX = posA.x + (posB.x - posA.x) * t;
+				const currentY = posA.y + (posB.y - posA.y) * t;
+				const currentZ = posA.z + (posB.z - posA.z) * t;
+
+				linePositions.push(posA.x, posA.y, posA.z, currentX, currentY, currentZ);
+
+				// Reveal start star
+				const keyA = starKey(posA);
+				if (!revealedStars.has(keyA)) {
+					revealedStars.add(keyA);
+					newStarsThisFrame.push(posA);
+				}
+
+				// Reveal end star when edge is complete
+				if (t >= 1) {
+					const keyB = starKey(posB);
+					if (!revealedStars.has(keyB)) {
+						revealedStars.add(keyB);
+						newStarsThisFrame.push(posB);
+					}
+				}
+			}
+
+			if (linePositions.length > 0) {
+				const segGeom = new LineSegmentsGeometry();
+				segGeom.setPositions(linePositions);
+
+				// Halo pass - wider, soft glow
+				const haloMat = new LineMaterial({
+					color: 0xffffff,
+					linewidth: 8,
+					transparent: true,
+					opacity: 0.1,
+					depthTest: false,
+					blending: THREE.AdditiveBlending,
+				});
+				haloMat.resolution.copy(rendererSize);
+				const halo = new LineSegments2(segGeom, haloMat);
+				halo.renderOrder = 1;
+				constellationGroup.add(halo);
+
+				// Core pass - thinner, brighter
+				const coreMat = new LineMaterial({
+					color: 0xffffff,
+					linewidth: 2.5,
+					transparent: true,
+					opacity: 0.4,
+					depthTest: false,
+					blending: THREE.AdditiveBlending,
+				});
+				coreMat.resolution.copy(rendererSize);
+				const core = new LineSegments2(segGeom, coreMat);
+				core.renderOrder = 1;
+				constellationGroup.add(core);
+			}
+
+			// Build highlighted stars geometry from all revealed stars
+			const starPositions: number[] = [];
+			for (const pos of hlPositions) {
+				if (revealedStars.has(starKey(pos))) {
+					starPositions.push(pos.x, pos.y, pos.z);
+				}
+			}
+
+			if (starPositions.length > 0) {
+				const hlGeom = new THREE.BufferGeometry();
+				hlGeom.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
+				const points = new THREE.Points(hlGeom, hlMat);
+				points.renderOrder = 2;
+				constellationGroup.add(points);
+			}
+
+			// Render rings around isolated nodes (periods/dots)
+			// Staggered after edges, each fading in over drawDuration
+			if (isolatedPositions.length > 0) {
+				const ringPositions: number[] = [];
+				for (let j = 0; j < isolatedPositions.length; j++) {
+					const ringStart = (edgeData.length + j) * stagger;
+					const t = Math.min(1, Math.max(0, (elapsed - ringStart) / drawDuration));
+					if (t > 0) {
+						ringPositions.push(isolatedPositions[j].x, isolatedPositions[j].y, isolatedPositions[j].z);
+					}
+				}
+				if (ringPositions.length > 0) {
+					const ringGeom = new THREE.BufferGeometry();
+					ringGeom.setAttribute('position', new THREE.Float32BufferAttribute(ringPositions, 3));
+					const ringPoints = new THREE.Points(ringGeom, ringMat);
+					ringPoints.renderOrder = 2;
+					constellationGroup.add(ringPoints);
+				}
+			}
+
+			// Continue until all elements are fully drawn
+			const totalItems = edgeData.length + isolatedPositions.length;
+			const totalDuration = totalItems > 0 ? (totalItems - 1) * stagger + drawDuration : 0;
+			if (elapsed < totalDuration) {
+				const id = requestAnimationFrame(animateDraw);
+				drawAnimationIds.push(id);
+			}
+		}
+
+		const id = requestAnimationFrame(animateDraw);
+		drawAnimationIds.push(id);
+	}
+
+	// --- Ambient constellation cycling ---
+
+	interface ResolvedConstellation {
+		name: string;
+		edges: { posA: THREE.Vector3; posB: THREE.Vector3 }[];
+		hlPositions: THREE.Vector3[];
+		centroid: THREE.Vector3;
+	}
+
+	let resolvedConstellations: ResolvedConstellation[] = [];
+
+	function resolveConstellations() {
+		const hipToStar = new Map<number, Star>();
+		for (const s of stars) {
+			if (s.hip) hipToStar.set(s.hip, s);
+		}
+
+		for (const def of CONSTELLATIONS) {
+			const edges: { posA: THREE.Vector3; posB: THREE.Vector3 }[] = [];
+			const posSet = new Map<number, THREE.Vector3>();
+
+			for (const [hip1, hip2] of def.lines) {
+				const sA = hipToStar.get(hip1);
+				const sB = hipToStar.get(hip2);
+				if (!sA || !sB) continue;
+
+				const posA = raDecToXYZ(sA.ra, sA.dec);
+				const posB = raDecToXYZ(sB.ra, sB.dec);
+				edges.push({ posA, posB });
+
+				if (!posSet.has(hip1)) posSet.set(hip1, posA);
+				if (!posSet.has(hip2)) posSet.set(hip2, posB);
+			}
+
+			if (edges.length === 0) continue;
+
+			const hlPositions = Array.from(posSet.values());
+			const centroid = new THREE.Vector3();
+			for (const p of hlPositions) centroid.add(p);
+			centroid.normalize();
+
+			resolvedConstellations.push({ name: def.name, edges, hlPositions, centroid });
+		}
+	}
+
+	function shuffleQueue() {
+		ambientQueue = resolvedConstellations.map((_, i) => i);
+		// Fisher-Yates shuffle
+		for (let i = ambientQueue.length - 1; i > 0; i--) {
+			const j = Math.floor(Math.random() * (i + 1));
+			[ambientQueue[i], ambientQueue[j]] = [ambientQueue[j], ambientQueue[i]];
+		}
+	}
+
+	function startAmbientCycle() {
+		resolveConstellations();
+		if (resolvedConstellations.length === 0) return;
+		shuffleQueue();
+
+		// Start first few with stagger
+		scheduleNext(500);
+		scheduleNext(2000);
+		scheduleNext(3500);
+		scheduleNext(5000);
+	}
+
+	function scheduleNext(delay: number) {
+		if (ambientPaused) return;
+		ambientTimerId = setTimeout(() => {
+			if (ambientPaused) return;
+			if (ambientQueue.length === 0) shuffleQueue();
+			const idx = ambientQueue.pop()!;
+			spawnAmbientConstellation(resolvedConstellations[idx]);
+			// Schedule the next one
+			scheduleNext(3000 + Math.random() * 2000);
+		}, delay);
+	}
+
+	function stopAmbientCycle() {
+		ambientPaused = true;
+		if (ambientTimerId !== null) {
+			clearTimeout(ambientTimerId);
+			ambientTimerId = null;
+		}
+		// Fade out all active ambient constellations
+		for (const ac of ambientConstellations) {
+			if (ac.animId !== null) cancelAnimationFrame(ac.animId);
+			if (ac.group.parent) sceneRef?.remove(ac.group);
+			ac.label.remove();
+		}
+		ambientConstellations = [];
+	}
+
+	function resumeAmbientCycle() {
+		ambientPaused = false;
+		scheduleNext(1000);
+		scheduleNext(2500);
+		scheduleNext(4000);
+	}
+
+	const AMBIENT_DRAW_DURATION = 400;
+	const AMBIENT_STAGGER = 80;
+	const AMBIENT_HOLD = 5000;
+	const AMBIENT_FADE = 3000;
+
+	function spawnAmbientConstellation(rc: ResolvedConstellation) {
+		if (!sceneRef || !cameraRef || ambientPaused) return;
+
+		const group = new THREE.Group();
+		sceneRef.add(group);
+
+		// Create label
+		const label = document.createElement('div');
+		label.className = 'ambient-label';
+		label.textContent = rc.name;
+		label.style.opacity = '0';
+		labelContainer.appendChild(label);
+
+		const ac: AmbientConstellation = {
+			name: rc.name,
+			group,
+			label,
+			edges: rc.edges,
+			hlPositions: rc.hlPositions,
+			startTime: performance.now(),
+			phase: 'draw',
+			phaseStart: performance.now(),
+			animId: null,
+		};
+
+		ambientConstellations.push(ac);
+
+		const revealedStars = new Set<string>();
+		const starKey = (v: THREE.Vector3) => `${v.x.toFixed(6)},${v.y.toFixed(6)},${v.z.toFixed(6)}`;
+
+		const totalDrawTime = (rc.edges.length - 1) * AMBIENT_STAGGER + AMBIENT_DRAW_DURATION;
+
+		function animate() {
+			if (ambientPaused || !group.parent) return;
+
+			const now = performance.now();
+			const phaseElapsed = now - ac.phaseStart;
+
+			// Phase transitions
+			if (ac.phase === 'draw' && phaseElapsed >= totalDrawTime) {
+				ac.phase = 'hold';
+				ac.phaseStart = now;
+			} else if (ac.phase === 'hold' && phaseElapsed >= AMBIENT_HOLD) {
+				ac.phase = 'fade';
+				ac.phaseStart = now;
+			} else if (ac.phase === 'fade' && phaseElapsed >= AMBIENT_FADE) {
+				// Remove
+				sceneRef?.remove(group);
+				label.remove();
+				ambientConstellations = ambientConstellations.filter(a => a !== ac);
+				return;
+			}
+
+			// Compute overall opacity
+			let opacity = 1.0;
+			if (ac.phase === 'draw') {
+				opacity = Math.min(1, phaseElapsed / 500);
+			} else if (ac.phase === 'fade') {
+				opacity = 1 - phaseElapsed / AMBIENT_FADE;
+			}
+
+			// Clear and rebuild group
+			while (group.children.length > 0) group.remove(group.children[0]);
+
+			const drawElapsed = ac.phase === 'draw' ? phaseElapsed : totalDrawTime;
+			const linePositions: number[] = [];
+
+			for (let i = 0; i < rc.edges.length; i++) {
+				const edgeStart = i * AMBIENT_STAGGER;
+				const t = Math.min(1, Math.max(0, (drawElapsed - edgeStart) / AMBIENT_DRAW_DURATION));
+				if (t <= 0) continue;
+
+				const { posA, posB } = rc.edges[i];
+				const cx = posA.x + (posB.x - posA.x) * t;
+				const cy = posA.y + (posB.y - posA.y) * t;
+				const cz = posA.z + (posB.z - posA.z) * t;
+				linePositions.push(posA.x, posA.y, posA.z, cx, cy, cz);
+
+				const kA = starKey(posA);
+				if (!revealedStars.has(kA)) revealedStars.add(kA);
+				if (t >= 1) {
+					const kB = starKey(posB);
+					if (!revealedStars.has(kB)) revealedStars.add(kB);
+				}
+			}
+
+			if (linePositions.length > 0) {
+				const segGeom = new LineSegmentsGeometry();
+				segGeom.setPositions(linePositions);
+
+				// Halo pass - wider, soft glow
+				const haloMat = new LineMaterial({
+					color: 0xffffff,
+					linewidth: 6,
+					transparent: true,
+					opacity: 0.1 * opacity,
+					depthTest: false,
+					blending: THREE.AdditiveBlending,
+				});
+				haloMat.resolution.copy(rendererSize);
+				const halo = new LineSegments2(segGeom, haloMat);
+				halo.renderOrder = 1;
+				group.add(halo);
+
+				// Core pass - thinner, brighter
+				const coreMat = new LineMaterial({
+					color: 0xffffff,
+					linewidth: 2,
+					transparent: true,
+					opacity: 0.32 * opacity,
+					depthTest: false,
+					blending: THREE.AdditiveBlending,
+				});
+				coreMat.resolution.copy(rendererSize);
+				const core = new LineSegments2(segGeom, coreMat);
+				core.renderOrder = 1;
+				group.add(core);
+			}
+
+			const starPositions: number[] = [];
+			for (const pos of rc.hlPositions) {
+				if (revealedStars.has(starKey(pos))) {
+					starPositions.push(pos.x, pos.y, pos.z);
+				}
+			}
+
+			if (starPositions.length > 0) {
+				const hlGeom = new THREE.BufferGeometry();
+				hlGeom.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
+				const hlMat = new THREE.ShaderMaterial({
+					vertexShader: `
+						void main() {
+							vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+							gl_Position = projectionMatrix * mvPosition;
+							gl_PointSize = 8.0;
+						}
+					`,
+					fragmentShader: `
+						uniform float uOpacity;
+						void main() {
+							float d = length(gl_PointCoord - 0.5) * 2.0;
+							if (d > 1.0) discard;
+							float alpha = exp(-d * d * 4.0) * 0.6 * uOpacity;
+							vec3 color = vec3(1.0, 1.0, 1.0);
+							gl_FragColor = vec4(color * alpha, alpha);
+						}
+					`,
+					uniforms: { uOpacity: new THREE.Uniform(opacity) },
+					transparent: true,
+					depthTest: false,
+					blending: THREE.AdditiveBlending,
+				});
+				const points = new THREE.Points(hlGeom, hlMat);
+				points.renderOrder = 2;
+				group.add(points);
+			}
+
+			// Update label position
+			if (cameraRef) {
+				const projected = rc.centroid.clone().project(cameraRef);
+				if (projected.z < 1) {
+					const rect = container.getBoundingClientRect();
+					const sx = (projected.x * 0.5 + 0.5) * rect.width;
+					const sy = (-projected.y * 0.5 + 0.5) * rect.height;
+					label.style.left = `${sx}px`;
+					label.style.top = `${sy - 30}px`;
+					const labelOpacity = ac.phase === 'draw'
+						? Math.max(0, (phaseElapsed - totalDrawTime * 0.5) / (totalDrawTime * 0.5))
+						: ac.phase === 'hold' ? 1
+						: 1 - phaseElapsed / AMBIENT_FADE;
+					label.style.opacity = `${Math.max(0, labelOpacity * 0.5)}`;
+				} else {
+					label.style.opacity = '0';
+				}
+			}
+
+			ac.animId = requestAnimationFrame(animate);
+		}
+
+		ac.animId = requestAnimationFrame(animate);
 	}
 
 	export function animateToMatch(result: MatchResult) {
 		if (!controlsRef || !cameraRef) return;
+
+		prepareForConstellation();
 
 		let cx = 0, cy = 0, cz = 0;
 		const positions: THREE.Vector3[] = [];
@@ -285,13 +772,22 @@
 		const len = Math.sqrt(cx * cx + cy * cy + cz * cz) || 1;
 		const centroidDir = new THREE.Vector3(cx / len, cy / len, cz / len);
 
-		let maxAngle = 0;
+		// Compute angular extent using the 90th percentile angle to avoid
+		// a single outlier star pulling the FOV too wide
+		const angles: number[] = [];
 		for (const pos of positions) {
-			const angle = Math.acos(Math.min(1, pos.dot(centroidDir)));
-			if (angle > maxAngle) maxAngle = angle;
+			angles.push(Math.acos(Math.min(1, pos.dot(centroidDir))));
 		}
+		angles.sort((a, b) => a - b);
+		const p90Index = Math.min(angles.length - 1, Math.floor(angles.length * 0.9));
+		const representativeAngle = angles[p90Index];
+		// Also keep the true max so we don't clip anything
+		const maxAngle = angles[angles.length - 1];
 
-		const targetFov = Math.min(120, Math.max(20, THREE.MathUtils.radToDeg(maxAngle) * 2.5 + 10));
+		// Tight zoom: use the larger of p90 and max-based, with minimal padding
+		const fovFromP90 = THREE.MathUtils.radToDeg(representativeAngle) * 2.2 + 3;
+		const fovFromMax = THREE.MathUtils.radToDeg(maxAngle) * 1.8 + 2;
+		const targetFov = Math.min(80, Math.max(10, Math.max(fovFromP90, fovFromMax)));
 		const target = centroidDir.clone().multiplyScalar(0.001);
 
 		// Compute local "north" (declination-increasing) direction at centroid.
@@ -326,13 +822,23 @@
 			cameraRef!.fov = startFov + (targetFov - startFov) * ease;
 			cameraRef!.updateProjectionMatrix();
 			controlsRef!.update();
-			if (t < 1) requestAnimationFrame(animate);
+			if (t < 1) {
+				requestAnimationFrame(animate);
+			} else {
+				// Camera arrived — start drawing the constellation
+				drawConstellationAnimated(result);
+			}
 		}
 		animate();
 	}
 
 	export function resetView() {
 		if (!controlsRef || !cameraRef) return;
+
+		clearAllConstellations();
+		if (uniformsRef) uniformsRef.uDim.value = 1.0;
+		if (resolvedConstellations.length > 0) resumeAmbientCycle();
+
 		const startTarget = controlsRef.target.clone();
 		const startUp = cameraRef.up.clone();
 		const defaultUp = new THREE.Vector3(0, 1, 0);
@@ -359,10 +865,6 @@
 		animate();
 	}
 
-	$effect(() => {
-		updateConstellation(matchResult);
-	});
-
 	onMount(() => {
 		const scene = new THREE.Scene();
 		sceneRef = scene;
@@ -377,6 +879,7 @@
 		renderer.setSize(container.clientWidth, container.clientHeight);
 		renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 		renderer.setClearColor(0x000005);
+		rendererSize.set(container.clientWidth, container.clientHeight);
 		container.appendChild(renderer.domElement);
 
 		const controls = new OrbitControls(camera, renderer.domElement);
@@ -404,6 +907,8 @@
 		const magnitudes = new Float32Array(count);
 		const colorIndices = new Float32Array(count);
 
+		const named = new Float32Array(count);
+
 		for (let i = 0; i < count; i++) {
 			const s = stars[i];
 			const pos = raDecToXYZ(s.ra, s.dec);
@@ -412,6 +917,7 @@
 			positions[i * 3 + 2] = pos.z;
 			magnitudes[i] = s.mag;
 			colorIndices[i] = s.ci ?? 0.62; // Default to solar-type if missing
+			named[i] = s.name ? 1.0 : 0.0;
 		}
 
 		const indices = new Float32Array(count);
@@ -422,6 +928,7 @@
 		starGeom.setAttribute('aMag', new THREE.Float32BufferAttribute(magnitudes, 1));
 		starGeom.setAttribute('aColorIndex', new THREE.Float32BufferAttribute(colorIndices, 1));
 		starGeom.setAttribute('aIndex', new THREE.Float32BufferAttribute(indices, 1));
+		starGeom.setAttribute('aNamed', new THREE.Float32BufferAttribute(named, 1));
 
 		const uniforms = {
 			uDim: new THREE.Uniform(1.0),
@@ -527,13 +1034,18 @@
 			camera.aspect = container.clientWidth / container.clientHeight;
 			camera.updateProjectionMatrix();
 			renderer.setSize(container.clientWidth, container.clientHeight);
+			rendererSize.set(container.clientWidth, container.clientHeight);
 		};
 		window.addEventListener('resize', onResize);
 
 		onReady();
 
+		// Start ambient constellation cycling
+		startAmbientCycle();
+
 		return () => {
 			cancelAnimationFrame(animId);
+			stopAmbientCycle();
 			window.removeEventListener('resize', onResize);
 			renderer.domElement.removeEventListener('wheel', onWheel);
 			renderer.domElement.removeEventListener('mousemove', onMouseMove);
@@ -546,6 +1058,7 @@
 </script>
 
 <div bind:this={container} class="star-field"></div>
+<div bind:this={labelContainer} class="ambient-labels"></div>
 <div bind:this={tooltip} class="star-tooltip"></div>
 
 <style>
@@ -554,6 +1067,26 @@
 		inset: 0;
 		width: 100%;
 		height: 100%;
+	}
+
+	.ambient-labels {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+		z-index: 1;
+	}
+
+	:global(.ambient-label) {
+		position: absolute;
+		transform: translateX(-50%);
+		color: rgba(255, 255, 255, 0.5);
+		font-size: 11px;
+		letter-spacing: 3px;
+		text-transform: uppercase;
+		white-space: nowrap;
+		pointer-events: none;
+		opacity: 0;
+		transition: opacity 0.3s;
 	}
 
 	.star-tooltip {
