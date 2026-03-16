@@ -541,7 +541,7 @@
 		}
 	}
 
-	function drawConstellationAnimated(result: MatchResult) {
+	function drawConstellationAnimated(result: MatchResult, fast = false) {
 		if (!sceneRef) return;
 
 		const constellationGroup = new THREE.Group();
@@ -634,8 +634,8 @@
 			blending: THREE.AdditiveBlending,
 		});
 
-		const drawDuration = 300; // ms per edge to draw
-		const stagger = 60; // ms between starting each edge
+		const drawDuration = fast ? 80 : 300; // ms per edge to draw
+		const stagger = fast ? 15 : 60; // ms between starting each edge
 		const startTime = performance.now();
 
 		function animateDraw() {
@@ -763,6 +763,111 @@
 
 		const id = requestAnimationFrame(animateDraw);
 		drawAnimationIds.push(id);
+	}
+
+	function drawConstellationInstant(result: MatchResult) {
+		if (!sceneRef) return;
+
+		const constellationGroup = new THREE.Group();
+		constellationGroups.push(constellationGroup);
+		sceneRef.add(constellationGroup);
+
+		const nodeToPos = new Map<number, THREE.Vector3>();
+		for (const pair of result.pairs) {
+			nodeToPos.set(pair.nodeIndex, raDecToXYZ(pair.star.ra, pair.star.dec).multiplyScalar(0.999));
+		}
+
+		const linePositions: number[] = [];
+		const connectedNodes = new Set<number>();
+		for (const [nA, nB] of result.graph.edges) {
+			const posA = nodeToPos.get(nA);
+			const posB = nodeToPos.get(nB);
+			if (!posA || !posB) continue;
+			linePositions.push(posA.x, posA.y, posA.z, posB.x, posB.y, posB.z);
+			connectedNodes.add(nA);
+			connectedNodes.add(nB);
+		}
+
+		if (linePositions.length > 0) {
+			const segGeom = new LineSegmentsGeometry();
+			segGeom.setPositions(linePositions);
+
+			const haloMat = new LineMaterial({
+				color: 0xffffff,
+				linewidth: 8,
+				transparent: true,
+				opacity: 0.1,
+				depthTest: false,
+				blending: THREE.AdditiveBlending,
+			});
+			haloMat.resolution.copy(rendererSize);
+			constellationGroup.add(new LineSegments2(segGeom, haloMat));
+
+			const coreMat = new LineMaterial({
+				color: 0xffffff,
+				linewidth: 2.5,
+				transparent: true,
+				opacity: 0.4,
+				depthTest: false,
+				blending: THREE.AdditiveBlending,
+			});
+			coreMat.resolution.copy(rendererSize);
+			constellationGroup.add(new LineSegments2(segGeom, coreMat));
+		}
+
+		const hlPositions: number[] = [];
+		for (const pair of result.pairs) {
+			const pos = nodeToPos.get(pair.nodeIndex);
+			if (pos && connectedNodes.has(pair.nodeIndex)) hlPositions.push(pos.x, pos.y, pos.z);
+		}
+
+		if (hlPositions.length > 0) {
+			const hlMat = new THREE.ShaderMaterial({
+				vertexShader: `void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_PointSize = 12.0; }`,
+				fragmentShader: `void main() { float d = length(gl_PointCoord - 0.5) * 2.0; if (d > 1.0) discard; float alpha = exp(-d * d * 4.0) * 0.9; gl_FragColor = vec4(vec3(alpha), alpha); }`,
+				transparent: true,
+				depthTest: false,
+				blending: THREE.AdditiveBlending,
+			});
+			const hlGeom = new THREE.BufferGeometry();
+			hlGeom.setAttribute('position', new THREE.Float32BufferAttribute(hlPositions, 3));
+			const points = new THREE.Points(hlGeom, hlMat);
+			points.renderOrder = 2;
+			constellationGroup.add(points);
+		}
+
+		// Rings for isolated nodes
+		const isoPositions: number[] = [];
+		for (const pair of result.pairs) {
+			if (!connectedNodes.has(pair.nodeIndex)) {
+				const pos = nodeToPos.get(pair.nodeIndex);
+				if (pos) isoPositions.push(pos.x, pos.y, pos.z);
+			}
+		}
+		if (isoPositions.length > 0) {
+			const ringMat = new THREE.ShaderMaterial({
+				vertexShader: `void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_PointSize = 28.0; }`,
+				fragmentShader: `void main() { float d = length(gl_PointCoord - 0.5) * 2.0; if (d > 1.0) discard; float ring = smoothstep(0.35, 0.55, d) * smoothstep(0.95, 0.7, d); float glow = exp(-d * d * 6.0) * 0.15; float alpha = ring * 0.7 + glow; gl_FragColor = vec4(vec3(alpha), alpha); }`,
+				transparent: true,
+				depthTest: false,
+				blending: THREE.AdditiveBlending,
+			});
+			const ringGeom = new THREE.BufferGeometry();
+			ringGeom.setAttribute('position', new THREE.Float32BufferAttribute(isoPositions, 3));
+			const ringPoints = new THREE.Points(ringGeom, ringMat);
+			ringPoints.renderOrder = 2;
+			constellationGroup.add(ringPoints);
+		}
+	}
+
+	export function refocusConstellation(allResults: MatchResult[], focusIndex: number) {
+		clearAllConstellations();
+		// Instantly draw all non-focused constellations
+		for (let i = 0; i < allResults.length; i++) {
+			if (i !== focusIndex) drawConstellationInstant(allResults[i]);
+		}
+		// Animate camera to focused one (fast replay)
+		animateToMatch(allResults[focusIndex], true);
 	}
 
 	// --- Ambient constellation cycling ---
@@ -1131,7 +1236,7 @@
 		}
 	}
 
-	export function animateToMatch(result: MatchResult) {
+	export function animateToMatch(result: MatchResult, fast = false) {
 		if (!controlsRef || !cameraRef) return;
 
 		prepareForConstellation();
@@ -1204,7 +1309,11 @@
 		const endDir = centroidDir.clone();
 		const startUp = cameraRef.up.clone();
 		const startFov = cameraRef.fov;
-		const duration = 1200;
+		// Scale camera pan duration by angular distance (0° → minimum, 180° → full)
+		const angularDist = Math.acos(Math.min(1, Math.max(-1, lookDir.dot(endDir))));
+		const baseDuration = fast ? 800 : 1200;
+		const minDuration = fast ? 300 : 400;
+		const duration = minDuration + (baseDuration - minDuration) * Math.min(1, angularDist / Math.PI);
 		const startTime = performance.now();
 
 		// Use quaternion slerp to rotate the look direction so the camera
@@ -1238,7 +1347,7 @@
 				requestAnimationFrame(animate);
 			} else {
 				// Camera arrived — start drawing the constellation
-				drawConstellationAnimated(result);
+				drawConstellationAnimated(result, fast);
 			}
 		}
 		animate();

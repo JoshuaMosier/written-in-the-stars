@@ -65,6 +65,7 @@
 	let showInput = $state(true);
 	let starField: StarField;
 	let constellations: ConstellationEntry[] = $state([]);
+	let focusedIndex = $state(-1);
 	let rerollBlacklist: number[] = [];  // accumulates stars from previous re-rolls
 
 	// --- URL hash encoding/decoding ---
@@ -167,6 +168,7 @@
 	function showResult(text: string, result: MatchResult) {
 		const entry = makeEntry(text, result);
 		constellations = [...constellations, entry];
+		focusedIndex = constellations.length - 1;
 
 		showInput = false;
 		stopMatchingPhrases();
@@ -261,6 +263,7 @@
 	function handleRerollResult(text: string, result: MatchResult) {
 		const entry = makeEntry(text, result);
 		constellations = [...constellations.slice(0, -1), entry];
+		focusedIndex = constellations.length - 1;
 		isRerolling = false;
 		stopMatchingPhrases();
 		isMatching = false;
@@ -294,6 +297,13 @@
 		worker.postMessage({ type: 'match', payload: { text: lastEntry.text, usedStarIndices } });
 	}
 
+	function handleFocusConstellation(index: number) {
+		if (showInput || isMatching) return;
+		focusedIndex = index;
+		const allResults = constellations.map(c => c.result);
+		starField?.refocusConstellation(allResults, index);
+	}
+
 	function handleAddAnother() {
 		showInput = true;
 		inputText = '';
@@ -301,6 +311,7 @@
 
 	function handleReset() {
 		constellations = [];
+		focusedIndex = -1;
 		rerollBlacklist = [];
 		showInput = true;
 		inputText = '';
@@ -479,14 +490,19 @@
 	{#if constellations.length > 0}
 		<div class="result-overlay" class:dimmed={showInput} role="region" aria-label="Your constellations">
 			{#each constellations as entry, i}
-				<div class="constellation-entry" class:latest={i === constellations.length - 1 && !showInput}>
+				<button
+					class="constellation-entry"
+					class:focused={i === focusedIndex && !showInput}
+					onclick={() => handleFocusConstellation(i)}
+					disabled={showInput || isMatching}
+				>
 					<div class="constellation-name">{entry.name}</div>
 					<div class="constellation-info">
 						<span class="catalog-id">{entry.catalogId}</span>
 						<span class="separator" aria-hidden="true">·</span>
 						<span class="star-count">{entry.starCount} stars</span>
 					</div>
-				</div>
+				</button>
 			{/each}
 			{#if !showInput}
 				<div class="result-actions" role="toolbar" aria-label="Constellation actions">
@@ -645,9 +661,23 @@
 		gap: 4px;
 		opacity: 0.4;
 		transition: opacity 0.3s;
+		background: none;
+		border: none;
+		padding: 4px 12px;
+		cursor: pointer;
+		font-family: inherit;
+		border-radius: 6px;
 	}
 
-	.constellation-entry.latest {
+	.constellation-entry:hover:not(:disabled) {
+		opacity: 0.7;
+	}
+
+	.constellation-entry:disabled {
+		cursor: default;
+	}
+
+	.constellation-entry.focused {
 		opacity: 1;
 	}
 
@@ -658,7 +688,7 @@
 		text-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
 	}
 
-	.constellation-entry:not(.latest) .constellation-name {
+	.constellation-entry:not(.focused) .constellation-name {
 		font-size: 16px;
 		letter-spacing: 4px;
 	}
@@ -672,7 +702,7 @@
 		align-items: center;
 	}
 
-	.constellation-entry:not(.latest) .constellation-info {
+	.constellation-entry:not(.focused) .constellation-info {
 		font-size: 11px;
 	}
 
@@ -690,7 +720,8 @@
 	}
 
 	.reset-btn {
-		background: none;
+		background: rgba(0, 0, 0, 0.4);
+		backdrop-filter: blur(8px);
 		border: 1px solid rgba(255, 255, 255, 0.15);
 		color: rgba(255, 255, 255, 0.5);
 		padding: 8px 20px;
@@ -809,7 +840,7 @@
 			letter-spacing: 4px;
 		}
 
-		.constellation-entry:not(.latest) .constellation-name {
+		.constellation-entry:not(.focused) .constellation-name {
 			font-size: 14px;
 			letter-spacing: 3px;
 		}
