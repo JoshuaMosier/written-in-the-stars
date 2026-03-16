@@ -3,6 +3,7 @@
 	import { textToGraph } from '$lib/engine/glyphs';
 	import starData from '$lib/data/stars.json';
 	import type { Star, MatchResult } from '$lib/engine/types';
+	import { CONSTELLATIONS } from '$lib/data/constellations';
 	import MatchWorker from '$lib/engine/match.worker?worker';
 
 	const stars: Star[] = (starData as Star[]).filter(s => s.mag > -10);
@@ -518,11 +519,147 @@
 		});
 	}
 
+	// --- Star search + info panel ---
+	let selectedStar = $state<Star | null>(null);
+	let selectedConstellation = $state<typeof CONSTELLATIONS[0] | null>(null);
+	let searchQuery = $state('');
+	let searchOpen = $state(false);
+	let searchInputEl: HTMLInputElement;
+	let starClickedThisTick = false;
+
+	// Build search index of named stars
+	const namedStars = stars.filter(s => s.name);
+	// Build HIP lookup for constellation star resolution
+	const starByHip = new Map<number, Star>();
+	for (const s of stars) if (s.hip) starByHip.set(s.hip, s);
+
+	interface SearchResult {
+		type: 'star' | 'constellation';
+		name: string;
+		star?: Star;
+		constellation?: typeof CONSTELLATIONS[0];
+	}
+
+	function getSearchResults(query: string): SearchResult[] {
+		if (!query.trim()) return [];
+		const q = query.toLowerCase();
+		const results: SearchResult[] = [];
+		// Stars by name
+		for (const s of namedStars) {
+			if (s.name!.toLowerCase().includes(q)) {
+				results.push({ type: 'star', name: s.name!, star: s });
+			}
+			if (results.length >= 12) break;
+		}
+		// IAU constellations by name
+		for (const c of CONSTELLATIONS) {
+			if (c.name.toLowerCase().includes(q)) {
+				results.push({ type: 'constellation', name: c.name, constellation: c });
+			}
+			if (results.length >= 20) break;
+		}
+		return results;
+	}
+
+	function handleSearchSelect(result: SearchResult) {
+		if (result.type === 'star' && result.star) {
+			selectedStar = result.star;
+			selectedConstellation = null;
+			starField?.clearTempConstellation();
+			starField?.highlightStar(result.star);
+			starField?.panToRaDec(result.star.ra, result.star.dec, 30);
+		} else if (result.type === 'constellation' && result.constellation) {
+			selectedConstellation = result.constellation;
+			selectedStar = null;
+			starField?.clearStarHighlight();
+			starField?.drawTempConstellation(result.constellation.name);
+			starField?.panToIAUConstellation(result.constellation.name);
+		}
+		searchQuery = '';
+		searchOpen = false;
+	}
+
+	function handleStarClick(star: Star, _screenPos: { x: number; y: number }) {
+		if (selectedStar && selectedStar.idx === star.idx) {
+			selectedStar = null;
+			starField?.clearStarHighlight();
+			starClickedThisTick = true;
+			requestAnimationFrame(() => { starClickedThisTick = false; });
+			return;
+		}
+		selectedStar = star;
+		selectedConstellation = null;
+		starField?.clearTempConstellation();
+		starField?.highlightStar(star);
+		// Prevent the bubbling click event from immediately dismissing
+		starClickedThisTick = true;
+		requestAnimationFrame(() => { starClickedThisTick = false; });
+	}
+
+	function getConstellationStars(c: typeof CONSTELLATIONS[0]): Star[] {
+		const hipSet = new Set<number>();
+		for (const [a, b] of c.lines) { hipSet.add(a); hipSet.add(b); }
+		const result: Star[] = [];
+		for (const hip of hipSet) {
+			const s = starByHip.get(hip);
+			if (s) result.push(s);
+		}
+		return result.sort((a, b) => a.mag - b.mag);
+	}
+
+	function formatRA(ra: number): string {
+		const hours = (ra / (Math.PI * 2)) * 24;
+		const h = Math.floor(hours);
+		const m = Math.floor((hours - h) * 60);
+		const s = ((hours - h - m / 60) * 3600).toFixed(1);
+		return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(4, '0')}s`;
+	}
+
+	function formatDec(dec: number): string {
+		const deg = (dec * 180) / Math.PI;
+		const sign = deg >= 0 ? '+' : '\u2212';
+		const abs = Math.abs(deg);
+		const d = Math.floor(abs);
+		const m = Math.floor((abs - d) * 60);
+		const s = ((abs - d - m / 60) * 3600).toFixed(0);
+		return `${sign}${d}\u00b0 ${String(m).padStart(2, '0')}\u2032 ${String(s).padStart(2, '0')}\u2033`;
+	}
+
+	function spectralClass(ci?: number): string {
+		if (ci === undefined) return 'Unknown';
+		if (ci < -0.02) return 'O/B (blue)';
+		if (ci < 0.15) return 'A (blue-white)';
+		if (ci < 0.44) return 'F (white)';
+		if (ci < 0.68) return 'G (yellow)';
+		if (ci < 1.15) return 'K (orange)';
+		return 'M (red)';
+	}
+
+	function starWikiUrl(star: Star): string | null {
+		if (star.name) {
+			return `https://en.wikipedia.org/wiki/${encodeURIComponent(star.name.replace(/ /g, '_'))}_(star)`;
+		}
+		if (star.hip) {
+			return `https://simbad.u-strasbg.fr/simbad/sim-id?Ident=HIP+${star.hip}`;
+		}
+		return null;
+	}
+
 	function handleClickOutsideSettings(e: MouseEvent) {
-		if (!settingsOpen) return;
 		const target = e.target as HTMLElement;
-		if (!target.closest('.settings-container')) {
+		if (settingsOpen && !target.closest('.settings-container')) {
 			settingsOpen = false;
+		}
+		// Close search dropdown when clicking outside
+		if (searchOpen && !target.closest('.star-search-container')) {
+			searchOpen = false;
+		}
+		// Dismiss star/constellation panel when clicking outside
+		if ((selectedStar || selectedConstellation) && !starClickedThisTick && !target.closest('.star-panel') && !target.closest('.star-search-container')) {
+			selectedStar = null;
+			selectedConstellation = null;
+			starField?.clearStarHighlight();
+			starField?.clearTempConstellation();
 		}
 	}
 
@@ -533,7 +670,7 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
 <div class="app" role="application" aria-label="Written in the Stars - constellation creator" onclick={handleClickOutsideSettings}>
-	<StarField {stars} bind:this={starField} onReady={handleStarFieldReady} onVertexDrag={handleVertexDrag} />
+	<StarField {stars} bind:this={starField} onReady={handleStarFieldReady} onVertexDrag={handleVertexDrag} onStarClick={handleStarClick} />
 
 	<div class="settings-container">
 		<button
@@ -651,6 +788,125 @@
 
 	{#if errorMessage}
 		<div class="error-toast" role="alert">{errorMessage}</div>
+	{/if}
+
+	<!-- Star search bar (top left) -->
+	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<div class="star-search-container" onclick={(e) => e.stopPropagation()}>
+		<div class="star-search-input-wrap">
+			<svg class="star-search-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+				<circle cx="11" cy="11" r="7" />
+				<line x1="16.5" y1="16.5" x2="21" y2="21" />
+			</svg>
+			<input
+				class="star-search-input"
+				type="text"
+				bind:value={searchQuery}
+				bind:this={searchInputEl}
+				onfocus={() => searchOpen = true}
+				oninput={() => searchOpen = true}
+				placeholder="Search stars & constellations..."
+				autocomplete="off"
+			/>
+			{#if searchQuery}
+				<button class="star-search-clear" onclick={() => { searchQuery = ''; searchOpen = false; }} aria-label="Clear search">
+					<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+						<line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
+					</svg>
+				</button>
+			{/if}
+		</div>
+		{#if searchOpen && searchQuery.trim()}
+			{@const results = getSearchResults(searchQuery)}
+			<div class="star-search-dropdown">
+				{#if results.length === 0}
+					<div class="star-search-empty">No results</div>
+				{:else}
+					{#each results as result}
+						<button class="star-search-result" onclick={() => handleSearchSelect(result)}>
+							<span class="star-search-result-type">{result.type === 'star' ? 'Star' : 'IAU'}</span>
+							<span class="star-search-result-name">{result.name}</span>
+							{#if result.type === 'star' && result.star}
+								<span class="star-search-result-mag">mag {result.star.mag.toFixed(1)}</span>
+							{/if}
+						</button>
+					{/each}
+				{/if}
+			</div>
+		{/if}
+	</div>
+
+	<!-- Left-side info panel -->
+	{#if selectedStar || selectedConstellation}
+		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<div class="star-panel" onclick={(e) => e.stopPropagation()}>
+			<button class="star-panel-close" onclick={() => { selectedStar = null; selectedConstellation = null; starField?.clearStarHighlight(); starField?.clearTempConstellation(); }} aria-label="Close info panel">
+				<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+					<line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
+				</svg>
+			</button>
+
+			{#if selectedStar}
+				<div class="star-panel-name">{selectedStar.name || `HIP ${selectedStar.hip || selectedStar.id}`}</div>
+				<div class="star-panel-rows">
+					<div class="star-panel-row">
+						<span class="star-panel-label">Magnitude</span>
+						<span class="star-panel-value">{selectedStar.mag.toFixed(2)}</span>
+					</div>
+					<div class="star-panel-row">
+						<span class="star-panel-label">Spectral</span>
+						<span class="star-panel-value">{spectralClass(selectedStar.ci)}</span>
+					</div>
+					<div class="star-panel-row">
+						<span class="star-panel-label">RA</span>
+						<span class="star-panel-value">{formatRA(selectedStar.ra)}</span>
+					</div>
+					<div class="star-panel-row">
+						<span class="star-panel-label">Dec</span>
+						<span class="star-panel-value">{formatDec(selectedStar.dec)}</span>
+					</div>
+					{#if selectedStar.hip}
+						<div class="star-panel-row">
+							<span class="star-panel-label">HIP</span>
+							<span class="star-panel-value">{selectedStar.hip}</span>
+						</div>
+					{/if}
+				</div>
+				{#if starWikiUrl(selectedStar)}
+					<a class="star-panel-link" href={starWikiUrl(selectedStar)} target="_blank" rel="noopener noreferrer">
+						{selectedStar.name ? 'Wikipedia' : 'SIMBAD'} &rarr;
+					</a>
+				{/if}
+			{:else if selectedConstellation}
+				{@const cStars = getConstellationStars(selectedConstellation)}
+				<div class="star-panel-name">{selectedConstellation.name}</div>
+				<div class="star-panel-subtitle">IAU Constellation</div>
+				<div class="star-panel-rows">
+					<div class="star-panel-row">
+						<span class="star-panel-label">Lines</span>
+						<span class="star-panel-value">{selectedConstellation.lines.length}</span>
+					</div>
+					<div class="star-panel-row">
+						<span class="star-panel-label">Stars</span>
+						<span class="star-panel-value">{cStars.length}</span>
+					</div>
+					{#if cStars.length > 0}
+						<div class="star-panel-row">
+							<span class="star-panel-label">Brightest</span>
+							<span class="star-panel-value">{cStars[0].name || `HIP ${cStars[0].hip}`} ({cStars[0].mag.toFixed(1)})</span>
+						</div>
+					{/if}
+				</div>
+				<div class="star-panel-star-list">
+					<div class="star-panel-list-title">Notable stars</div>
+					{#each cStars.filter((s: Star) => s.name).slice(0, 8) as s}
+						<button class="star-panel-star-btn" onclick={() => { selectedStar = s; selectedConstellation = null; starField?.clearTempConstellation(); starField?.highlightStar(s); starField?.panToRaDec(s.ra, s.dec, 30); }}>
+							{s.name} <span class="star-panel-star-mag">({s.mag.toFixed(1)})</span>
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
 	{/if}
 
 	<a class="attribution" href="https://neal.fun/constellation-draw/" target="_blank" rel="noopener noreferrer">
@@ -785,7 +1041,7 @@
 		pointer-events: none;
 	}
 
-	input {
+	.input-overlay input {
 		background: rgba(0, 0, 0, 0.2);
 		border: 1px solid rgba(255, 255, 255, 0.15);
 		border-radius: 8px;
@@ -802,15 +1058,15 @@
 		transition: border-color 0.2s;
 	}
 
-	input::placeholder {
+	.input-overlay input::placeholder {
 		color: rgba(255, 255, 255, 0.5);
 	}
 
-	input:focus {
+	.input-overlay input:focus {
 		border-color: rgba(255, 215, 0, 0.4);
 	}
 
-	input:focus-visible {
+	.input-overlay input:focus-visible {
 		box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.3);
 	}
 
@@ -1194,7 +1450,7 @@
 
 	/* Mobile adjustments */
 	@media (max-width: 480px) {
-		input {
+		.input-overlay input {
 			font-size: 18px;
 			padding: 14px 20px;
 			letter-spacing: 1.5px;
@@ -1247,6 +1503,292 @@
 		.constellation-name {
 			font-size: 18px;
 			letter-spacing: 3px;
+		}
+	}
+
+	/* Star search bar (top left) */
+	.star-search-container {
+		position: absolute;
+		top: 16px;
+		left: 16px;
+		z-index: 15;
+		width: 260px;
+	}
+
+	.star-search-input-wrap {
+		position: relative;
+		display: flex;
+		align-items: center;
+	}
+
+	.star-search-icon {
+		position: absolute;
+		left: 10px;
+		color: rgba(255, 255, 255, 0.3);
+		pointer-events: none;
+	}
+
+	.star-search-input {
+		width: 100%;
+		background: rgba(0, 0, 0, 0.35);
+		backdrop-filter: blur(8px);
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		border-radius: 8px;
+		color: #fff;
+		font-size: 13px;
+		font-family: inherit;
+		padding: 8px 30px 8px 30px;
+		letter-spacing: 0.5px;
+		outline: none;
+		transition: border-color 0.2s;
+	}
+
+	.star-search-input::placeholder {
+		color: rgba(255, 255, 255, 0.3);
+	}
+
+	.star-search-input:focus {
+		border-color: rgba(255, 215, 0, 0.3);
+	}
+
+	.star-search-clear {
+		position: absolute;
+		right: 6px;
+		background: none;
+		border: none;
+		color: rgba(255, 255, 255, 0.3);
+		cursor: pointer;
+		padding: 4px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 4px;
+		transition: color 0.15s;
+	}
+
+	.star-search-clear:hover {
+		color: rgba(255, 255, 255, 0.7);
+	}
+
+	.star-search-dropdown {
+		position: absolute;
+		top: 100%;
+		left: 0;
+		right: 0;
+		margin-top: 4px;
+		background: rgba(0, 0, 0, 0.8);
+		backdrop-filter: blur(12px);
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		border-radius: 8px;
+		max-height: 280px;
+		overflow-y: auto;
+		animation: panel-in 0.12s ease-out;
+	}
+
+	.star-search-empty {
+		padding: 12px 14px;
+		font-size: 12px;
+		color: rgba(255, 255, 255, 0.3);
+		letter-spacing: 0.5px;
+	}
+
+	.star-search-result {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: 100%;
+		background: none;
+		border: none;
+		padding: 8px 12px;
+		cursor: pointer;
+		font-family: inherit;
+		text-align: left;
+		color: rgba(255, 255, 255, 0.7);
+		transition: background 0.1s;
+	}
+
+	.star-search-result:hover {
+		background: rgba(255, 255, 255, 0.06);
+	}
+
+	.star-search-result:first-child {
+		border-radius: 8px 8px 0 0;
+	}
+
+	.star-search-result:last-child {
+		border-radius: 0 0 8px 8px;
+	}
+
+	.star-search-result-type {
+		font-size: 9px;
+		letter-spacing: 1px;
+		text-transform: uppercase;
+		color: rgba(170, 200, 255, 0.5);
+		background: rgba(170, 200, 255, 0.08);
+		padding: 2px 5px;
+		border-radius: 3px;
+		flex-shrink: 0;
+	}
+
+	.star-search-result-name {
+		font-size: 13px;
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.star-search-result-mag {
+		font-size: 11px;
+		color: rgba(255, 255, 255, 0.3);
+		font-variant-numeric: tabular-nums;
+		flex-shrink: 0;
+	}
+
+	/* Left-side info panel */
+	.star-panel {
+		position: absolute;
+		top: 60px;
+		left: 16px;
+		z-index: 14;
+		width: 260px;
+		background: rgba(0, 0, 0, 0.6);
+		backdrop-filter: blur(12px);
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		border-radius: 10px;
+		padding: 14px 16px;
+		animation: panel-in 0.15s ease-out;
+	}
+
+	.star-panel-close {
+		position: absolute;
+		top: 10px;
+		right: 10px;
+		background: none;
+		border: none;
+		color: rgba(255, 255, 255, 0.3);
+		cursor: pointer;
+		padding: 4px;
+		border-radius: 4px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: color 0.15s;
+	}
+
+	.star-panel-close:hover {
+		color: rgba(255, 255, 255, 0.7);
+	}
+
+	.star-panel-name {
+		font-size: 16px;
+		letter-spacing: 1px;
+		color: rgba(255, 215, 0, 0.9);
+		margin-bottom: 4px;
+		padding-right: 20px;
+	}
+
+	.star-panel-subtitle {
+		font-size: 11px;
+		letter-spacing: 1px;
+		text-transform: uppercase;
+		color: rgba(170, 200, 255, 0.5);
+		margin-bottom: 10px;
+	}
+
+	.star-panel-rows {
+		display: flex;
+		flex-direction: column;
+		gap: 5px;
+		margin-top: 8px;
+	}
+
+	.star-panel-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 12px;
+	}
+
+	.star-panel-label {
+		font-size: 11px;
+		letter-spacing: 1px;
+		text-transform: uppercase;
+		color: rgba(255, 255, 255, 0.35);
+		flex-shrink: 0;
+	}
+
+	.star-panel-value {
+		font-size: 13px;
+		color: rgba(255, 255, 255, 0.75);
+		font-variant-numeric: tabular-nums;
+		text-align: right;
+	}
+
+	.star-panel-link {
+		display: inline-block;
+		margin-top: 10px;
+		font-size: 12px;
+		letter-spacing: 0.5px;
+		color: rgba(170, 200, 255, 0.7);
+		text-decoration: none;
+		transition: color 0.15s;
+	}
+
+	.star-panel-link:hover {
+		color: rgba(170, 200, 255, 1);
+	}
+
+	.star-panel-star-list {
+		margin-top: 12px;
+		border-top: 1px solid rgba(255, 255, 255, 0.08);
+		padding-top: 10px;
+	}
+
+	.star-panel-list-title {
+		font-size: 10px;
+		letter-spacing: 1px;
+		text-transform: uppercase;
+		color: rgba(255, 255, 255, 0.3);
+		margin-bottom: 6px;
+	}
+
+	.star-panel-star-btn {
+		display: block;
+		width: 100%;
+		background: none;
+		border: none;
+		padding: 4px 0;
+		cursor: pointer;
+		font-family: inherit;
+		font-size: 12px;
+		color: rgba(170, 200, 255, 0.65);
+		text-align: left;
+		transition: color 0.15s;
+	}
+
+	.star-panel-star-btn:hover {
+		color: rgba(170, 200, 255, 1);
+	}
+
+	.star-panel-star-mag {
+		color: rgba(255, 255, 255, 0.3);
+		font-size: 11px;
+	}
+
+	/* Mobile: collapse search and panel */
+	@media (max-width: 480px) {
+		.star-search-container {
+			width: 200px;
+			top: env(safe-area-inset-top, 12px);
+			left: 12px;
+		}
+
+		.star-panel {
+			width: 200px;
+			left: 12px;
+			top: 52px;
 		}
 	}
 

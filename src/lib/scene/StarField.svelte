@@ -9,10 +9,11 @@
 	import type { Star, MatchResult } from '$lib/engine/types';
 	import { CONSTELLATIONS } from '$lib/data/constellations';
 
-	let { stars, onReady = () => {}, onVertexDrag = (_e: { constellationIndex: number; nodeIndex: number; newStar: Star }) => {} }: {
+	let { stars, onReady = () => {}, onVertexDrag = (_e: { constellationIndex: number; nodeIndex: number; newStar: Star }) => {}, onStarClick = (_star: Star, _screenPos: { x: number; y: number }) => {} }: {
 		stars: Star[];
 		onReady?: () => void;
 		onVertexDrag?: (e: { constellationIndex: number; nodeIndex: number; newStar: Star }) => void;
+		onStarClick?: (star: Star, screenPos: { x: number; y: number }) => void;
 	} = $props();
 
 	let container: HTMLDivElement;
@@ -866,6 +867,27 @@
 				} else {
 					setOverlayLabelOpacity(label, 0);
 				}
+			}
+		}
+
+		// Star highlight label
+		if (starHighlightLabel && (starHighlightLabel as any)._hlWorldPos) {
+			const worldPos = (starHighlightLabel as any)._hlWorldPos as THREE.Vector3;
+			if (updateOverlayLabelPosition(starHighlightLabel, worldPos, -20)) {
+				setOverlayLabelOpacity(starHighlightLabel, 0.9);
+			} else {
+				setOverlayLabelOpacity(starHighlightLabel, 0);
+			}
+		}
+
+		// Temp constellation label
+		if (tempConstellationLabel && (tempConstellationLabel as any)._tcCentroid) {
+			const centroid = (tempConstellationLabel as any)._tcCentroid as THREE.Vector3;
+			const dot = centroid.dot(overlayCameraDir);
+			if (dot > 0.2 && updateOverlayLabelPosition(tempConstellationLabel, centroid, 0)) {
+				setOverlayLabelOpacity(tempConstellationLabel, 0.7);
+			} else {
+				setOverlayLabelOpacity(tempConstellationLabel, 0);
 			}
 		}
 	}
@@ -2304,6 +2326,240 @@
 		if (uniformsRef) uniformsRef.uMonochrome.value = on ? 1.0 : 0.0;
 	}
 
+	// --- Star highlight (large label + ring) for search/click ---
+	let starHighlightGroup: THREE.Group | null = null;
+	let starHighlightLabel: Text | null = null;
+
+	export function highlightStar(star: Star) {
+		clearStarHighlight();
+		if (!sceneRef || !overlaySceneRef) return;
+
+		const pos = raDecToXYZ(star.ra, star.dec).multiplyScalar(0.999);
+		const group = new THREE.Group();
+
+		// Ring effect around the star
+		const ringGeom = new THREE.BufferGeometry();
+		ringGeom.setAttribute('position', new THREE.Float32BufferAttribute([pos.x, pos.y, pos.z], 3));
+		const ringMat = new THREE.ShaderMaterial({
+			vertexShader: `
+				void main() {
+					vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+					gl_Position = projectionMatrix * mvPosition;
+					gl_PointSize = 28.0;
+				}
+			`,
+			fragmentShader: `
+				void main() {
+					float d = length(gl_PointCoord - 0.5) * 2.0;
+					float ring = smoothstep(0.6, 0.7, d) * smoothstep(1.0, 0.85, d);
+					float glow = exp(-d * d * 2.0) * 0.15;
+					float alpha = ring * 0.7 + glow;
+					vec3 color = vec3(1.0, 0.84, 0.0);
+					gl_FragColor = vec4(color * alpha, alpha);
+				}
+			`,
+			transparent: true,
+			depthTest: false,
+			blending: THREE.AdditiveBlending,
+		});
+		const ringPoints = new THREE.Points(ringGeom, ringMat);
+		ringPoints.renderOrder = 5;
+		group.add(ringPoints);
+
+		sceneRef.add(group);
+		starHighlightGroup = group;
+
+		// Large label in overlay scene
+		const label = new Text();
+		label.text = (star.name || `HIP ${star.hip || star.id}`).toUpperCase();
+		label.anchorX = 'center';
+		label.anchorY = 'bottom';
+		label.fontSize = 14;
+		label.letterSpacing = 0.08;
+		label.color = 0xffd700;
+		label.fillOpacity = 0.9;
+		label.outlineColor = 0x000000;
+		label.outlineWidth = '10%';
+		label.outlineBlur = '25%';
+		label.outlineOpacity = 0.8;
+		label.sdfGlyphSize = 128;
+		label.frustumCulled = false;
+		label.renderOrder = 12;
+		label.position.z = 0;
+		(label as any)._hlWorldPos = raDecToXYZ(star.ra, star.dec);
+		overlaySceneRef.add(label);
+		label.sync();
+		starHighlightLabel = label;
+	}
+
+	export function clearStarHighlight() {
+		if (starHighlightGroup && sceneRef) {
+			sceneRef.remove(starHighlightGroup);
+			starHighlightGroup = null;
+		}
+		if (starHighlightLabel) {
+			disposeOverlayLabel(starHighlightLabel);
+			starHighlightLabel = null;
+		}
+	}
+
+	// --- Temporary IAU constellation display (for search) ---
+	let tempConstellationGroup: THREE.Group | null = null;
+	let tempConstellationLabel: Text | null = null;
+
+	export function drawTempConstellation(constellationName: string) {
+		clearTempConstellation();
+		if (!sceneRef || !overlaySceneRef) return;
+
+		if (resolvedConstellations.length === 0) resolveConstellations();
+		const rc = resolvedConstellations.find(c => c.name === constellationName);
+		if (!rc) return;
+
+		const group = new THREE.Group();
+		const positions: number[] = [];
+		for (const { posA, posB } of rc.edges) {
+			positions.push(posA.x, posA.y, posA.z, posB.x, posB.y, posB.z);
+		}
+
+		if (positions.length > 0) {
+			const segGeom = new LineSegmentsGeometry();
+			segGeom.setPositions(positions);
+
+			const haloMat = new LineMaterial({
+				color: 0xffffff,
+				linewidth: 6,
+				transparent: true,
+				opacity: 0.12,
+				depthTest: false,
+				blending: THREE.AdditiveBlending,
+			});
+			haloMat.resolution.copy(rendererSize);
+			const halo = new LineSegments2(segGeom, haloMat);
+			halo.renderOrder = 1;
+			group.add(halo);
+
+			const coreMat = new LineMaterial({
+				color: 0xffffff,
+				linewidth: 2,
+				transparent: true,
+				opacity: 0.35,
+				depthTest: false,
+				blending: THREE.AdditiveBlending,
+			});
+			coreMat.resolution.copy(rendererSize);
+			const core = new LineSegments2(segGeom, coreMat);
+			core.renderOrder = 1;
+			group.add(core);
+		}
+
+		sceneRef.add(group);
+		tempConstellationGroup = group;
+
+		// Label at centroid
+		const label = createOverlayLabel(rc.name);
+		(label as any)._tcCentroid = rc.centroid.clone();
+		setOverlayLabelOpacity(label, 0.7);
+		tempConstellationLabel = label;
+	}
+
+	export function clearTempConstellation() {
+		if (tempConstellationGroup && sceneRef) {
+			sceneRef.remove(tempConstellationGroup);
+			tempConstellationGroup = null;
+		}
+		if (tempConstellationLabel) {
+			disposeOverlayLabel(tempConstellationLabel);
+			tempConstellationLabel = null;
+		}
+	}
+
+	// --- Pan camera to RA/Dec position ---
+	export function panToRaDec(ra: number, dec: number, fov?: number) {
+		if (!controlsRef || !cameraRef) return;
+
+		const targetDir = raDecToXYZ(ra, dec);
+		const localNorth = new THREE.Vector3(
+			-Math.sin(dec) * Math.cos(ra),
+			Math.cos(dec),
+			Math.sin(dec) * Math.sin(ra)
+		).normalize();
+
+		const targetFov = fov ?? Math.min(60, cameraRef.fov);
+		const startPos = cameraRef.position.clone();
+		const lookDir = controlsRef.target.clone().sub(startPos).normalize();
+		const startUp = cameraRef.up.clone();
+		const startFov = cameraRef.fov;
+		const angularDist = Math.acos(Math.min(1, Math.max(-1, lookDir.dot(targetDir))));
+		const duration = 300 + 500 * Math.min(1, angularDist / Math.PI);
+		const startTime = performance.now();
+
+		const qStart = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), lookDir);
+		const qEnd = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), targetDir);
+		const qSlerp = new THREE.Quaternion();
+		const slerpedDir = new THREE.Vector3();
+		const origin = new THREE.Vector3(0, 0, 0.0001);
+		const Y_UP = new THREE.Vector3(0, 1, 0);
+
+		function animate() {
+			const elapsed = performance.now() - startTime;
+			const t = Math.min(1, elapsed / duration);
+			const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+			cameraRef!.position.lerpVectors(startPos, origin, ease);
+			qSlerp.slerpQuaternions(qStart, qEnd, ease);
+			slerpedDir.set(0, 0, -1).applyQuaternion(qSlerp);
+			controlsRef!.target.copy(cameraRef!.position).addScaledVector(slerpedDir, 0.001);
+			cameraRef!.up.lerpVectors(startUp, localNorth, ease).normalize();
+			(controlsRef as any)._quat.setFromUnitVectors(cameraRef!.up, Y_UP);
+			(controlsRef as any)._quatInverse.copy((controlsRef as any)._quat).invert();
+			cameraRef!.fov = startFov + (targetFov - startFov) * ease;
+			cameraRef!.updateProjectionMatrix();
+			controlsRef!.update();
+			if (t < 1) requestAnimationFrame(animate);
+		}
+		animate();
+	}
+
+	// --- Pan to IAU constellation centroid with FOV fitting ---
+	export function panToIAUConstellation(constellationName: string) {
+		if (!controlsRef || !cameraRef) return;
+
+		if (resolvedConstellations.length === 0) resolveConstellations();
+		const rc = resolvedConstellations.find(c => c.name === constellationName);
+		if (!rc) return;
+
+		const centroidDir = rc.centroid.clone();
+		const centroidRa = Math.atan2(-centroidDir.z, centroidDir.x);
+		const centroidDec = Math.asin(Math.max(-1, Math.min(1, centroidDir.y)));
+		const localNorth = new THREE.Vector3(
+			-Math.sin(centroidDec) * Math.cos(centroidRa),
+			Math.cos(centroidDec),
+			Math.sin(centroidDec) * Math.sin(centroidRa)
+		).normalize();
+
+		// Binary search for FOV
+		const testCam = new THREE.PerspectiveCamera(60, cameraRef.aspect, 0.1, 10);
+		testCam.position.set(0, 0, 0.0001);
+		testCam.up.copy(localNorth);
+		testCam.lookAt(centroidDir.clone().multiplyScalar(10));
+		const fitMargin = 0.85;
+		const maxFov = cameraRef.aspect < 0.8 ? 110 : 80;
+		let lo = 5, hi = maxFov + 10;
+		for (let i = 0; i < 16; i++) {
+			const mid = (lo + hi) / 2;
+			testCam.fov = mid;
+			testCam.updateProjectionMatrix();
+			let fits = true;
+			for (const pos of rc.hlPositions) {
+				const ndc = pos.clone().project(testCam);
+				if (Math.abs(ndc.x) > fitMargin || Math.abs(ndc.y) > fitMargin) { fits = false; break; }
+			}
+			if (fits) hi = mid; else lo = mid;
+		}
+		const targetFov = Math.min(maxFov, Math.max(15, hi));
+
+		panToRaDec(centroidRa, centroidDec, targetFov);
+	}
+
 	export function captureImage(): Promise<Blob> {
 		return new Promise((resolve, reject) => {
 			const canvas = container?.querySelector('canvas');
@@ -2622,9 +2878,45 @@
 			}
 		};
 
+		// --- Star click detection (distinct from drag and orbit) ---
+		let clickStart: { x: number; y: number; time: number } | null = null;
+		const CLICK_THRESHOLD = 8; // max px movement to count as click
+		const CLICK_MAX_MS = 300;  // max duration
+
+		const onStarPointerDown = (e: PointerEvent) => {
+			if (e.button !== 0) return;
+			clickStart = { x: e.clientX, y: e.clientY, time: performance.now() };
+		};
+
+		const onStarPointerUp = (e: PointerEvent) => {
+			if (!clickStart) return;
+			// If a vertex drag was active, skip star click
+			if (dragState) { clickStart = null; return; }
+
+			const dx = e.clientX - clickStart.x;
+			const dy = e.clientY - clickStart.y;
+			const dist = Math.sqrt(dx * dx + dy * dy);
+			const elapsed = performance.now() - clickStart.time;
+			clickStart = null;
+
+			if (dist > CLICK_THRESHOLD || elapsed > CLICK_MAX_MS) return;
+
+			const rect = container.getBoundingClientRect();
+			const mx = e.clientX - rect.left;
+			const my = e.clientY - rect.top;
+			camera.updateMatrixWorld();
+
+			const star = findNearestStarToScreen(mx, my, camera, rect.width, rect.height);
+			if (star) {
+				onStarClick(star, { x: e.clientX, y: e.clientY });
+			}
+		};
+
 		renderer.domElement.addEventListener('pointerdown', onDragPointerDown);
+		renderer.domElement.addEventListener('pointerdown', onStarPointerDown);
 		renderer.domElement.addEventListener('pointermove', onDragPointerMove);
 		renderer.domElement.addEventListener('pointerup', onDragPointerUp);
+		renderer.domElement.addEventListener('pointerup', onStarPointerUp);
 
 		const onMouseMove = (e: PointerEvent) => {
 			// Suppress hover tooltips on touch/pen devices
@@ -2810,8 +3102,10 @@
 			renderer.domElement.removeEventListener('pointermove', onMouseMove);
 			renderer.domElement.removeEventListener('pointerleave', onPointerLeave);
 			renderer.domElement.removeEventListener('pointerdown', onDragPointerDown);
+			renderer.domElement.removeEventListener('pointerdown', onStarPointerDown);
 			renderer.domElement.removeEventListener('pointermove', onDragPointerMove);
 			renderer.domElement.removeEventListener('pointerup', onDragPointerUp);
+			renderer.domElement.removeEventListener('pointerup', onStarPointerUp);
 			renderer.domElement.removeEventListener('touchstart', onTouchStart);
 			renderer.domElement.removeEventListener('touchmove', onTouchMove);
 			renderer.domElement.removeEventListener('touchend', onTouchEnd);
