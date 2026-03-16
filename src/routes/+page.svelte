@@ -23,6 +23,7 @@
 	let showInput = $state(true);
 	let starField: StarField;
 	let constellations: ConstellationEntry[] = $state([]);
+	let rerollBlacklist: number[] = [];  // accumulates stars from previous re-rolls
 
 	// --- URL hash encoding/decoding ---
 	// Compact format: text~<base64url of 14-bit packed star indices>
@@ -182,6 +183,7 @@
 		const text = inputText.trim();
 		if (!text) return;
 
+		rerollBlacklist = [];
 		isMatching = true;
 		pendingText = text;
 		const usedStarIndices = getUsedStarIndices();
@@ -208,8 +210,13 @@
 		isMatching = true;
 		pendingText = lastEntry.text;
 
-		// Blacklist stars from ALL constellations (including the one being re-rolled)
-		const usedStarIndices = getUsedStarIndices();
+		// Add the current result's stars to the accumulated re-roll blacklist
+		for (const pair of lastEntry.result.pairs) {
+			rerollBlacklist.push(pair.star.idx);
+		}
+
+		// Combine all active constellation stars + accumulated re-roll history
+		const usedStarIndices = [...getUsedStarIndices(), ...rerollBlacklist];
 		worker.postMessage({ type: 'match', payload: { text: lastEntry.text, usedStarIndices } });
 	}
 
@@ -220,6 +227,7 @@
 
 	function handleReset() {
 		constellations = [];
+		rerollBlacklist = [];
 		showInput = true;
 		inputText = '';
 		// Clear hash

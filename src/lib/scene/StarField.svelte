@@ -433,7 +433,7 @@
 		if (iauOverlayActive && iauOverlayGroup) {
 			iauOverlayGroup.traverse((child) => {
 				if ((child as any).material && (child as any).material.opacity !== undefined) {
-					(child as any).material.opacity = 0.08;
+					(child as any).material.opacity *= 0.3;
 				}
 			});
 		}
@@ -988,18 +988,33 @@
 				const segGeom = new LineSegmentsGeometry();
 				segGeom.setPositions(allPositions);
 
-				const lineMat = new LineMaterial({
-					color: 0xaaccff,
-					linewidth: 1.2,
+				// Halo pass - wider, soft glow (matches ambient constellation style)
+				const haloMat = new LineMaterial({
+					color: 0xffffff,
+					linewidth: 6,
 					transparent: true,
-					opacity: 0.18,
+					opacity: 0.07,
 					depthTest: false,
 					blending: THREE.AdditiveBlending,
 				});
-				lineMat.resolution.copy(rendererSize);
-				const lines = new LineSegments2(segGeom, lineMat);
-				lines.renderOrder = 1;
-				group.add(lines);
+				haloMat.resolution.copy(rendererSize);
+				const halo = new LineSegments2(segGeom, haloMat);
+				halo.renderOrder = 1;
+				group.add(halo);
+
+				// Core pass - thinner, brighter
+				const coreMat = new LineMaterial({
+					color: 0xffffff,
+					linewidth: 2,
+					transparent: true,
+					opacity: 0.22,
+					depthTest: false,
+					blending: THREE.AdditiveBlending,
+				});
+				coreMat.resolution.copy(rendererSize);
+				const core = new LineSegments2(segGeom, coreMat);
+				core.renderOrder = 1;
+				group.add(core);
 			}
 
 			sceneRef.add(group);
@@ -1160,9 +1175,12 @@
 		if (uniformsRef) uniformsRef.uDim.value = 1.0;
 		// Restore IAU overlay opacity if it was dimmed
 		if (iauOverlayActive && iauOverlayGroup) {
+			let matIdx = 0;
+			const restoreOpacities = [0.07, 0.22]; // halo, core
 			iauOverlayGroup.traverse((child) => {
 				if ((child as any).material && (child as any).material.opacity !== undefined) {
-					(child as any).material.opacity = 0.18;
+					(child as any).material.opacity = restoreOpacities[matIdx] ?? 0.22;
+					matIdx++;
 				}
 			});
 		}
@@ -1477,15 +1495,15 @@
 	:global(.iau-overlay-label) {
 		position: absolute;
 		transform: translate(-50%, -50%);
-		color: rgba(170, 200, 255, 0.7);
-		font-size: 10px;
+		color: rgba(255, 255, 255, 0.9);
+		font-size: 13px;
 		font-weight: 300;
-		letter-spacing: 2px;
+		letter-spacing: 4px;
 		text-transform: uppercase;
 		white-space: nowrap;
 		pointer-events: none;
 		opacity: 0;
-		text-shadow: 0 0 4px rgba(0, 0, 0, 0.9), 0 0 8px rgba(0, 0, 0, 0.6);
+		text-shadow: 0 0 6px rgba(0, 0, 0, 0.8), 0 0 14px rgba(0, 0, 0, 0.5), 0 0 24px rgba(100, 150, 255, 0.3);
 	}
 
 	:global(.ambient-label) {
