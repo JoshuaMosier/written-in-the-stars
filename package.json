@@ -13,7 +13,8 @@
   },
   "dependencies": {
     "kd-tree-javascript": "^1.0.3",
-    "three": "^0.172.0"
+    "three": "^0.172.0",
+    "troika-three-text": "^0.52.4"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.0",

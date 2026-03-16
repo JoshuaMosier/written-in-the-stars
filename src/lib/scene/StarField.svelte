@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import * as THREE from 'three';
+	import { Text } from 'troika-three-text';
 	import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 	import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 	import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
@@ -16,11 +17,15 @@
 	let container: HTMLDivElement;
 	let tooltip: HTMLDivElement;
 	let sceneRef: THREE.Scene | null = null;
+	let overlaySceneRef: THREE.Scene | null = null;
 	let cameraRef: THREE.PerspectiveCamera | null = null;
+	let overlayCameraRef: THREE.OrthographicCamera | null = null;
 	let controlsRef: OrbitControls | null = null;
 	let constellationGroups: THREE.Group[] = [];
 	let drawAnimationIds: number[] = [];
 	let starPointsRef: THREE.Points | null = null;
+	const projectedLabelPos = new THREE.Vector3();
+	const overlayCameraDir = new THREE.Vector3();
 
 	// --- Shooting stars (meteors) ---
 	interface Meteor {
@@ -196,22 +201,27 @@
 	interface AmbientConstellation {
 		name: string;
 		group: THREE.Group;
-		label: HTMLDivElement;
+		label: Text;
 		edges: { posA: THREE.Vector3; posB: THREE.Vector3 }[];
 		hlPositions: THREE.Vector3[];
+		centroid: THREE.Vector3;
 		startTime: number;
 		phase: 'draw' | 'hold' | 'fade';
 		phaseStart: number;
+		totalDrawTime: number;
 		animId: number | null;
 	}
 	let ambientConstellations: AmbientConstellation[] = [];
 	let ambientQueue: number[] = [];
 	let ambientTimerId: ReturnType<typeof setTimeout> | null = null;
 	let ambientPaused = false;
-	let labelContainer: HTMLDivElement;
 	let uniformsRef: { uDim: THREE.Uniform<number>; uTime: THREE.Uniform<number>; uFovScale: THREE.Uniform<number>; uHoveredIndex: THREE.Uniform<number> } | null = null;
-	const DEFAULT_FOV = 60;
+	const DEFAULT_FOV = 90;
+	let debugFov = $state(DEFAULT_FOV);
 	let rendererSize = new THREE.Vector2(1, 1);
+
+	// --- Auto-rotate (landing page drift) ---
+	let autoRotateActive = true;
 
 	// Touch support state
 	let pinchStartDist = 0;
@@ -220,8 +230,98 @@
 	// IAU overlay state
 	let iauOverlayActive = false;
 	let iauOverlayGroup: THREE.Group | null = null;
-	let iauOverlayLabels: HTMLDivElement[] = [];
-	let iauLabelData: { label: HTMLDivElement; centroid: THREE.Vector3 }[] = [];
+	let iauLabelData: { label: Text; centroid: THREE.Vector3 }[] = [];
+
+	const LABEL_FONT_SIZE = 13;
+	const LABEL_LETTER_SPACING = 0.12;
+	const LABEL_OUTLINE_COLOR = 0x05070d;
+	const LABEL_OUTLINE_WIDTH = '8%';
+	const LABEL_OUTLINE_BLUR = '35%';
+	const AMBIENT_LABEL_OFFSET = 30;
+
+	function createOverlayLabel(text: string): Text {
+		const label = new Text();
+		label.text = text.toUpperCase();
+		label.anchorX = 'center';
+		label.anchorY = 'middle';
+		label.fontSize = LABEL_FONT_SIZE;
+		label.letterSpacing = LABEL_LETTER_SPACING;
+		label.color = 0xffffff;
+		label.fillOpacity = 0;
+		label.outlineColor = LABEL_OUTLINE_COLOR;
+		label.outlineWidth = LABEL_OUTLINE_WIDTH;
+		label.outlineBlur = LABEL_OUTLINE_BLUR;
+		label.outlineOpacity = 0;
+		label.sdfGlyphSize = 128;
+		label.frustumCulled = false;
+		label.renderOrder = 10;
+		label.position.z = 0;
+		overlaySceneRef?.add(label);
+		label.sync();
+		return label;
+	}
+
+	function disposeOverlayLabel(label: Text) {
+		label.removeFromParent();
+		label.dispose();
+	}
+
+	function setOverlayLabelOpacity(label: Text, opacity: number) {
+		const clamped = Math.max(0, Math.min(1, opacity));
+		label.visible = clamped > 0.001;
+		label.fillOpacity = clamped;
+		label.outlineOpacity = Math.min(1, clamped * 0.95);
+	}
+
+	function updateOverlayLabelPosition(label: Text, worldPos: THREE.Vector3, offsetY: number) {
+		if (!cameraRef || !container) return false;
+		const width = container.clientWidth;
+		const height = container.clientHeight;
+		projectedLabelPos.copy(worldPos).project(cameraRef);
+		if (projectedLabelPos.z >= 1) return false;
+
+		const sx = (projectedLabelPos.x * 0.5 + 0.5) * width;
+		const sy = (-projectedLabelPos.y * 0.5 + 0.5) * height;
+		label.position.set(sx - width * 0.5, height * 0.5 - sy + offsetY, 0);
+		return true;
+	}
+
+	function updateOverlayLabels(now: number) {
+		if (!cameraRef || !container) return;
+
+		cameraRef.getWorldDirection(overlayCameraDir);
+
+		for (const ac of ambientConstellations) {
+			const phaseElapsed = now - ac.phaseStart;
+			const labelOpacity = ac.phase === 'draw'
+				? Math.max(0, (phaseElapsed - ac.totalDrawTime * 0.5) / (ac.totalDrawTime * 0.5))
+				: ac.phase === 'hold' ? 1
+				: 1 - phaseElapsed / AMBIENT_FADE;
+
+			if (updateOverlayLabelPosition(ac.label, ac.centroid, AMBIENT_LABEL_OFFSET)) {
+				setOverlayLabelOpacity(ac.label, labelOpacity * 0.85);
+			} else {
+				setOverlayLabelOpacity(ac.label, 0);
+			}
+		}
+
+		if (!iauOverlayActive) return;
+
+		for (const { label, centroid } of iauLabelData) {
+			const dot = centroid.dot(overlayCameraDir);
+			if (dot <= 0.2) {
+				setOverlayLabelOpacity(label, 0);
+				continue;
+			}
+
+			if (updateOverlayLabelPosition(label, centroid, 0)) {
+				const fade = Math.min(1, (dot - 0.2) / 0.3);
+				setOverlayLabelOpacity(label, fade * 0.6);
+			} else {
+				setOverlayLabelOpacity(label, 0);
+			}
+		}
+	}
 
 	// Convert B-V color index to RGB using Ballesteros' formula (2012)
 	// Maps stellar temperature to perceptually accurate color
@@ -418,6 +518,9 @@
 
 	function prepareForConstellation() {
 		if (!sceneRef) return;
+
+		// Stop auto-rotate so the view stays locked on the constellation
+		if (autoRotateActive) toggleAutoRotate(false);
 
 		// Stop ambient constellations when showing user's result
 		if (!ambientPaused) stopAmbientCycle();
@@ -674,6 +777,8 @@
 	let resolvedConstellations: ResolvedConstellation[] = [];
 
 	function resolveConstellations() {
+		if (resolvedConstellations.length > 0) return;
+
 		const hipToStar = new Map<number, Star>();
 		for (const s of stars) {
 			if (s.hip) hipToStar.set(s.hip, s);
@@ -750,7 +855,7 @@
 		for (const ac of ambientConstellations) {
 			if (ac.animId !== null) cancelAnimationFrame(ac.animId);
 			if (ac.group.parent) sceneRef?.remove(ac.group);
-			ac.label.remove();
+			disposeOverlayLabel(ac.label);
 		}
 		ambientConstellations = [];
 	}
@@ -773,22 +878,19 @@
 		const group = new THREE.Group();
 		sceneRef.add(group);
 
-		// Create label
-		const label = document.createElement('div');
-		label.className = 'ambient-label';
-		label.textContent = rc.name;
-		label.style.opacity = '0';
-		labelContainer.appendChild(label);
+		const totalDrawTime = (rc.edges.length - 1) * AMBIENT_STAGGER + AMBIENT_DRAW_DURATION;
 
 		const ac: AmbientConstellation = {
 			name: rc.name,
 			group,
-			label,
+			label: createOverlayLabel(rc.name),
 			edges: rc.edges,
 			hlPositions: rc.hlPositions,
+			centroid: rc.centroid,
 			startTime: performance.now(),
 			phase: 'draw',
 			phaseStart: performance.now(),
+			totalDrawTime,
 			animId: null,
 		};
 
@@ -796,8 +898,6 @@
 
 		const revealedStars = new Set<string>();
 		const starKey = (v: THREE.Vector3) => `${v.x.toFixed(6)},${v.y.toFixed(6)},${v.z.toFixed(6)}`;
-
-		const totalDrawTime = (rc.edges.length - 1) * AMBIENT_STAGGER + AMBIENT_DRAW_DURATION;
 
 		function animate() {
 			if (ambientPaused || !group.parent) return;
@@ -815,7 +915,7 @@
 			} else if (ac.phase === 'fade' && phaseElapsed >= AMBIENT_FADE) {
 				// Remove
 				sceneRef?.remove(group);
-				label.remove();
+				disposeOverlayLabel(ac.label);
 				ambientConstellations = ambientConstellations.filter(a => a !== ac);
 				return;
 			}
@@ -924,25 +1024,6 @@
 				group.add(points);
 			}
 
-			// Update label position
-			if (cameraRef) {
-				const projected = rc.centroid.clone().project(cameraRef);
-				if (projected.z < 1) {
-					const rect = container.getBoundingClientRect();
-					const sx = (projected.x * 0.5 + 0.5) * rect.width;
-					const sy = (-projected.y * 0.5 + 0.5) * rect.height;
-					label.style.left = `${sx}px`;
-					label.style.top = `${sy - 30}px`;
-					const labelOpacity = ac.phase === 'draw'
-						? Math.max(0, (phaseElapsed - totalDrawTime * 0.5) / (totalDrawTime * 0.5))
-						: ac.phase === 'hold' ? 1
-						: 1 - phaseElapsed / AMBIENT_FADE;
-					label.style.opacity = `${Math.max(0, labelOpacity * 0.85)}`;
-				} else {
-					label.style.opacity = '0';
-				}
-			}
-
 			ac.animId = requestAnimationFrame(animate);
 		}
 
@@ -1028,17 +1109,9 @@
 				});
 			}
 
-			// Create HTML labels for each constellation
 			iauLabelData = [];
-			iauOverlayLabels = [];
 			for (const rc of resolvedConstellations) {
-				const label = document.createElement('div');
-				label.className = 'iau-overlay-label';
-				label.textContent = rc.name;
-				label.style.opacity = '0';
-				labelContainer.appendChild(label);
-				iauOverlayLabels.push(label);
-				iauLabelData.push({ label, centroid: rc.centroid });
+				iauLabelData.push({ label: createOverlayLabel(rc.name), centroid: rc.centroid });
 			}
 		} else {
 			// Remove overlay
@@ -1046,41 +1119,14 @@
 				sceneRef.remove(iauOverlayGroup);
 				iauOverlayGroup = null;
 			}
-			for (const label of iauOverlayLabels) {
-				label.remove();
+			for (const { label } of iauLabelData) {
+				disposeOverlayLabel(label);
 			}
-			iauOverlayLabels = [];
 			iauLabelData = [];
 
 			// Resume ambient cycling if no user constellation is active
 			if (constellationGroups.length === 0) {
 				resumeAmbientCycle();
-			}
-		}
-	}
-
-	function updateIAUOverlayLabels() {
-		if (!iauOverlayActive || !cameraRef || !container) return;
-
-		const cameraDir = new THREE.Vector3();
-		cameraRef.getWorldDirection(cameraDir);
-		const rect = container.getBoundingClientRect();
-
-		for (const { label, centroid } of iauLabelData) {
-			const dot = centroid.dot(cameraDir);
-			if (dot > 0.3) {
-				const projected = centroid.clone().project(cameraRef);
-				if (projected.z < 1) {
-					const sx = (projected.x * 0.5 + 0.5) * rect.width;
-					const sy = (-projected.y * 0.5 + 0.5) * rect.height;
-					label.style.left = `${sx}px`;
-					label.style.top = `${sy}px`;
-					label.style.opacity = '0.6';
-				} else {
-					label.style.opacity = '0';
-				}
-			} else {
-				label.style.opacity = '0';
 			}
 		}
 	}
@@ -1255,17 +1301,47 @@
 		animate();
 	}
 
+	export function toggleAutoRotate(on: boolean) {
+		autoRotateActive = on;
+		if (controlsRef) controlsRef.autoRotate = on;
+	}
+
+	export function captureImage(): Promise<Blob> {
+		return new Promise((resolve, reject) => {
+			const canvas = container?.querySelector('canvas');
+			if (!canvas) return reject(new Error('No canvas'));
+			canvas.toBlob((blob) => {
+				if (blob) resolve(blob);
+				else reject(new Error('Failed to capture image'));
+			}, 'image/png');
+		});
+	}
+
 	onMount(() => {
 		const scene = new THREE.Scene();
 		sceneRef = scene;
+		const overlayScene = new THREE.Scene();
+		overlaySceneRef = overlayScene;
 
 		const camera = new THREE.PerspectiveCamera(
-			60, container.clientWidth / container.clientHeight, 0.1, 10
+			DEFAULT_FOV, container.clientWidth / container.clientHeight, 0.1, 10
 		);
 		camera.position.set(0, 0, 0.0001);
 		cameraRef = camera;
+		const overlayCamera = new THREE.OrthographicCamera(
+			-container.clientWidth / 2,
+			container.clientWidth / 2,
+			container.clientHeight / 2,
+			-container.clientHeight / 2,
+			0.1,
+			10
+		);
+		overlayCamera.position.z = 1;
+		overlayCameraRef = overlayCamera;
 
-		const renderer = new THREE.WebGLRenderer({ antialias: true });
+		const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+		renderer.getContext().drawingBufferColorSpace = 'srgb';
+		renderer.autoClear = false;
 		renderer.setSize(container.clientWidth, container.clientHeight);
 		renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 		renderer.setClearColor(0x000005);
@@ -1278,6 +1354,8 @@
 		controls.rotateSpeed = -0.25;
 		controls.enableDamping = true;
 		controls.dampingFactor = 0.08;
+		controls.autoRotate = autoRotateActive;
+		controls.autoRotateSpeed = 0.15;
 
 		// Scale rotation speed based on viewport and FOV so dragging feels
 		// consistent across screen sizes and zoom levels
@@ -1479,20 +1557,34 @@
 		function render() {
 			animId = requestAnimationFrame(render);
 			const dt = clock.getDelta();
-			uniforms.uTime.value = clock.getElapsedTime();
+			const elapsedTime = clock.getElapsedTime();
+			uniforms.uTime.value = elapsedTime;
 			// Stars grow as you zoom in (lower FOV)
 			uniforms.uFovScale.value = DEFAULT_FOV / camera.fov;
+			debugFov = camera.fov;
 			// Update shooting stars
 			updateMeteors(dt);
 			controls.update();
-			updateIAUOverlayLabels();
+			updateOverlayLabels(performance.now());
+			renderer.clear();
 			renderer.render(scene, camera);
+			if (overlaySceneRef && overlayCameraRef) {
+				renderer.clearDepth();
+				renderer.render(overlaySceneRef, overlayCameraRef);
+			}
 		}
 		render();
 
 		const onResize = () => {
 			camera.aspect = container.clientWidth / container.clientHeight;
 			camera.updateProjectionMatrix();
+			if (overlayCameraRef) {
+				overlayCameraRef.left = -container.clientWidth / 2;
+				overlayCameraRef.right = container.clientWidth / 2;
+				overlayCameraRef.top = container.clientHeight / 2;
+				overlayCameraRef.bottom = -container.clientHeight / 2;
+				overlayCameraRef.updateProjectionMatrix();
+			}
 			renderer.setSize(container.clientWidth, container.clientHeight);
 			rendererSize.set(container.clientWidth, container.clientHeight);
 			updateRotateSpeed();
@@ -1522,6 +1614,10 @@
 		return () => {
 			cancelAnimationFrame(animId);
 			stopAmbientCycle();
+			for (const { label } of iauLabelData) {
+				disposeOverlayLabel(label);
+			}
+			iauLabelData = [];
 			stopMeteors();
 			window.removeEventListener('resize', onResize);
 			renderer.domElement.removeEventListener('wheel', onWheel);
@@ -1537,57 +1633,34 @@
 			if (renderer.domElement.parentNode) {
 				renderer.domElement.parentNode.removeChild(renderer.domElement);
 			}
+			overlaySceneRef = null;
+			overlayCameraRef = null;
 		};
 	});
 </script>
 
 <div bind:this={container} class="star-field" role="img" aria-label="Interactive 3D star field. Drag to rotate, scroll to zoom."></div>
-<div bind:this={labelContainer} class="ambient-labels" aria-hidden="true"></div>
 <div bind:this={tooltip} class="star-tooltip" role="tooltip" aria-hidden="true"></div>
+<div class="debug-fov">FOV: {debugFov.toFixed(1)}</div>
 
 <style>
+	.debug-fov {
+		position: fixed;
+		top: 8px;
+		right: 8px;
+		color: rgba(255, 255, 255, 0.6);
+		font-family: monospace;
+		font-size: 12px;
+		z-index: 100;
+		pointer-events: none;
+	}
+
 	.star-field {
 		position: absolute;
 		inset: 0;
 		width: 100%;
 		height: 100%;
 		touch-action: none;
-	}
-
-	.ambient-labels {
-		position: absolute;
-		inset: 0;
-		pointer-events: none;
-		z-index: 1;
-	}
-
-	:global(.iau-overlay-label) {
-		position: absolute;
-		transform: translate(-50%, -50%);
-		color: rgba(255, 255, 255, 0.9);
-		font-size: 13px;
-		font-weight: 300;
-		letter-spacing: 4px;
-		text-transform: uppercase;
-		white-space: nowrap;
-		pointer-events: none;
-		opacity: 0;
-		text-shadow: 0 0 6px rgba(0, 0, 0, 0.8), 0 0 14px rgba(0, 0, 0, 0.5), 0 0 24px rgba(100, 150, 255, 0.3);
-	}
-
-	:global(.ambient-label) {
-		position: absolute;
-		transform: translateX(-50%);
-		color: rgba(255, 255, 255, 0.9);
-		font-size: 13px;
-		font-weight: 300;
-		letter-spacing: 4px;
-		text-transform: uppercase;
-		white-space: nowrap;
-		pointer-events: none;
-		opacity: 0;
-		transition: opacity 0.3s;
-		text-shadow: 0 0 6px rgba(0, 0, 0, 0.8), 0 0 14px rgba(0, 0, 0, 0.5), 0 0 24px rgba(100, 150, 255, 0.3);
 	}
 
 	.star-tooltip {
