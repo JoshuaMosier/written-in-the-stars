@@ -49,7 +49,8 @@
 		let b64 = '';
 		for (let i = 0; i < buf.length; i++) b64 += String.fromCharCode(buf[i]);
 		b64 = btoa(b64).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-		return encodeURIComponent(text) + '~' + b64;
+		const textB64 = btoa(unescape(encodeURIComponent(text))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+		return textB64 + '~' + b64;
 	}
 
 	function decodeSingleResult(segment: string): { text: string; result: MatchResult } | null {
@@ -57,7 +58,9 @@
 			const sepIdx = segment.indexOf('~');
 			if (sepIdx < 0) return null;
 
-			const text = decodeURIComponent(segment.slice(0, sepIdx));
+			let textB64 = segment.slice(0, sepIdx).replace(/-/g, '+').replace(/_/g, '/');
+			while (textB64.length % 4) textB64 += '=';
+			const text = decodeURIComponent(escape(atob(textB64)));
 			const graph = textToGraph(text);
 
 			let b64 = segment.slice(sepIdx + 1).replace(/-/g, '+').replace(/_/g, '/');
@@ -156,6 +159,8 @@
 	const worker = new MatchWorker();
 	worker.postMessage({ type: 'init', payload: { stars } });
 
+	let errorMessage = $state('');
+
 	worker.onmessage = (e: MessageEvent) => {
 		const { type, payload } = e.data;
 		if (type === 'result') {
@@ -164,7 +169,19 @@
 			} else {
 				showResult(pendingText, payload as MatchResult);
 			}
+		} else if (type === 'error') {
+			isMatching = false;
+			isRerolling = false;
+			errorMessage = 'Something went wrong matching stars. Please try again.';
+			setTimeout(() => (errorMessage = ''), 4000);
 		}
+	};
+
+	worker.onerror = () => {
+		isMatching = false;
+		isRerolling = false;
+		errorMessage = 'Something went wrong. Please try again.';
+		setTimeout(() => (errorMessage = ''), 4000);
 	};
 
 	let pendingText = '';
@@ -272,16 +289,17 @@
 	}
 </script>
 
-<div class="app">
+<div class="app" role="application" aria-label="Written in the Stars - constellation creator">
 	<StarField {stars} bind:this={starField} onReady={handleStarFieldReady} />
 
 	<button
 		class="iau-toggle"
 		class:active={iauOverlay}
 		onclick={handleToggleIAU}
-		title="Toggle IAU constellations"
+		aria-label={iauOverlay ? 'Hide IAU constellations' : 'Show IAU constellations'}
+		aria-pressed={iauOverlay}
 	>
-		<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5">
+		<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
 			<circle cx="5" cy="5" r="1.5" fill="currentColor" stroke="none"/>
 			<circle cx="19" cy="4" r="1.5" fill="currentColor" stroke="none"/>
 			<circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
@@ -296,43 +314,51 @@
 
 	{#if showInput}
 		<div class="input-overlay" class:matching={isMatching}>
+			<label for="constellation-input" class="sr-only">Enter text to map to stars</label>
 			<input
+				id="constellation-input"
 				type="text"
 				bind:value={inputText}
 				onkeydown={handleKeydown}
 				placeholder="Type anything..."
 				maxlength={30}
 				disabled={isMatching}
+				autocomplete="off"
+				aria-describedby={isMatching ? 'matching-status' : undefined}
 				use:autoFocus
 			/>
 			{#if isMatching}
-				<div class="matching-indicator">Finding stars...</div>
+				<div id="matching-status" class="matching-indicator" role="status" aria-live="polite">Finding stars...</div>
 			{/if}
 		</div>
 	{/if}
 
+	{#if errorMessage}
+		<div class="error-toast" role="alert">{errorMessage}</div>
+	{/if}
+
 	{#if constellations.length > 0}
-		<div class="result-overlay" class:dimmed={showInput}>
+		<div class="result-overlay" class:dimmed={showInput} role="region" aria-label="Your constellations">
 			{#each constellations as entry, i}
 				<div class="constellation-entry" class:latest={i === constellations.length - 1 && !showInput}>
 					<div class="constellation-name">{entry.name}</div>
 					<div class="constellation-info">
 						<span class="catalog-id">{entry.catalogId}</span>
-						<span class="separator">·</span>
+						<span class="separator" aria-hidden="true">·</span>
 						<span class="star-count">{entry.starCount} stars</span>
 					</div>
 				</div>
 			{/each}
 			{#if !showInput}
-				<div class="result-actions">
-					<button class="reset-btn" onclick={handleReroll} disabled={isRerolling}>
+				<div class="result-actions" role="toolbar" aria-label="Constellation actions">
+					<button class="reset-btn" onclick={handleReroll} disabled={isRerolling} aria-label="Re-roll constellation placement">
 						{isRerolling ? 'Re-rolling...' : 'Re-roll'}
 					</button>
-					<button class="reset-btn" onclick={handleShare}>
+					<button class="reset-btn" onclick={handleShare} aria-label={copied ? 'Link copied to clipboard' : 'Copy shareable link'}>
 						{copied ? 'Copied!' : 'Share link'}
 					</button>
-					<button class="reset-btn" onclick={handleAddAnother}>Add another</button>
-					<button class="reset-btn" onclick={handleReset}>Clear all</button>
+					<button class="reset-btn" onclick={handleAddAnother} aria-label="Add another constellation">Add another</button>
+					<button class="reset-btn" onclick={handleReset} aria-label="Clear all constellations">Clear all</button>
 				</div>
 			{/if}
 		</div>
@@ -340,10 +366,23 @@
 </div>
 
 <style>
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border: 0;
+	}
+
 	.app {
 		position: relative;
 		width: 100vw;
 		height: 100vh;
+		height: 100dvh;
 		overflow: hidden;
 	}
 
@@ -388,6 +427,10 @@
 		border-color: rgba(255, 215, 0, 0.4);
 	}
 
+	input:focus-visible {
+		box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.3);
+	}
+
 	.matching-indicator {
 		position: absolute;
 		top: 100%;
@@ -396,6 +439,28 @@
 		font-size: 13px;
 		letter-spacing: 3px;
 		text-transform: uppercase;
+	}
+
+	.error-toast {
+		position: absolute;
+		top: 24px;
+		left: 50%;
+		transform: translateX(-50%);
+		z-index: 20;
+		background: rgba(200, 50, 50, 0.15);
+		border: 1px solid rgba(200, 50, 50, 0.3);
+		color: rgba(255, 150, 150, 0.9);
+		padding: 10px 24px;
+		border-radius: 8px;
+		font-size: 14px;
+		letter-spacing: 0.5px;
+		backdrop-filter: blur(8px);
+		animation: toast-in 0.3s ease-out;
+	}
+
+	@keyframes toast-in {
+		from { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+		to { opacity: 1; transform: translateX(-50%) translateY(0); }
 	}
 
 	.result-overlay {
@@ -409,6 +474,10 @@
 		align-items: center;
 		gap: 8px;
 		transition: opacity 0.3s;
+		width: 100%;
+		max-width: 100vw;
+		padding: 0 16px;
+		box-sizing: border-box;
 	}
 
 	.result-overlay.dimmed {
@@ -463,6 +532,9 @@
 		display: flex;
 		gap: 10px;
 		margin-top: 12px;
+		flex-wrap: wrap;
+		justify-content: center;
+		padding: 0 8px;
 	}
 
 	.reset-btn {
@@ -481,6 +553,11 @@
 	.reset-btn:hover:not(:disabled) {
 		border-color: rgba(255, 215, 0, 0.3);
 		color: rgba(255, 215, 0, 0.7);
+	}
+
+	.reset-btn:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.4);
 	}
 
 	.reset-btn:disabled {
@@ -512,9 +589,79 @@
 		border-color: rgba(255, 255, 255, 0.25);
 	}
 
+	.iau-toggle:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 2px rgba(170, 200, 255, 0.5);
+	}
+
 	.iau-toggle.active {
 		background: rgba(170, 200, 255, 0.12);
 		border-color: rgba(170, 200, 255, 0.3);
 		color: rgba(170, 200, 255, 0.8);
+	}
+
+	/* Mobile adjustments */
+	@media (max-width: 480px) {
+		input {
+			font-size: 18px;
+			padding: 14px 20px;
+			letter-spacing: 1.5px;
+		}
+
+		.constellation-name {
+			font-size: 22px;
+			letter-spacing: 4px;
+		}
+
+		.constellation-entry:not(.latest) .constellation-name {
+			font-size: 14px;
+			letter-spacing: 3px;
+		}
+
+		.constellation-info {
+			font-size: 11px;
+			letter-spacing: 1.5px;
+		}
+
+		.result-actions {
+			gap: 8px;
+		}
+
+		.reset-btn {
+			padding: 8px 14px;
+			font-size: 12px;
+		}
+
+		.result-overlay {
+			bottom: 32px;
+		}
+
+		.iau-toggle {
+			top: env(safe-area-inset-top, 16px);
+			right: env(safe-area-inset-right, 16px);
+		}
+	}
+
+	@media (max-width: 360px) {
+		.result-actions {
+			gap: 6px;
+		}
+
+		.reset-btn {
+			padding: 7px 10px;
+			font-size: 11px;
+		}
+
+		.constellation-name {
+			font-size: 18px;
+			letter-spacing: 3px;
+		}
+	}
+
+	/* Safe area for notched phones */
+	@supports (padding: env(safe-area-inset-bottom)) {
+		.result-overlay {
+			padding-bottom: env(safe-area-inset-bottom);
+		}
 	}
 </style>
