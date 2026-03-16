@@ -260,13 +260,19 @@ function rdpSimplify(points: Pt[], epsilon: number, protectedIndices?: Set<numbe
 }
 
 /**
- * Convert text into a graph representation with deduplicated nodes and edges.
+ * Convert text into a graph of nodes and edges suitable for star matching.
  *
- * Features:
- * - Inserts intersection points where strokes cross within a letter
- * - Deduplicates shared vertices (exact coordinate match)
- * - Simplifies curved paths (like O, S, C) to fewer points using RDP
- * - Produces connected constellation-style networks per letter
+ * Uses Hershey Simplex Roman font data to convert each character into polyline
+ * strokes, then builds a unified graph with:
+ * - Intersection detection (where strokes cross within a letter)
+ * - T-junction detection (stroke endpoints landing on another stroke's segment)
+ * - RDP simplification to reduce point count on curves
+ * - Coordinate deduplication to merge shared vertices
+ * - Normalization to [0, 1] coordinate space
+ *
+ * @param text - Input text to convert (unsupported characters are skipped)
+ * @param simplifyEpsilon - RDP tolerance; higher = fewer points (default 2.0)
+ * @returns Graph with deduplicated nodes and edges ready for star matching
  */
 export function textToGraph(text: string, simplifyEpsilon = 2.0): GlyphGraph {
   // Phase 1: collect raw strokes per letter with cursor offsets

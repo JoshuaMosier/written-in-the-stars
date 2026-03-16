@@ -1,6 +1,6 @@
 <script lang="ts">
 	import StarField from '$lib/scene/StarField.svelte';
-	import { textToGraph } from '$lib/engine/glyphs';
+	import { encodeAllToHash, decodeHashToResults } from '$lib/engine/sharing';
 	import starData from '$lib/data/stars.json';
 	import type { Star, MatchResult } from '$lib/engine/types';
 	import { CONSTELLATIONS } from '$lib/data/constellations';
@@ -69,92 +69,6 @@
 	let focusedIndex = $state(-1);
 	let rerollBlacklist: number[] = [];  // accumulates stars from previous re-rolls
 
-	// --- URL hash encoding/decoding ---
-	// Compact format: text~<base64url of 14-bit packed star indices>
-	// Each star.idx is packed as 14 bits (max 16383, we have ~8870 stars)
-	// Node indices are implicit (array position = nodeIndex)
-	const BITS_PER_IDX = 14;
-
-	function encodeSingleResult(text: string, result: MatchResult): string {
-		const sorted = [...result.pairs].sort((a, b) => a.nodeIndex - b.nodeIndex);
-		const totalBits = sorted.length * BITS_PER_IDX;
-		const buf = new Uint8Array(Math.ceil(totalBits / 8));
-		let bitPos = 0;
-		for (let i = 0; i < sorted.length; i++) {
-			const idx = sorted[i].star.idx;
-			for (let b = BITS_PER_IDX - 1; b >= 0; b--) {
-				const bit = (idx >> b) & 1;
-				const byteIdx = Math.floor(bitPos / 8);
-				const bitIdx = 7 - (bitPos % 8);
-				buf[byteIdx] |= bit << bitIdx;
-				bitPos++;
-			}
-		}
-		let b64 = '';
-		for (let i = 0; i < buf.length; i++) b64 += String.fromCharCode(buf[i]);
-		b64 = btoa(b64).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-		const textB64 = btoa(unescape(encodeURIComponent(text))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-		return textB64 + '~' + b64;
-	}
-
-	function decodeSingleResult(segment: string): { text: string; result: MatchResult } | null {
-		try {
-			const sepIdx = segment.indexOf('~');
-			if (sepIdx < 0) return null;
-
-			let textB64 = segment.slice(0, sepIdx).replace(/-/g, '+').replace(/_/g, '/');
-			while (textB64.length % 4) textB64 += '=';
-			const text = decodeURIComponent(escape(atob(textB64)));
-			const graph = textToGraph(text);
-
-			let b64 = segment.slice(sepIdx + 1).replace(/-/g, '+').replace(/_/g, '/');
-			while (b64.length % 4) b64 += '=';
-			const raw = atob(b64);
-			const buf = new Uint8Array(raw.length);
-			for (let i = 0; i < raw.length; i++) buf[i] = raw.charCodeAt(i);
-
-			const count = graph.nodes.length;
-			const totalBits = count * BITS_PER_IDX;
-			if (buf.length < Math.ceil(totalBits / 8)) return null;
-
-			const pairs: MatchResult['pairs'] = [];
-			let bitPos = 0;
-			for (let i = 0; i < count; i++) {
-				let idx = 0;
-				for (let b = BITS_PER_IDX - 1; b >= 0; b--) {
-					const byteIdx = Math.floor(bitPos / 8);
-					const bitIdx = 7 - (bitPos % 8);
-					idx |= ((buf[byteIdx] >> bitIdx) & 1) << b;
-					bitPos++;
-				}
-				const star = starByIdx.get(idx);
-				if (!star) return null;
-				pairs.push({ star, nodeIndex: i });
-			}
-			return {
-				text,
-				result: { pairs, cost: 0, transform: { x: 0, y: 0, scale: 0 }, graph },
-			};
-		} catch {
-			return null;
-		}
-	}
-
-	// Multiple constellations separated by '|' in the hash
-	function encodeAllToHash(entries: ConstellationEntry[]): string {
-		return entries.map(e => encodeSingleResult(e.text, e.result)).join('|');
-	}
-
-	function decodeHashToResults(hash: string): { text: string; result: MatchResult }[] {
-		const segments = hash.split('|');
-		const results: { text: string; result: MatchResult }[] = [];
-		for (const seg of segments) {
-			const decoded = decodeSingleResult(seg);
-			if (decoded) results.push(decoded);
-		}
-		return results;
-	}
-
 	function makeEntry(text: string, result: MatchResult): ConstellationEntry {
 		const now = new Date();
 		return {
@@ -185,7 +99,7 @@
 	let pendingHashResults: { text: string; result: MatchResult }[] = [];
 
 	if (typeof window !== 'undefined' && window.location.hash.length > 1) {
-		pendingHashResults = decodeHashToResults(window.location.hash.slice(1));
+		pendingHashResults = decodeHashToResults(window.location.hash.slice(1), starByIdx);
 	}
 
 	function handleStarFieldReady() {

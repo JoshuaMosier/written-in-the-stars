@@ -15,7 +15,7 @@
 // @ts-ignore - CJS module
 import kdTreePkg from 'kd-tree-javascript';
 const { kdTree } = kdTreePkg;
-import { nelderMead, cmaes } from './optimizer';
+import { cmaes } from './optimizer';
 import type { Star, AnchorPoint, MatchResult, GlyphGraph } from './types';
 
 // ---------------------------------------------------------------------------
@@ -86,6 +86,8 @@ class StarGrid {
 
   lastDistSq = 0;
 
+  // cellSize: spatial hash resolution in normalized [0,1] sky coords (~0.7° per cell)
+  // pad: extra border around the [0,1] range to catch RA wraparound queries
   constructor(points: KDPoint[], cellSize = 0.012, pad = 0.15) {
     this.cellSize = cellSize;
     this.invCellSize = 1 / cellSize;
@@ -223,6 +225,8 @@ function computeCostEq(
   }
 
   const duplicates = n - uniqueCount;
+  // 1.5× edge weight: penalize shape distortion more than raw distance
+  // 0.3× duplicate penalty: discourage reusing the same star for multiple nodes
   return totalDist + edgeCost * 1.5 + duplicates * 0.3;
 }
 
@@ -463,6 +467,24 @@ function resolveDuplicates(
 // Main matching pipeline
 // ---------------------------------------------------------------------------
 
+/**
+ * Find the best placement of a glyph graph onto a real star field.
+ *
+ * Searches over (position, scale) transforms in three phases:
+ * 1. **Coarse grid search** — scans the sky in equirectangular space with a
+ *    hierarchical grid + RANSAC-style edge hypotheses to find promising regions.
+ * 2. **Gnomonic refinement** — re-projects stars onto a gnomonic tangent plane
+ *    at each candidate and runs CMA-ES to minimize placement cost in locally-
+ *    Euclidean space (eliminates equirectangular warping artifacts).
+ * 3. **Duplicate resolution** — assigns unique stars to nodes via greedy +
+ *    iterative swap refinement using a KD-tree for k-nearest candidates.
+ *
+ * @param stars - Full star catalog
+ * @param graph - Glyph graph from {@link textToGraph}
+ * @param blacklist - Star indices to penalize (e.g. already used in other constellations)
+ * @param onProgress - Optional callback with progress fraction [0, 1]
+ * @returns Best match with star-to-node pairs, cost, and camera transform
+ */
 export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph, blacklist: Set<number> | null = null, onProgress?: (pct: number) => void): MatchResult {
   const { nodes, edges } = graph;
 
@@ -497,11 +519,11 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph, blacklist:
   }
 
   // --- Compute equirectangular star field extent ---
-  // Clamp y-range to ±65° declination for coarse search.
-  // Gnomonic refinement handles the geometry correctly at any declination,
-  // so we keep a wide coarse search range.
-  const Y_MIN_CLAMP = 0.139;
-  const Y_MAX_CLAMP = 0.861;
+  // Clamp y-range to ±65° declination (0.139 ≈ 25°/180°) for coarse search.
+  // Near the poles equirectangular projection distorts too heavily for the
+  // coarse grid to be useful; gnomonic refinement handles any declination.
+  const Y_MIN_CLAMP = 0.139;  // ~-65° dec in [0,1] normalized space
+  const Y_MAX_CLAMP = 0.861;  // ~+65° dec
   let minSX = Infinity, maxSX = -Infinity;
   let minSY = Infinity, maxSY = -Infinity;
   for (const s of eqStars) {
@@ -523,7 +545,7 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph, blacklist:
     if (anchorDx[i] > anchorMaxX) anchorMaxX = anchorDx[i];
   }
   const anchorWidth = anchorMaxX - anchorMinX || 1;
-  const maxAngularSpan = 0.139;
+  const maxAngularSpan = 0.139;  // ~50° — largest constellation footprint to consider
   const maxScale = maxAngularSpan / anchorWidth;
   const allScales = [0.012, 0.015, 0.018, 0.02, 0.025, 0.03, 0.035, 0.04, 0.05, 0.065, 0.08, 0.1, 0.13, 0.17, 0.22];
   const scaleValues = allScales.filter(s => s <= maxScale);
@@ -545,7 +567,7 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph, blacklist:
     cost: number;
   }
 
-  const topN = 80;
+  const topN = 80;  // number of best candidates to keep for gnomonic refinement
   const best: Candidate[] = [];
   let worstBestCost = Infinity;
 
@@ -589,7 +611,7 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph, blacklist:
 
   const coarseStepsX = 40;
   const coarseStepsY = 40;
-  const coarseTopN = 300;
+  const coarseTopN = 300;  // keep top 300 coarse candidates for fine-grid refinement
   const coarseBest: Candidate[] = [];
   let coarseWorstCost = Infinity;
 
@@ -790,7 +812,7 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph, blacklist:
   // Phase 2: NM refinement with multi-start on all coarse candidates
   // Cache gnomonic grids — candidates near the same sky position share a grid
   const gnoGridCache = new Map<string, { grid: StarGrid; ra0: number; dec0: number } | null>();
-  const GNO_CACHE_RES = 0.02; // ~1° grid for caching
+  const GNO_CACHE_RES = 0.02; // ~1° snap grid — nearby candidates share a gnomonic projection
 
   const bestLen = best.length;
   for (let ci = 0; ci < bestLen; ci++) {

@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "fetch-stars": "tsx scripts/fetch-stars.ts",
     "visualize": "tsx scripts/visualize.ts",
-    "generate-og": "tsx scripts/generate-og-image.ts"
+    "generate-og": "tsx scripts/generate-og-image.ts",
+    "generate-readme-images": "tsx scripts/generate-readme-images.ts"
   },
   "dependencies": {
     "kd-tree-javascript": "^1.0.3",

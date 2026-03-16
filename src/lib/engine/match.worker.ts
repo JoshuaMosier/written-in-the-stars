@@ -1,5 +1,13 @@
 /**
  * Web Worker for star matching — runs the heavy computation off the main thread.
+ *
+ * Protocol:
+ *   → { type: 'init', payload: { stars: Star[] } }   — cache star catalog
+ *   ← { type: 'ready' }
+ *   → { type: 'match', payload: { text, usedStarIndices? } }  — run matching
+ *   ← { type: 'progress', payload: number }           — progress [0, 1]
+ *   ← { type: 'result', payload: MatchResult }        — final result
+ *   ← { type: 'error', payload: string }              — on failure
  */
 import { textToGraph } from './glyphs';
 import { matchStarsToAnchors } from './matcher';
@@ -11,7 +19,6 @@ self.onmessage = (e: MessageEvent) => {
 	const { type, payload } = e.data;
 
 	if (type === 'init') {
-		// Receive and cache the star catalog once
 		stars = payload.stars;
 		self.postMessage({ type: 'ready' });
 	} else if (type === 'match') {
@@ -19,14 +26,19 @@ self.onmessage = (e: MessageEvent) => {
 			self.postMessage({ type: 'error', payload: 'Worker not initialized' });
 			return;
 		}
-		const graph = textToGraph(payload.text);
-		const blacklist = payload.usedStarIndices
-			? new Set<number>(payload.usedStarIndices as number[])
-			: null;
-		const onProgress = (pct: number) => {
-			self.postMessage({ type: 'progress', payload: pct });
-		};
-		const result = matchStarsToAnchors(stars, graph, blacklist, onProgress);
-		self.postMessage({ type: 'result', payload: result });
+		try {
+			const graph = textToGraph(payload.text);
+			const blacklist = payload.usedStarIndices
+				? new Set<number>(payload.usedStarIndices as number[])
+				: null;
+			const onProgress = (pct: number) => {
+				self.postMessage({ type: 'progress', payload: pct });
+			};
+			const result = matchStarsToAnchors(stars, graph, blacklist, onProgress);
+			self.postMessage({ type: 'result', payload: result });
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			self.postMessage({ type: 'error', payload: message });
+		}
 	}
 };
