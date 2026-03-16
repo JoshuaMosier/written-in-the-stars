@@ -801,11 +801,23 @@
 			Math.sin(centroidDec) * Math.sin(centroidRa)
 		).normalize();
 
-		const startTarget = controlsRef.target.clone();
+		// Derive start direction from the actual camera look direction,
+		// not just the target — after orbiting, the camera has moved off origin.
+		const startPos = cameraRef.position.clone();
+		const lookDir = controlsRef.target.clone().sub(startPos).normalize();
+		const endDir = centroidDir.clone();
 		const startUp = cameraRef.up.clone();
 		const startFov = cameraRef.fov;
 		const duration = 1200;
 		const startTime = performance.now();
+
+		// Use quaternion slerp to rotate the look direction so the camera
+		// always takes the short arc rather than swinging through the back.
+		const qStart = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), lookDir);
+		const qEnd = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), endDir);
+		const qSlerp = new THREE.Quaternion();
+		const slerpedDir = new THREE.Vector3();
+		const origin = new THREE.Vector3(0, 0, 0.0001);
 
 		const Y_UP = new THREE.Vector3(0, 1, 0);
 
@@ -813,7 +825,11 @@
 			const elapsed = performance.now() - startTime;
 			const t = Math.min(1, elapsed / duration);
 			const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-			controlsRef!.target.lerpVectors(startTarget, target, ease);
+			// Move camera back to origin
+			cameraRef!.position.lerpVectors(startPos, origin, ease);
+			qSlerp.slerpQuaternions(qStart, qEnd, ease);
+			slerpedDir.set(0, 0, -1).applyQuaternion(qSlerp);
+			controlsRef!.target.copy(cameraRef!.position).addScaledVector(slerpedDir, 0.001);
 			cameraRef!.up.lerpVectors(startUp, localNorth, ease).normalize();
 			// OrbitControls caches the up-to-Y quaternion at construction time.
 			// Update it each frame so the new up vector is respected.
@@ -839,13 +855,20 @@
 		if (uniformsRef) uniformsRef.uDim.value = 1.0;
 		if (resolvedConstellations.length > 0) resumeAmbientCycle();
 
-		const startTarget = controlsRef.target.clone();
+		const startPos = cameraRef.position.clone();
+		const lookDir = controlsRef.target.clone().sub(startPos).normalize();
+		const endDir = new THREE.Vector3(0, 0, -1);
 		const startUp = cameraRef.up.clone();
 		const defaultUp = new THREE.Vector3(0, 1, 0);
 		const startFov = cameraRef.fov;
-		const endTarget = new THREE.Vector3(0, 0, -0.001);
 		const duration = 800;
 		const startTime = performance.now();
+
+		const qStart = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), lookDir);
+		const qEnd = new THREE.Quaternion(); // identity — already pointing (0,0,-1)
+		const qSlerp = new THREE.Quaternion();
+		const slerpedDir = new THREE.Vector3();
+		const origin = new THREE.Vector3(0, 0, 0.0001);
 
 		const Y_UP = new THREE.Vector3(0, 1, 0);
 
@@ -853,7 +876,10 @@
 			const elapsed = performance.now() - startTime;
 			const t = Math.min(1, elapsed / duration);
 			const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-			controlsRef!.target.lerpVectors(startTarget, endTarget, ease);
+			cameraRef!.position.lerpVectors(startPos, origin, ease);
+			qSlerp.slerpQuaternions(qStart, qEnd, ease);
+			slerpedDir.set(0, 0, -1).applyQuaternion(qSlerp);
+			controlsRef!.target.copy(cameraRef!.position).addScaledVector(slerpedDir, 0.001);
 			cameraRef!.up.lerpVectors(startUp, defaultUp, ease).normalize();
 			(controlsRef as any)._quat.setFromUnitVectors(cameraRef!.up, Y_UP);
 			(controlsRef as any)._quatInverse.copy((controlsRef as any)._quat).invert();
