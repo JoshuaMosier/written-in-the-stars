@@ -170,6 +170,7 @@ function computeCostEq(
   usedGen: Uint32Array,
   gen: number,
   costCeiling: number,
+  blacklist: Set<number> | null = null,
 ): number {
   if (scale <= 0) return 1e12;
 
@@ -191,6 +192,8 @@ function computeCostEq(
     if (nn) {
       const d = Math.sqrt(grid.lastDistSq) * invScale;
       totalDist += d + d * d;
+      // Heavy penalty for reusing blacklisted stars
+      if (blacklist && blacklist.has(nn.idx)) totalDist += 2.0;
       nearestIdx[i] = nn.idx;
       nearestX[i] = nn.x;
       nearestY[i] = nn.y;
@@ -243,6 +246,7 @@ function computeCostGnomonic(
   usedGen: Uint32Array,
   gen: number,
   costCeiling = Infinity,
+  blacklist: Set<number> | null = null,
 ): number {
   if (scale <= 0) return 1e12;
 
@@ -262,6 +266,8 @@ function computeCostGnomonic(
     if (nn) {
       const d = Math.sqrt(grid.lastDistSq) * invScale;
       totalDist += d + d * d;
+      // Heavy penalty for reusing blacklisted stars
+      if (blacklist && blacklist.has(nn.idx)) totalDist += 2.0;
       nearestIdx[i] = nn.idx;
       nearestX[i] = nn.x;
       nearestY[i] = nn.y;
@@ -457,7 +463,7 @@ function resolveDuplicates(
 // Main matching pipeline
 // ---------------------------------------------------------------------------
 
-export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph): MatchResult {
+export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph, blacklist: Set<number> | null = null): MatchResult {
   const { nodes, edges } = graph;
 
   if (nodes.length === 0 || stars.length === 0) {
@@ -632,7 +638,7 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph): MatchResu
           const ty = minSY + (rangeY * (yi + jy + 0.5)) / coarseStepsY;
           gen++;
           const cost = computeCostEq(eqGrid, anchorDx, anchorDy, edges, tx, ty, scale,
-            projX, projY, nearestIdx, nearestXArr, nearestYArr, usedGen, gen, coarseWorstCost);
+            projX, projY, nearestIdx, nearestXArr, nearestYArr, usedGen, gen, coarseWorstCost, blacklist);
           insertCoarse({ tx, ty, scale, cost });
         }
       }
@@ -665,7 +671,7 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph): MatchResu
           const fty = cand.ty - fineHalfH + fineStepH * (fj + 0.5);
           gen++;
           const cost = computeCostEq(eqGrid, anchorDx, anchorDy, edges, ftx, fty, fineScale,
-            projX, projY, nearestIdx, nearestXArr, nearestYArr, usedGen, gen, worstBestCost);
+            projX, projY, nearestIdx, nearestXArr, nearestYArr, usedGen, gen, worstBestCost, blacklist);
           insertCandidate({ tx: ftx, ty: fty, scale: fineScale, cost });
         }
       }
@@ -718,7 +724,7 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph): MatchResu
         // Score and insert
         gen++;
         const cost = computeCostEq(eqGrid, anchorDx, anchorDy, edges, tx, ty, scale,
-          projX, projY, nearestIdx, nearestXArr, nearestYArr, usedGen, gen, worstBestCost);
+          projX, projY, nearestIdx, nearestXArr, nearestYArr, usedGen, gen, worstBestCost, blacklist);
         insertCandidate({ tx, ty, scale, cost });
       }
     }
@@ -809,7 +815,7 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph): MatchResu
     const costFn = (p: number[]): number => {
       gnoGen++;
       return computeCostGnomonic(cachedGno!.grid, anchorDx, anchorDy, edges, p[0], p[1], p[2],
-        gnoProjX, gnoProjY, gnoNearIdx, gnoNearX, gnoNearY, usedGen, gnoGen, bestResult.cost);
+        gnoProjX, gnoProjY, gnoNearIdx, gnoNearX, gnoNearY, usedGen, gnoGen, bestResult.cost, blacklist);
     };
 
     const searchRadius = Math.max(0.003, gnoScaleInit * 0.15);
