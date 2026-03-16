@@ -745,7 +745,7 @@
 						? Math.max(0, (phaseElapsed - totalDrawTime * 0.5) / (totalDrawTime * 0.5))
 						: ac.phase === 'hold' ? 1
 						: 1 - phaseElapsed / AMBIENT_FADE;
-					label.style.opacity = `${Math.max(0, labelOpacity * 0.5)}`;
+					label.style.opacity = `${Math.max(0, labelOpacity * 0.85)}`;
 				} else {
 					label.style.opacity = '0';
 				}
@@ -1105,14 +1105,16 @@
 	:global(.ambient-label) {
 		position: absolute;
 		transform: translateX(-50%);
-		color: rgba(255, 255, 255, 0.5);
-		font-size: 11px;
-		letter-spacing: 3px;
+		color: rgba(255, 255, 255, 0.9);
+		font-size: 13px;
+		font-weight: 300;
+		letter-spacing: 4px;
 		text-transform: uppercase;
 		white-space: nowrap;
 		pointer-events: none;
 		opacity: 0;
 		transition: opacity 0.3s;
+		text-shadow: 0 0 6px rgba(0, 0, 0, 0.8), 0 0 14px rgba(0, 0, 0, 0.5), 0 0 24px rgba(100, 150, 255, 0.3);
 	}
 
 	.star-tooltip {
