@@ -358,6 +358,9 @@
 	let autoRotate = $state(true);
 	let starLabels = $state(false);
 	let coordGrid = $state(false);
+	let shootingStars = $state(true);
+	let brightness = $state(1.0);
+	let monoColor = $state(false);
 	let settingsOpen = $state(false);
 
 	function handleToggleAutoRotate() {
@@ -378,6 +381,21 @@
 	function handleToggleCoordGrid() {
 		coordGrid = !coordGrid;
 		starField?.toggleCoordinateGrid(coordGrid);
+	}
+
+	function handleToggleShootingStars() {
+		shootingStars = !shootingStars;
+		starField?.toggleShootingStars(shootingStars);
+	}
+
+	function handleBrightnessChange(e: Event) {
+		brightness = parseFloat((e.target as HTMLInputElement).value);
+		starField?.setBrightness(brightness);
+	}
+
+	function handleToggleMonoColor() {
+		monoColor = !monoColor;
+		starField?.setMonochrome(monoColor);
 	}
 
 	async function handleShare() {
@@ -489,6 +507,37 @@
 					</svg>
 					<span>Coordinates</span>
 				</button>
+				<button class="settings-item" class:active={shootingStars} onclick={handleToggleShootingStars} role="menuitemcheckbox" aria-checked={shootingStars}>
+					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+						<line x1="4" y1="20" x2="18" y2="6" />
+						<polyline points="18 14 18 6 10 6" />
+					</svg>
+					<span>Shooting stars</span>
+				</button>
+				<button class="settings-item" class:active={!monoColor} onclick={handleToggleMonoColor} role="menuitemcheckbox" aria-checked={!monoColor}>
+					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+						<circle cx="12" cy="12" r="9" />
+						<circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" />
+					</svg>
+					<span>Star color</span>
+				</button>
+				<div class="settings-item slider-row">
+					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+						<circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
+						<circle cx="12" cy="12" r="6" />
+						<circle cx="12" cy="12" r="9" opacity="0.4" />
+					</svg>
+					<label for="mag-slider">Brightness</label>
+					<input
+						id="mag-slider"
+						type="range"
+						min="0.2"
+						max="2.0"
+						step="0.1"
+						value={brightness}
+						oninput={handleBrightnessChange}
+					/>
+				</div>
 			</div>
 		{/if}
 	</div>
@@ -1015,6 +1064,50 @@
 	.settings-item:focus-visible {
 		outline: none;
 		box-shadow: 0 0 0 2px rgba(170, 200, 255, 0.4);
+	}
+
+	.slider-row {
+		cursor: default;
+	}
+
+	.slider-row label {
+		font-size: 13px;
+		letter-spacing: 0.5px;
+		color: rgba(255, 255, 255, 0.4);
+		cursor: default;
+		white-space: nowrap;
+	}
+
+	.slider-row input[type="range"] {
+		-webkit-appearance: none;
+		appearance: none;
+		width: 64px;
+		height: 2px;
+		background: rgba(255, 255, 255, 0.15);
+		border-radius: 2px;
+		outline: none;
+		margin: 0 0 0 auto;
+		padding: 0;
+	}
+
+	.slider-row input[type="range"]::-webkit-slider-thumb {
+		-webkit-appearance: none;
+		appearance: none;
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: rgba(170, 200, 255, 0.7);
+		cursor: pointer;
+		border: none;
+	}
+
+	.slider-row input[type="range"]::-moz-range-thumb {
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: rgba(170, 200, 255, 0.7);
+		cursor: pointer;
+		border: none;
 	}
 
 	/* Mobile adjustments */

@@ -570,7 +570,7 @@
 	let ambientQueue: number[] = [];
 	let ambientTimerId: ReturnType<typeof setTimeout> | null = null;
 	let ambientPaused = false;
-	let uniformsRef: { uDim: THREE.Uniform<number>; uTime: THREE.Uniform<number>; uFovScale: THREE.Uniform<number>; uHoveredIndex: THREE.Uniform<number> } | null = null;
+	let uniformsRef: { uDim: THREE.Uniform<number>; uTime: THREE.Uniform<number>; uFovScale: THREE.Uniform<number>; uHoveredIndex: THREE.Uniform<number>; uBrightness: THREE.Uniform<number>; uMonochrome: THREE.Uniform<number> } | null = null;
 	const DEFAULT_FOV = 90;
 	let debugFov = $state(DEFAULT_FOV);
 	let rendererSize = new THREE.Vector2(1, 1);
@@ -772,6 +772,7 @@
 		attribute float aNamed;
 		uniform float uFovScale;
 		uniform float uHoveredIndex;
+		uniform float uBrightness;
 		varying float vMag;
 		varying float vColorIndex;
 		varying float vHover;
@@ -794,7 +795,7 @@
 			float baseSize = 4.0 + 35.0 * pow(flux, 0.3);
 			// Scale up as FOV decreases (zooming in)
 			float hoverScale = 1.0 + vHover * 0.6;
-			gl_PointSize = baseSize * uFovScale * hoverScale;
+			gl_PointSize = baseSize * uFovScale * hoverScale * uBrightness;
 		}
 	`;
 
@@ -802,6 +803,8 @@
 	const fragmentShader = `
 		uniform float uDim;
 		uniform float uTime;
+		uniform float uMonochrome;
+		uniform float uBrightness;
 		varying float vMag;
 		varying float vColorIndex;
 		varying float vHover;
@@ -863,6 +866,7 @@
 
 			// Star color from B-V index
 			vec3 starColor = bvToColor(vColorIndex);
+			starColor = mix(starColor, vec3(1.0), uMonochrome);
 
 			// Slightly lighter core, colored halo
 			vec3 coreColor = mix(starColor, vec3(1.0), 0.3);
@@ -871,7 +875,7 @@
 			// Overall brightness boost for dim stars
 			float brightnessBoost = 1.0 + 0.3 * smoothstep(2.0, 6.5, vMag);
 
-			float alpha = profile * uDim * brightnessBoost;
+			float alpha = profile * uDim * brightnessBoost * uBrightness;
 
 			// Hover: brighten the star while keeping its color
 			alpha *= 1.0 + vHover * 1.2;
@@ -1857,8 +1861,8 @@
 			const SPHERE_R = 1.0;
 			const SEGMENTS = 120;
 
-			// RA lines (every 2h = 30°) — great circles from pole to pole
-			for (let h = 0; h < 24; h += 2) {
+			// RA lines (every 1h = 15°) — great circles from pole to pole
+			for (let h = 0; h < 24; h += 1) {
 				const ra = (h / 24) * Math.PI * 2;
 				const points: number[] = [];
 				for (let i = 0; i <= SEGMENTS; i++) {
@@ -1905,8 +1909,8 @@
 				coordGridLabels.push(label);
 			}
 
-			// Dec lines (every 30°, skip poles) — small circles at constant declination
-			for (let d = -60; d <= 60; d += 30) {
+			// Dec lines (every 15°, skip poles) — small circles at constant declination
+			for (let d = -75; d <= 75; d += 15) {
 				if (d === 0) continue; // we'll draw the equator separately
 				const dec = (d * Math.PI) / 180;
 				const points: number[] = [];
@@ -2014,6 +2018,24 @@
 			}
 			coordGridLabels = [];
 		}
+	}
+
+	export function toggleShootingStars(on: boolean) {
+		if (on) {
+			resumeMeteors();
+			resumeComets();
+		} else {
+			stopMeteors();
+			stopComets();
+		}
+	}
+
+	export function setBrightness(value: number) {
+		if (uniformsRef) uniformsRef.uBrightness.value = value;
+	}
+
+	export function setMonochrome(on: boolean) {
+		if (uniformsRef) uniformsRef.uMonochrome.value = on ? 1.0 : 0.0;
 	}
 
 	export function captureImage(): Promise<Blob> {
@@ -2163,6 +2185,8 @@
 			uTime: new THREE.Uniform(0.0),
 			uFovScale: new THREE.Uniform(1.0),
 			uHoveredIndex: new THREE.Uniform(-1.0),
+			uBrightness: new THREE.Uniform(1.0),
+			uMonochrome: new THREE.Uniform(0.0),
 		};
 		uniformsRef = uniforms;
 
@@ -2425,8 +2449,9 @@
 
 	.camera-heading {
 		position: fixed;
-		bottom: 16px;
-		right: 16px;
+		top: 16px;
+		left: 50%;
+		transform: translateX(-50%);
 		z-index: 100;
 		pointer-events: none;
 		font-family: monospace;
