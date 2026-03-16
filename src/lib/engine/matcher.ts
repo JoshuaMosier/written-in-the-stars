@@ -12,7 +12,6 @@
  * rendered on a 3D celestial sphere.
  */
 
-// @ts-ignore - CJS module
 import kdTreePkg from 'kd-tree-javascript';
 const { kdTree } = kdTreePkg;
 import { cmaes } from './optimizer';

@@ -1,6 +1,5 @@
 /**
  * IAU constellation stick-figure definitions.
- * Auto-generated from constellations_hip.csv by scripts/build-data.ts
  * Each line segment connects two stars by their HIP (Hipparcos) catalog number.
  */
 

@@ -19,7 +19,7 @@ The result is rendered on an interactive 3D celestial sphere. You can orbit, zoo
 
 ## Features
 
-- Real stars from the Yale Bright Star Catalog
+- Real stars from the HYG Database (Hipparcos, Yale, Gliese)
 - Interactive 3D star field with orbit controls
 - IAU constellation overlay (88 official constellations)
 - Shareable URLs — every result is encoded in the link
@@ -52,4 +52,4 @@ npm run dev
 
 ## Credits
 
-Star data from the [Yale Bright Star Catalog](http://tdc-www.harvard.edu/catalogs/bsc5.html). Font geometry from the [Hershey Simplex](https://paulbourke.net/dataformats/hershey/) vector font. Inspired by [neal.fun/constellation-draw](https://neal.fun/constellation-draw/).
+Star data from the [HYG Database](https://github.com/astronexus/HYG-Database) (Hipparcos, Yale Bright Star Catalog, Gliese). Font geometry from the [Hershey Simplex](https://paulbourke.net/dataformats/hershey/) vector font. Inspired by [neal.fun/constellation-draw](https://neal.fun/constellation-draw/).

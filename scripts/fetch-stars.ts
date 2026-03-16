@@ -6,7 +6,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 interface Star {
+  idx: number;  // compact sequential index (0..N-1), used for URL encoding
   id: number;
+  hip?: number; // Hipparcos catalog number
   ra: number;
   dec: number;
   mag: number;
@@ -94,12 +96,21 @@ async function main() {
     const hygId = parseInt(cols[idIdx]?.trim() || "", 10);
     const id = !isNaN(hr) && hr > 0 ? hr : hygId;
 
+    // Resolve Hipparcos ID from the HYG 'id' column (Hipparcos catalog number)
+    const hipStr = cols[idIdx]?.trim();
+    const hip = hipStr ? parseInt(hipStr, 10) : NaN;
+
     const star: Star = {
+      idx: 0, // assigned after sorting
       id,
       ra: Math.round(rarad * 1e6) / 1e6,
       dec: Math.round(decrad * 1e6) / 1e6,
       mag: Math.round(mag * 100) / 100,
     };
+
+    if (!isNaN(hip) && hip > 0) {
+      star.hip = hip;
+    }
 
     const ciStr = cols[ciIdx]?.trim();
     if (ciStr) {
@@ -117,8 +128,9 @@ async function main() {
     stars.push(star);
   }
 
-  // Sort by magnitude (brightest first)
+  // Sort by magnitude (brightest first), then assign sequential indices
   stars.sort((a, b) => a.mag - b.mag);
+  for (let i = 0; i < stars.length; i++) stars[i].idx = i;
 
   console.log(`\nTotal stars with mag <= 6.5: ${stars.length}`);
   console.log(`Brightest: ${JSON.stringify(stars[0])}`);

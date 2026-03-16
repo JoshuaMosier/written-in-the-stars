@@ -12,7 +12,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { textToGraph } from "../src/lib/engine/glyphs";
 import { matchStarsToAnchors } from "../src/lib/engine/matcher";
-import type { Star, MatchResult, GlyphGraph } from "../src/lib/engine/types";
+import type { Star, MatchResult } from "../src/lib/engine/types";
 
 // ---------------------------------------------------------------------------
 // Load data
