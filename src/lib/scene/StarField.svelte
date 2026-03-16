@@ -1104,12 +1104,6 @@
 		// Also keep the true max so we don't clip anything
 		const maxAngle = angles[angles.length - 1];
 
-		// Tight zoom: use the larger of p90 and max-based, with minimal padding
-		const fovFromP90 = THREE.MathUtils.radToDeg(representativeAngle) * 2.2 + 3;
-		const fovFromMax = THREE.MathUtils.radToDeg(maxAngle) * 1.8 + 2;
-		const targetFov = Math.min(80, Math.max(10, Math.max(fovFromP90, fovFromMax)));
-		const target = centroidDir.clone().multiplyScalar(0.001);
-
 		// Compute local "north" (declination-increasing) direction at centroid.
 		// This is the tangent vector d(raDecToXYZ)/d(dec) at the centroid's
 		// RA/Dec, so text aligned with Dec appears upright on screen.
@@ -1120,6 +1114,34 @@
 			Math.cos(centroidDec),
 			Math.sin(centroidDec) * Math.sin(centroidRa)
 		).normalize();
+
+		// Find the FOV where all stars fit within 70% of the viewport by
+		// projecting through a test camera with the final orientation.
+		const testCam = new THREE.PerspectiveCamera(60, cameraRef.aspect, 0.1, 10);
+		testCam.position.set(0, 0, 0.0001);
+		testCam.up.copy(localNorth);
+		testCam.lookAt(centroidDir.clone().multiplyScalar(10));
+		const fitMargin = 0.9; // stars must land within ±90% of NDC
+
+		// Allow higher max FOV on portrait viewports to fit wide constellations
+		const maxFov = cameraRef.aspect < 0.8 ? 110 : 80;
+		let lo = 5, hi = maxFov + 10;
+		for (let i = 0; i < 16; i++) {
+			const mid = (lo + hi) / 2;
+			testCam.fov = mid;
+			testCam.updateProjectionMatrix();
+			let fits = true;
+			for (const pos of positions) {
+				const ndc = pos.clone().project(testCam);
+				if (Math.abs(ndc.x) > fitMargin || Math.abs(ndc.y) > fitMargin) {
+					fits = false;
+					break;
+				}
+			}
+			if (fits) hi = mid; else lo = mid;
+		}
+		const targetFov = Math.min(maxFov, Math.max(15, hi));
+		const target = centroidDir.clone().multiplyScalar(0.001);
 
 		// Derive start direction from the actual camera look direction,
 		// not just the target — after orbiting, the camera has moved off origin.
@@ -1248,6 +1270,16 @@
 		controls.rotateSpeed = -0.25;
 		controls.enableDamping = true;
 		controls.dampingFactor = 0.08;
+
+		// Scale rotation speed based on viewport and FOV so dragging feels
+		// consistent across screen sizes and zoom levels
+		function updateRotateSpeed() {
+			const baseFov = DEFAULT_FOV;
+			const fovScale = camera.fov / baseFov;
+			const sizeScale = Math.min(container.clientWidth, container.clientHeight) / 800;
+			controls.rotateSpeed = -0.25 * fovScale / sizeScale;
+		}
+		updateRotateSpeed();
 		controls.target.set(0, 0, -0.001);
 		controls.minDistance = 0.0001;
 		controls.maxDistance = 0.01;
@@ -1258,6 +1290,7 @@
 			e.preventDefault();
 			camera.fov = Math.max(10, Math.min(120, camera.fov + e.deltaY * 0.05));
 			camera.updateProjectionMatrix();
+			updateRotateSpeed();
 		};
 		renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
 
@@ -1283,6 +1316,7 @@
 				const scale = pinchStartDist / currentDist;
 				camera.fov = Math.max(10, Math.min(120, pinchStartFov * scale));
 				camera.updateProjectionMatrix();
+				updateRotateSpeed();
 			}
 		};
 
@@ -1445,6 +1479,7 @@
 			camera.updateProjectionMatrix();
 			renderer.setSize(container.clientWidth, container.clientHeight);
 			rendererSize.set(container.clientWidth, container.clientHeight);
+			updateRotateSpeed();
 		};
 		window.addEventListener('resize', onResize);
 
