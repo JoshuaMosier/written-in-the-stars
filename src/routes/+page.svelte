@@ -430,6 +430,37 @@
 		}
 	}
 
+	function handleVertexDrag(e: { constellationIndex: number; nodeIndex: number; newStar: Star }) {
+		const { constellationIndex, nodeIndex, newStar } = e;
+		const entry = constellations[constellationIndex];
+		if (!entry) return;
+
+		// Clone the result with the updated star
+		const newPairs = entry.result.pairs.map(p =>
+			p.nodeIndex === nodeIndex ? { ...p, star: newStar } : { ...p }
+		);
+		const newResult: MatchResult = {
+			...entry.result,
+			pairs: newPairs,
+		};
+		const newEntry: ConstellationEntry = {
+			...entry,
+			result: newResult,
+		};
+		constellations = [
+			...constellations.slice(0, constellationIndex),
+			newEntry,
+			...constellations.slice(constellationIndex + 1),
+		];
+
+		// Update URL hash
+		history.replaceState(null, '', '#' + encodeAllToHash(constellations));
+
+		// Redraw all constellations instantly (camera is already in place)
+		const allResults = constellations.map(c => c.result);
+		starField?.redrawConstellations(allResults);
+	}
+
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter') {
 			handleSubmit();
@@ -451,7 +482,7 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
 <div class="app" role="application" aria-label="Written in the Stars - constellation creator" onclick={handleClickOutsideSettings}>
-	<StarField {stars} bind:this={starField} onReady={handleStarFieldReady} />
+	<StarField {stars} bind:this={starField} onReady={handleStarFieldReady} onVertexDrag={handleVertexDrag} />
 
 	<div class="settings-container">
 		<button

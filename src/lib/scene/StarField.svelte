@@ -9,9 +9,10 @@
 	import type { Star, MatchResult } from '$lib/engine/types';
 	import { CONSTELLATIONS } from '$lib/data/constellations';
 
-	let { stars, onReady = () => {} }: {
+	let { stars, onReady = () => {}, onVertexDrag = (_e: { constellationIndex: number; nodeIndex: number; newStar: Star }) => {} }: {
 		stars: Star[];
 		onReady?: () => void;
+		onVertexDrag?: (e: { constellationIndex: number; nodeIndex: number; newStar: Star }) => void;
 	} = $props();
 
 	let container: HTMLDivElement;
@@ -26,6 +27,161 @@
 	let starPointsRef: THREE.Points | null = null;
 	const projectedLabelPos = new THREE.Vector3();
 	const overlayCameraDir = new THREE.Vector3();
+
+	// --- Draggable constellation vertices ---
+	let currentResults: MatchResult[] = [];
+	let dragState: {
+		active: boolean;
+		constellationIndex: number;
+		nodeIndex: number;
+		startMouse: { x: number; y: number };
+		committed: boolean; // true once mouse moves past threshold
+		candidateStar: Star | null;
+		dragGroup: THREE.Group | null;
+	} | null = null;
+	const DRAG_COMMIT_THRESHOLD = 5; // pixels before drag starts
+	const VERTEX_PICK_THRESHOLD = 25; // pixels to pick a constellation vertex
+
+	// Build a spatial index for fast star lookup by screen position
+	function findNearestStarToScreen(
+		mx: number, my: number, camera: THREE.PerspectiveCamera,
+		w: number, h: number, excludeIdx?: number
+	): Star | null {
+		const projected = new THREE.Vector3();
+		let bestDist = Infinity;
+		let bestStar: Star | null = null;
+		const threshold = 50;
+		for (const s of stars) {
+			if (excludeIdx !== undefined && s.idx === excludeIdx) continue;
+			projected.copy(raDecToXYZ(s.ra, s.dec));
+			projected.project(camera);
+			if (projected.z > 1) continue;
+			const sx = (projected.x * 0.5 + 0.5) * w;
+			const sy = (-projected.y * 0.5 + 0.5) * h;
+			const dx = sx - mx;
+			const dy = sy - my;
+			const dist = Math.sqrt(dx * dx + dy * dy);
+			if (dist < threshold && dist < bestDist) {
+				bestDist = dist;
+				bestStar = s;
+			}
+		}
+		return bestStar;
+	}
+
+	function findPickedVertex(
+		mx: number, my: number, camera: THREE.PerspectiveCamera,
+		w: number, h: number
+	): { constellationIndex: number; nodeIndex: number; star: Star } | null {
+		const projected = new THREE.Vector3();
+		let bestDist = Infinity;
+		let bestPick: { constellationIndex: number; nodeIndex: number; star: Star } | null = null;
+		for (let ci = 0; ci < currentResults.length; ci++) {
+			const result = currentResults[ci];
+			for (const pair of result.pairs) {
+				projected.copy(raDecToXYZ(pair.star.ra, pair.star.dec).multiplyScalar(0.999));
+				projected.project(camera);
+				if (projected.z > 1) continue;
+				const sx = (projected.x * 0.5 + 0.5) * w;
+				const sy = (-projected.y * 0.5 + 0.5) * h;
+				const dx = sx - mx;
+				const dy = sy - my;
+				const dist = Math.sqrt(dx * dx + dy * dy);
+				if (dist < VERTEX_PICK_THRESHOLD && dist < bestDist) {
+					bestDist = dist;
+					bestPick = { constellationIndex: ci, nodeIndex: pair.nodeIndex, star: pair.star };
+				}
+			}
+		}
+		return bestPick;
+	}
+
+	function updateDragVisual(candidateStar: Star | null) {
+		if (!dragState || !sceneRef) return;
+
+		// Remove old drag visual
+		if (dragState.dragGroup) {
+			sceneRef.remove(dragState.dragGroup);
+			dragState.dragGroup = null;
+		}
+		if (!candidateStar) return;
+
+		const result = currentResults[dragState.constellationIndex];
+		if (!result) return;
+
+		const group = new THREE.Group();
+		const candidatePos = raDecToXYZ(candidateStar.ra, candidateStar.dec).multiplyScalar(0.999);
+
+		// Draw lines from candidate to neighbor vertices
+		const neighbors: THREE.Vector3[] = [];
+		for (const [nA, nB] of result.graph.edges) {
+			let neighborIdx = -1;
+			if (nA === dragState.nodeIndex) neighborIdx = nB;
+			else if (nB === dragState.nodeIndex) neighborIdx = nA;
+			if (neighborIdx < 0) continue;
+			const neighborPair = result.pairs.find(p => p.nodeIndex === neighborIdx);
+			if (neighborPair) {
+				neighbors.push(raDecToXYZ(neighborPair.star.ra, neighborPair.star.dec).multiplyScalar(0.999));
+			}
+		}
+
+		if (neighbors.length > 0) {
+			const linePositions: number[] = [];
+			for (const nPos of neighbors) {
+				linePositions.push(candidatePos.x, candidatePos.y, candidatePos.z, nPos.x, nPos.y, nPos.z);
+			}
+			const segGeom = new LineSegmentsGeometry();
+			segGeom.setPositions(linePositions);
+
+			const previewMat = new LineMaterial({
+				color: 0xffd700,
+				linewidth: 3,
+				transparent: true,
+				opacity: 0.35,
+				depthTest: false,
+				blending: THREE.AdditiveBlending,
+				dashed: true,
+				dashSize: 0.003,
+				gapSize: 0.003,
+			});
+			previewMat.resolution.copy(rendererSize);
+			const previewLines = new LineSegments2(segGeom, previewMat);
+			previewLines.computeLineDistances();
+			previewLines.renderOrder = 3;
+			group.add(previewLines);
+		}
+
+		// Highlight candidate star with a bright dot
+		const hlGeom = new THREE.BufferGeometry();
+		hlGeom.setAttribute('position', new THREE.Float32BufferAttribute([candidatePos.x, candidatePos.y, candidatePos.z], 3));
+		const hlMat = new THREE.ShaderMaterial({
+			vertexShader: `
+				void main() {
+					vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+					gl_Position = projectionMatrix * mvPosition;
+					gl_PointSize = 18.0;
+				}
+			`,
+			fragmentShader: `
+				void main() {
+					float d = length(gl_PointCoord - 0.5) * 2.0;
+					if (d > 1.0) discard;
+					float alpha = exp(-d * d * 3.0) * 0.95;
+					vec3 color = vec3(1.0, 0.84, 0.0);
+					gl_FragColor = vec4(color * alpha, alpha);
+				}
+			`,
+			transparent: true,
+			depthTest: false,
+			blending: THREE.AdditiveBlending,
+		});
+		const hlPoints = new THREE.Points(hlGeom, hlMat);
+		hlPoints.renderOrder = 4;
+		group.add(hlPoints);
+
+		sceneRef.add(group);
+		dragState.dragGroup = group;
+	}
 
 	// --- Named star labels ---
 	let starLabelsActive = false;
@@ -909,6 +1065,7 @@
 			if (group.parent) sceneRef?.remove(group);
 		}
 		constellationGroups = [];
+		currentResults = [];
 	}
 
 	function prepareForConstellation() {
@@ -1258,12 +1415,22 @@
 
 	export function refocusConstellation(allResults: MatchResult[], focusIndex: number) {
 		clearAllConstellations();
+		currentResults = [...allResults];
 		// Instantly draw all non-focused constellations
 		for (let i = 0; i < allResults.length; i++) {
 			if (i !== focusIndex) drawConstellationInstant(allResults[i]);
 		}
 		// Animate camera to focused one (fast replay)
 		animateToMatch(allResults[focusIndex], true);
+	}
+
+	/** Redraw all constellations instantly without camera animation (used after vertex drag) */
+	export function redrawConstellations(allResults: MatchResult[]) {
+		clearAllConstellations();
+		currentResults = [...allResults];
+		for (const result of allResults) {
+			drawConstellationInstant(result);
+		}
 	}
 
 	// --- Ambient constellation cycling ---
@@ -1634,6 +1801,11 @@
 
 	export function animateToMatch(result: MatchResult, fast = false) {
 		if (!controlsRef || !cameraRef) return;
+
+		// Track this result if not already tracked (single-add case)
+		if (!currentResults.includes(result)) {
+			currentResults.push(result);
+		}
 
 		prepareForConstellation();
 
@@ -2229,9 +2401,104 @@
 		let hoveredIdx = -1;
 		const projected = new THREE.Vector3();
 
+		// --- Vertex drag handlers ---
+		const onDragPointerDown = (e: PointerEvent) => {
+			if (e.button !== 0 || currentResults.length === 0) return;
+			const rect = container.getBoundingClientRect();
+			const mx = e.clientX - rect.left;
+			const my = e.clientY - rect.top;
+			camera.updateMatrixWorld();
+			const pick = findPickedVertex(mx, my, camera, rect.width, rect.height);
+			if (pick) {
+				dragState = {
+					active: true,
+					constellationIndex: pick.constellationIndex,
+					nodeIndex: pick.nodeIndex,
+					startMouse: { x: e.clientX, y: e.clientY },
+					committed: false,
+					candidateStar: null,
+					dragGroup: null,
+				};
+				// Don't prevent default yet — let OrbitControls handle if it's not a drag
+			}
+		};
+
+		const onDragPointerMove = (e: PointerEvent) => {
+			if (!dragState || !dragState.active) return;
+			const dx = e.clientX - dragState.startMouse.x;
+			const dy = e.clientY - dragState.startMouse.y;
+			const dist = Math.sqrt(dx * dx + dy * dy);
+
+			if (!dragState.committed) {
+				if (dist < DRAG_COMMIT_THRESHOLD) return;
+				// Commit to drag — disable orbit controls
+				dragState.committed = true;
+				controls.enabled = false;
+				// Hide hover tooltip
+				hoveredIdx = -1;
+				uniforms.uHoveredIndex.value = -1.0;
+				tooltip.style.opacity = '0';
+				container.style.cursor = 'grabbing';
+			}
+
+			const rect = container.getBoundingClientRect();
+			const mx = e.clientX - rect.left;
+			const my = e.clientY - rect.top;
+			camera.updateMatrixWorld();
+
+			// Find nearest star to snap to (including the original)
+			const candidate = findNearestStarToScreen(mx, my, camera, rect.width, rect.height);
+
+			dragState.candidateStar = candidate;
+			updateDragVisual(candidate);
+
+			// Show tooltip for candidate
+			if (candidate) {
+				const label = candidate.name || `HIP ${candidate.id}`;
+				tooltip.textContent = label;
+				tooltip.style.opacity = '1';
+				tooltip.style.left = `${e.clientX + 14}px`;
+				tooltip.style.top = `${e.clientY + 14}px`;
+			} else {
+				tooltip.style.opacity = '0';
+			}
+		};
+
+		const onDragPointerUp = (_e: PointerEvent) => {
+			if (!dragState || !dragState.active) return;
+
+			if (dragState.committed && dragState.candidateStar) {
+				// Clean up drag visual
+				if (dragState.dragGroup && sceneRef) {
+					sceneRef.remove(dragState.dragGroup);
+				}
+				const { constellationIndex, nodeIndex, candidateStar } = dragState;
+				dragState = null;
+				controls.enabled = true;
+				container.style.cursor = '';
+				tooltip.style.opacity = '0';
+				// Fire callback to parent
+				onVertexDrag({ constellationIndex, nodeIndex, newStar: candidateStar });
+			} else {
+				// Clean up without action
+				if (dragState.dragGroup && sceneRef) {
+					sceneRef.remove(dragState.dragGroup);
+				}
+				dragState = null;
+				controls.enabled = true;
+				container.style.cursor = '';
+			}
+		};
+
+		renderer.domElement.addEventListener('pointerdown', onDragPointerDown);
+		renderer.domElement.addEventListener('pointermove', onDragPointerMove);
+		renderer.domElement.addEventListener('pointerup', onDragPointerUp);
+
 		const onMouseMove = (e: PointerEvent) => {
 			// Suppress hover tooltips on touch/pen devices
 			if (e.pointerType !== 'mouse') return;
+			// Suppress hover during vertex drag
+			if (dragState?.committed) return;
 
 			const rect = container.getBoundingClientRect();
 			const mx = e.clientX - rect.left;
@@ -2262,6 +2529,16 @@
 				if (dist < threshold && dist < bestDist) {
 					bestDist = dist;
 					bestStar = si;
+				}
+			}
+
+			// Check if hovering over a constellation vertex — show grab cursor
+			if (currentResults.length > 0) {
+				const pick = findPickedVertex(mx, my, camera, w, h);
+				if (pick && !dragState) {
+					container.style.cursor = 'grab';
+				} else if (!dragState) {
+					container.style.cursor = '';
 				}
 			}
 
@@ -2400,6 +2677,9 @@
 			renderer.domElement.removeEventListener('wheel', onWheel);
 			renderer.domElement.removeEventListener('pointermove', onMouseMove);
 			renderer.domElement.removeEventListener('pointerleave', onPointerLeave);
+			renderer.domElement.removeEventListener('pointerdown', onDragPointerDown);
+			renderer.domElement.removeEventListener('pointermove', onDragPointerMove);
+			renderer.domElement.removeEventListener('pointerup', onDragPointerUp);
 			renderer.domElement.removeEventListener('touchstart', onTouchStart);
 			renderer.domElement.removeEventListener('touchmove', onTouchMove);
 			renderer.domElement.removeEventListener('touchend', onTouchEnd);
