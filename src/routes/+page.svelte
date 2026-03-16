@@ -250,11 +250,18 @@
 		// Clear hash
 		history.replaceState(null, '', window.location.pathname);
 		starField?.resetView();
+		autoRotate = true;
+		starField?.toggleAutoRotate(true);
 	}
 
 	let copied = $state(false);
 	let iauOverlay = $state(false);
+	let autoRotate = $state(true);
 
+	function handleToggleAutoRotate() {
+		autoRotate = !autoRotate;
+		starField?.toggleAutoRotate(autoRotate);
+	}
 
 	function handleToggleIAU() {
 		iauOverlay = !iauOverlay;
@@ -264,18 +271,32 @@
 	async function handleShare() {
 		try {
 			await navigator.clipboard.writeText(window.location.href);
-			copied = true;
-			setTimeout(() => (copied = false), 2000);
 		} catch {
-			// Fallback: select a temporary input
 			const tmp = document.createElement('input');
 			tmp.value = window.location.href;
 			document.body.appendChild(tmp);
 			tmp.select();
 			document.execCommand('copy');
 			tmp.remove();
-			copied = true;
-			setTimeout(() => (copied = false), 2000);
+		}
+		copied = true;
+		setTimeout(() => (copied = false), 2000);
+	}
+
+	async function handleSaveImage() {
+		try {
+			const blob = await starField?.captureImage();
+			if (!blob) return;
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			const name = constellations[constellations.length - 1]?.name ?? 'constellation';
+			a.download = `${name.replace(/[^a-zA-Z0-9]/g, '_')}.png`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch {
+			errorMessage = 'Failed to save image. Please try again.';
+			setTimeout(() => (errorMessage = ''), 4000);
 		}
 	}
 
@@ -310,6 +331,19 @@
 			<line x1="19" y1="4" x2="12" y2="12" />
 			<line x1="12" y1="12" x2="4" y2="19" />
 			<line x1="12" y1="12" x2="20" y2="18" />
+		</svg>
+	</button>
+
+	<button
+		class="iau-toggle rotate-toggle"
+		class:active={autoRotate}
+		onclick={handleToggleAutoRotate}
+		aria-label={autoRotate ? 'Stop auto-rotate' : 'Start auto-rotate'}
+		aria-pressed={autoRotate}
+	>
+		<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+			<path d="M21 12a9 9 0 1 1-3-6.7" />
+			<polyline points="21 3 21 9 15 9" />
 		</svg>
 	</button>
 
@@ -398,9 +432,10 @@
 						{isRerolling ? 'Re-rolling...' : 'Re-roll'}
 					</button>
 					<button class="reset-btn" onclick={handleShare} aria-label={copied ? 'Link copied to clipboard' : 'Copy shareable link'}>
-						{copied ? 'Copied!' : 'Share link'}
+						{copied ? 'Copied!' : 'Share'}
 					</button>
-					<button class="reset-btn" onclick={handleAddAnother} aria-label="Add another constellation">Add another</button>
+					<button class="reset-btn" onclick={handleSaveImage} aria-label="Save constellation as image">Save image</button>
+					<button class="reset-btn" onclick={handleAddAnother} aria-label="Add another constellation">Add more</button>
 					<button class="reset-btn" onclick={handleReset} aria-label="Clear all constellations">Clear all</button>
 				</div>
 			{/if}
@@ -664,6 +699,10 @@
 		background: rgba(170, 200, 255, 0.12);
 		border-color: rgba(170, 200, 255, 0.3);
 		color: rgba(170, 200, 255, 0.8);
+	}
+
+	.rotate-toggle {
+		top: 54px;
 	}
 
 	/* Mobile adjustments */
