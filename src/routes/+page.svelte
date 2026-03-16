@@ -474,6 +474,8 @@
 		</svg>
 	</a>
 
+	<a class="author" href="https://x.com/joshrmosier" target="_blank" rel="noopener noreferrer">Made by Josh Mosier</a>
+
 	{#if constellations.length > 0}
 		<div class="result-overlay" class:dimmed={showInput} role="region" aria-label="Your constellations">
 			{#each constellations as entry, i}
@@ -731,6 +733,22 @@
 	}
 
 	.attribution:hover {
+		color: rgba(255, 255, 255, 0.7);
+	}
+
+	.author {
+		position: absolute;
+		bottom: 14px;
+		right: 16px;
+		z-index: 10;
+		color: rgba(255, 255, 255, 0.4);
+		font-size: 12px;
+		letter-spacing: 0.5px;
+		text-decoration: none;
+		transition: color 0.2s;
+	}
+
+	.author:hover {
 		color: rgba(255, 255, 255, 0.7);
 	}
 

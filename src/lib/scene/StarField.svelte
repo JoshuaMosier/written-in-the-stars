@@ -1267,7 +1267,8 @@
 
 		const startPos = cameraRef.position.clone();
 		const lookDir = controlsRef.target.clone().sub(startPos).normalize();
-		const endDir = new THREE.Vector3(0, 0, -1);
+		const defaultTilt = 15 * Math.PI / 180;
+		const endDir = new THREE.Vector3(0, -Math.sin(defaultTilt), -Math.cos(defaultTilt));
 		const startUp = cameraRef.up.clone();
 		const defaultUp = new THREE.Vector3(0, 1, 0);
 		const startFov = cameraRef.fov;
@@ -1275,7 +1276,7 @@
 		const startTime = performance.now();
 
 		const qStart = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), lookDir);
-		const qEnd = new THREE.Quaternion(); // identity — already pointing (0,0,-1)
+		const qEnd = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), endDir);
 		const qSlerp = new THREE.Quaternion();
 		const slerpedDir = new THREE.Vector3();
 		const origin = new THREE.Vector3(0, 0, 0.0001);
@@ -1366,7 +1367,9 @@
 			controls.rotateSpeed = -0.25 * fovScale / sizeScale;
 		}
 		updateRotateSpeed();
-		controls.target.set(0, 0, -0.001);
+		// Tilt default view 15° below the equator for a better sense of the sphere
+		const tiltRad = 15 * Math.PI / 180;
+		controls.target.set(0, -Math.sin(tiltRad) * 0.001, -Math.cos(tiltRad) * 0.001);
 		controls.minDistance = 0.0001;
 		controls.maxDistance = 0.01;
 		controls.update();
