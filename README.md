@@ -21,7 +21,7 @@ The result is rendered on an interactive 3D celestial sphere. You can orbit, zoo
 
 - Real stars from the HYG Database (Hipparcos, Yale, Gliese)
 - Interactive 3D star field with orbit controls
-- IAU constellation overlay (88 official constellations)
+- IAU constellation overlay (87 of 88 official constellations)
 - Shareable URLs — every result is encoded in the link
 - Shooting star animations and ambient sky cycling
 - Re-roll to find alternate placements

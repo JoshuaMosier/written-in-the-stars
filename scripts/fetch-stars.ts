@@ -38,9 +38,11 @@ function parseCSVLine(line: string): string[] {
 }
 
 async function main() {
-  // HYG Database v41 from GitHub (main branch)
+  // HYG Database v41 — pinned to a specific commit for reproducibility.
+  // To update: pick a new commit SHA from https://github.com/astronexus/HYG-Database/commits/main
+  const HYG_COMMIT = "c7f7f883fe678cc7680169a50ccd7dcc49b060ce";
   const url =
-    "https://raw.githubusercontent.com/astronexus/HYG-Database/main/hyg/CURRENT/hygdata_v41.csv";
+    `https://raw.githubusercontent.com/astronexus/HYG-Database/${HYG_COMMIT}/hyg/CURRENT/hygdata_v41.csv`;
 
   console.log("Fetching HYG v41 database...");
   const res = await fetch(url, { signal: AbortSignal.timeout(120000) });
@@ -56,12 +58,14 @@ async function main() {
   const headers = parseCSVLine(lines[0]);
   console.log("Columns:", headers.join(", "));
 
-  // Map column indices
+  // Validate expected columns exist (fail loudly on schema drift)
+  const EXPECTED_COLUMNS = ["id", "hr", "rarad", "decrad", "mag", "proper", "ci"];
   const col = (name: string) => {
     const idx = headers.indexOf(name);
-    if (idx < 0) throw new Error(`Column "${name}" not found`);
+    if (idx < 0) throw new Error(`Column "${name}" not found — HYG schema may have changed`);
     return idx;
   };
+  for (const c of EXPECTED_COLUMNS) col(c); // validate all up-front
 
   const hrIdx = col("hr");
   const raradIdx = col("rarad");

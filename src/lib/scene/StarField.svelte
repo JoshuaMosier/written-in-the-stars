@@ -34,6 +34,22 @@
 	const projectedLabelPos = new THREE.Vector3();
 	const overlayCameraDir = new THREE.Vector3();
 
+	// Shared up-axis constant for OrbitControls quaternion sync
+	const Y_UP = new THREE.Vector3(0, 1, 0);
+
+	/**
+	 * Sync OrbitControls' internal up-axis quaternion after changing camera.up.
+	 * OrbitControls caches _quat/_quatInverse at construction time from the initial
+	 * camera.up. When we animate camera.up to a new orientation, these must be
+	 * updated or the controls will fight the new up vector.
+	 *
+	 * Uses private internals — isolate here so a Three.js upgrade only breaks one spot.
+	 */
+	function syncControlsUp(controls: OrbitControls, cameraUp: THREE.Vector3) {
+		(controls as any)._quat.setFromUnitVectors(cameraUp, Y_UP);
+		(controls as any)._quatInverse.copy((controls as any)._quat).invert();
+	}
+
 	// --- Draggable constellation vertices ---
 	let currentResults: MatchResult[] = [];
 	let dragState: {
@@ -1535,7 +1551,6 @@
 		const qSlerp = new THREE.Quaternion();
 		const slerpedDir = new THREE.Vector3();
 		const origin = new THREE.Vector3(0, 0, 0.0001);
-		const Y_UP = new THREE.Vector3(0, 1, 0);
 
 		function animate() {
 			const elapsed = performance.now() - startTime;
@@ -1546,8 +1561,7 @@
 			slerpedDir.set(0, 0, -1).applyQuaternion(qSlerp);
 			controlsRef!.target.copy(cameraRef!.position).addScaledVector(slerpedDir, 0.001);
 			cameraRef!.up.lerpVectors(startUp, localNorth, ease).normalize();
-			(controlsRef as any)._quat.setFromUnitVectors(cameraRef!.up, Y_UP);
-			(controlsRef as any)._quatInverse.copy((controlsRef as any)._quat).invert();
+			syncControlsUp(controlsRef!, cameraRef!.up);
 			cameraRef!.fov = startFov + (targetFov - startFov) * ease;
 			cameraRef!.updateProjectionMatrix();
 			controlsRef!.update();
@@ -2026,8 +2040,6 @@
 		const slerpedDir = new THREE.Vector3();
 		const origin = new THREE.Vector3(0, 0, 0.0001);
 
-		const Y_UP = new THREE.Vector3(0, 1, 0);
-
 		function animate() {
 			const elapsed = performance.now() - startTime;
 			const t = Math.min(1, elapsed / duration);
@@ -2040,8 +2052,7 @@
 			cameraRef!.up.lerpVectors(startUp, localNorth, ease).normalize();
 			// OrbitControls caches the up-to-Y quaternion at construction time.
 			// Update it each frame so the new up vector is respected.
-			(controlsRef as any)._quat.setFromUnitVectors(cameraRef!.up, Y_UP);
-			(controlsRef as any)._quatInverse.copy((controlsRef as any)._quat).invert();
+			syncControlsUp(controlsRef!, cameraRef!.up);
 			cameraRef!.fov = startFov + (targetFov - startFov) * ease;
 			cameraRef!.updateProjectionMatrix();
 			controlsRef!.update();
@@ -2093,8 +2104,6 @@
 		const slerpedDir = new THREE.Vector3();
 		const origin = new THREE.Vector3(0, 0, 0.0001);
 
-		const Y_UP = new THREE.Vector3(0, 1, 0);
-
 		function animate() {
 			const elapsed = performance.now() - startTime;
 			const t = Math.min(1, elapsed / duration);
@@ -2104,8 +2113,7 @@
 			slerpedDir.set(0, 0, -1).applyQuaternion(qSlerp);
 			controlsRef!.target.copy(cameraRef!.position).addScaledVector(slerpedDir, 0.001);
 			cameraRef!.up.lerpVectors(startUp, defaultUp, ease).normalize();
-			(controlsRef as any)._quat.setFromUnitVectors(cameraRef!.up, Y_UP);
-			(controlsRef as any)._quatInverse.copy((controlsRef as any)._quat).invert();
+			syncControlsUp(controlsRef!, cameraRef!.up);
 			cameraRef!.fov = startFov + (DEFAULT_FOV - startFov) * ease;
 			cameraRef!.updateProjectionMatrix();
 			controlsRef!.update();
@@ -2503,15 +2511,13 @@
 		).normalize();
 
 		const targetFov = fov ?? Math.min(60, cameraRef.fov);
-		const Y_UP = new THREE.Vector3(0, 1, 0);
 
 		// Reduced motion: jump instantly
 		if (reducedMotion) {
 			cameraRef.position.set(0, 0, 0.0001);
 			controlsRef.target.copy(cameraRef.position).addScaledVector(targetDir, 0.001);
 			cameraRef.up.copy(localNorth);
-			(controlsRef as any)._quat.setFromUnitVectors(cameraRef.up, Y_UP);
-			(controlsRef as any)._quatInverse.copy((controlsRef as any)._quat).invert();
+			syncControlsUp(controlsRef, cameraRef.up);
 			cameraRef.fov = targetFov;
 			cameraRef.updateProjectionMatrix();
 			controlsRef.update();
@@ -2541,8 +2547,7 @@
 			slerpedDir.set(0, 0, -1).applyQuaternion(qSlerp);
 			controlsRef!.target.copy(cameraRef!.position).addScaledVector(slerpedDir, 0.001);
 			cameraRef!.up.lerpVectors(startUp, localNorth, ease).normalize();
-			(controlsRef as any)._quat.setFromUnitVectors(cameraRef!.up, Y_UP);
-			(controlsRef as any)._quatInverse.copy((controlsRef as any)._quat).invert();
+			syncControlsUp(controlsRef!, cameraRef!.up);
 			cameraRef!.fov = startFov + (targetFov - startFov) * ease;
 			cameraRef!.updateProjectionMatrix();
 			controlsRef!.update();
