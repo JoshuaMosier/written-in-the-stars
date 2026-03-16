@@ -341,10 +341,10 @@ function ptDist(a: Pt, b: Pt): number {
  * Simplify a polyline using Ramer-Douglas-Peucker algorithm.
  * Returns indices of kept points.
  */
-function rdpSimplify(points: Pt[], epsilon: number): number[] {
+function rdpSimplify(points: Pt[], epsilon: number, protectedIndices?: Set<number>): number[] {
   if (points.length <= 2) return points.map((_, i) => i);
 
-  // Find point farthest from line between first and last
+  // Find point farthest from line between first and last (or any protected index)
   let maxDist = 0;
   let maxIdx = 0;
   const first = points[0];
@@ -352,6 +352,12 @@ function rdpSimplify(points: Pt[], epsilon: number): number[] {
   const lineLen = ptDist(first, last);
 
   for (let i = 1; i < points.length - 1; i++) {
+    // Protected points are always kept — treat them as infinitely far
+    if (protectedIndices?.has(i)) {
+      const d = epsilon + 1;
+      if (d > maxDist) { maxDist = d; maxIdx = i; }
+      continue;
+    }
     let d: number;
     if (lineLen < 1e-10) {
       d = ptDist(points[i], first);
@@ -366,12 +372,22 @@ function rdpSimplify(points: Pt[], epsilon: number): number[] {
   }
 
   if (maxDist > epsilon) {
-    const left = rdpSimplify(points.slice(0, maxIdx + 1), epsilon);
-    const right = rdpSimplify(points.slice(maxIdx), epsilon);
+    const leftProtected = protectedIndices ? new Set([...protectedIndices].filter(i => i <= maxIdx)) : undefined;
+    const left = rdpSimplify(points.slice(0, maxIdx + 1), epsilon, leftProtected);
+    const rightProtected = protectedIndices ? new Set([...protectedIndices].filter(i => i >= maxIdx).map(i => i - maxIdx)) : undefined;
+    const right = rdpSimplify(points.slice(maxIdx), epsilon, rightProtected);
     // Offset right indices and merge (avoiding duplicate at maxIdx)
     return [...left, ...right.slice(1).map(i => i + maxIdx)];
   } else {
-    return [0, points.length - 1];
+    // Even when flattening, keep protected indices
+    const kept = [0];
+    if (protectedIndices) {
+      for (let i = 1; i < points.length - 1; i++) {
+        if (protectedIndices.has(i)) kept.push(i);
+      }
+    }
+    kept.push(points.length - 1);
+    return kept;
   }
 }
 
@@ -472,10 +488,25 @@ export function textToGraph(text: string, simplifyEpsilon = 2.0): GlyphGraph {
   }
 
   // Phase 3: simplify strokes (reduce point count on curves)
+  // Protect junction points shared between strokes from being removed by RDP
   for (const letter of letterStrokes) {
-    for (const stroke of letter.strokes) {
+    for (let si = 0; si < letter.strokes.length; si++) {
+      const stroke = letter.strokes[si];
       if (stroke.points.length > 4) {
-        const kept = rdpSimplify(stroke.points, simplifyEpsilon);
+        // Find indices in this stroke that match points in other strokes
+        const protectedIndices = new Set<number>();
+        for (let pi = 1; pi < stroke.points.length - 1; pi++) {
+          const p = stroke.points[pi];
+          for (let sj = 0; sj < letter.strokes.length; sj++) {
+            if (si === sj) continue;
+            for (const q of letter.strokes[sj].points) {
+              if (Math.abs(p.x - q.x) < 0.5 && Math.abs(p.y - q.y) < 0.5) {
+                protectedIndices.add(pi);
+              }
+            }
+          }
+        }
+        const kept = rdpSimplify(stroke.points, simplifyEpsilon, protectedIndices.size > 0 ? protectedIndices : undefined);
         stroke.points = kept.map(i => stroke.points[i]);
       }
     }
