@@ -197,6 +197,350 @@
 		scheduleMeteor();
 	}
 
+	// --- Comets with shuttlecock-shaped ice trails ---
+	// Single triangle-strip mesh per comet — no separate head spheres.
+	// The head is just the brightest, narrowest point of the strip.
+	interface CometDustParticle {
+		pos: THREE.Vector3;       // current position on sphere
+		drift: THREE.Vector3;     // velocity (tangent to sphere)
+		life: number;             // remaining life (seconds)
+		maxLife: number;          // initial life
+	}
+
+	interface Comet {
+		startPos: THREE.Vector3;   // initial position on unit sphere
+		axis: THREE.Vector3;       // great-circle rotation axis
+		speed: number;
+		lifetime: number;
+		elapsed: number;
+		brightness: number;
+		trailLength: number;
+		color: THREE.Color;
+		mesh: THREE.Mesh;
+		size: number;
+		perpAxis: THREE.Vector3;
+		// Dust particle system
+		dustPoints: THREE.Points;
+		dustParticles: CometDustParticle[];
+		dustSpawnTimer: number;
+	}
+
+	const MAX_COMETS = 4;
+	const COMET_SPINE = 48;
+	const MAX_DUST_PER_COMET = 40;
+	let activeComets: Comet[] = [];
+	let cometTimerId: ReturnType<typeof setTimeout> | null = null;
+	let cometsEnabled = true;
+	let cometGroup: THREE.Group | null = null;
+
+	const COMET_COLORS = [
+		new THREE.Color(0.5, 0.7, 1.0),    // bright blue
+		new THREE.Color(0.3, 0.9, 1.0),    // vivid cyan
+		new THREE.Color(0.9, 0.3, 1.0),    // magenta-violet
+		new THREE.Color(0.6, 0.4, 1.0),    // blue-purple
+		new THREE.Color(0.2, 1.0, 0.5),    // vivid emerald
+		new THREE.Color(0.3, 1.0, 0.9),    // bright teal
+		new THREE.Color(1.0, 0.3, 0.8),    // hot pink
+	];
+
+	function spawnComet() {
+		if (!cometsEnabled || !sceneRef || !cameraRef || activeComets.length >= MAX_COMETS) {
+			scheduleComet();
+			return;
+		}
+
+		const camForward = new THREE.Vector3(0, 0, -1).applyQuaternion(cameraRef.quaternion).normalize();
+
+		let startPos: THREE.Vector3;
+		let attempts = 0;
+		do {
+			startPos = new THREE.Vector3(
+				Math.random() * 2 - 1,
+				Math.random() * 2 - 1,
+				Math.random() * 2 - 1
+			).normalize();
+			attempts++;
+		} while (startPos.dot(camForward) < 0.1 && attempts < 20);
+
+		if (startPos.dot(camForward) < 0.1) {
+			scheduleComet();
+			return;
+		}
+
+		const randomDir = new THREE.Vector3(
+			Math.random() * 2 - 1,
+			Math.random() * 2 - 1,
+			Math.random() * 2 - 1
+		).normalize();
+		const tangent = randomDir.sub(startPos.clone().multiplyScalar(randomDir.dot(startPos))).normalize();
+		const axis = new THREE.Vector3().crossVectors(startPos, tangent).normalize();
+
+		// perpAxis must be perpendicular to the travel direction AND lie on the sphere.
+		// tangent is our travel direction on the sphere; startPos is the radial.
+		// So perpAxis = tangent × startPos gives us the lateral spread direction.
+		const perpAxis = new THREE.Vector3().crossVectors(tangent, startPos).normalize();
+
+		const color = COMET_COLORS[Math.floor(Math.random() * COMET_COLORS.length)];
+		const brightness = 0.5 + Math.random() * 0.4;
+		const speed = 0.02 + Math.random() * 0.06;
+		const lifetime = 5 + Math.random() * 5;
+		const trailLength = 0.03 + Math.random() * 0.05;
+		const size = 0.6 + Math.random() * 1.2;
+
+		// Build triangle strip geometry
+		const vertCount = COMET_SPINE * 2;
+		const positions = new Float32Array(vertCount * 3);
+		const colors = new Float32Array(vertCount * 4);
+		const indexCount = (COMET_SPINE - 1) * 6;
+		const indices = new Uint16Array(indexCount);
+		for (let i = 0; i < COMET_SPINE - 1; i++) {
+			const base = i * 6;
+			const v = i * 2;
+			indices[base]     = v;
+			indices[base + 1] = v + 1;
+			indices[base + 2] = v + 2;
+			indices[base + 3] = v + 1;
+			indices[base + 4] = v + 3;
+			indices[base + 5] = v + 2;
+		}
+
+		const geom = new THREE.BufferGeometry();
+		geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+		geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 4));
+		geom.setIndex(new THREE.BufferAttribute(indices, 1));
+
+		const mat = new THREE.MeshBasicMaterial({
+			vertexColors: true,
+			transparent: true,
+			depthTest: false,
+			blending: THREE.AdditiveBlending,
+			side: THREE.DoubleSide,
+		});
+		const mesh = new THREE.Mesh(geom, mat);
+		mesh.frustumCulled = false;
+		mesh.renderOrder = 3;
+		cometGroup!.add(mesh);
+
+		// Dust particle system — scattered particles trailing behind the comet
+		const dustPositions = new Float32Array(MAX_DUST_PER_COMET * 3);
+		const dustColors = new Float32Array(MAX_DUST_PER_COMET * 4);
+		const dustGeom = new THREE.BufferGeometry();
+		dustGeom.setAttribute('position', new THREE.Float32BufferAttribute(dustPositions, 3));
+		dustGeom.setAttribute('color', new THREE.Float32BufferAttribute(dustColors, 4));
+		const dustMat = new THREE.PointsMaterial({
+			size: 1.5,
+			sizeAttenuation: false,
+			vertexColors: true,
+			transparent: true,
+			depthTest: false,
+			blending: THREE.AdditiveBlending,
+		});
+		const dustPoints = new THREE.Points(dustGeom, dustMat);
+		dustPoints.frustumCulled = false;
+		dustPoints.renderOrder = 2;
+		cometGroup!.add(dustPoints);
+
+		activeComets.push({
+			startPos: startPos.clone(),
+			axis, speed, lifetime, elapsed: 0,
+			brightness, trailLength, color,
+			mesh, size, perpAxis,
+			dustPoints, dustParticles: [], dustSpawnTimer: 0,
+		});
+		scheduleComet();
+	}
+
+	function scheduleComet() {
+		if (!cometsEnabled) return;
+		const delay = 2000 + Math.random() * 4000;
+		cometTimerId = setTimeout(spawnComet, delay);
+	}
+
+	const _cometPt = new THREE.Vector3();
+	const _cometPp = new THREE.Vector3();
+
+	function updateComets(dt: number) {
+		for (let i = activeComets.length - 1; i >= 0; i--) {
+			const c = activeComets[i];
+			c.elapsed += dt;
+
+			if (c.elapsed >= c.lifetime) {
+				cometGroup?.remove(c.mesh);
+				c.mesh.geometry.dispose();
+				(c.mesh.material as THREE.Material).dispose();
+				cometGroup?.remove(c.dustPoints);
+				c.dustPoints.geometry.dispose();
+				(c.dustPoints.material as THREE.Material).dispose();
+				activeComets.splice(i, 1);
+				continue;
+			}
+
+			const progress = c.elapsed / c.lifetime;
+			const headAngle = c.elapsed * c.speed;
+
+			// Fade in over first 8%, fade out over last 15%
+			const fadeMult = progress < 0.08
+				? progress / 0.08
+				: progress > 0.85
+					? 1.0 - (progress - 0.85) / 0.15
+					: 1.0;
+
+			const posAttr = c.mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+			const colAttr = c.mesh.geometry.getAttribute('color') as THREE.BufferAttribute;
+
+			// Narrow tail width — more like a line than a ribbon
+			const maxHalfWidth = 0.003 * c.size;
+
+			for (let p = 0; p < COMET_SPINE; p++) {
+				// t: 0 = tail tip, 1 = head
+				const t = p / (COMET_SPINE - 1);
+				const angle = headAngle - c.trailLength * (1 - t);
+
+				// Spine point on the great circle
+				_cometPt.copy(c.startPos).applyAxisAngle(c.axis, angle).multiplyScalar(0.997);
+
+				// Width: narrow throughout, slightly wider near middle, pinched at both ends
+				const widthT = 1.0 - t; // 0 at head, 1 at tail
+				const taper = Math.sin(t * Math.PI); // 0 at both ends, 1 in middle
+				const headPinch = Math.pow(1.0 - t, 0.3); // stays wide, narrows at head
+				const halfWidth = maxHalfWidth * taper * headPinch;
+
+				// Perpendicular offset (rotate perpAxis along the great circle)
+				_cometPp.copy(c.perpAxis).applyAxisAngle(c.axis, angle);
+
+				const li = p * 2;
+				posAttr.setXYZ(li,
+					_cometPt.x + _cometPp.x * halfWidth,
+					_cometPt.y + _cometPp.y * halfWidth,
+					_cometPt.z + _cometPp.z * halfWidth
+				);
+				posAttr.setXYZ(li + 1,
+					_cometPt.x - _cometPp.x * halfWidth,
+					_cometPt.y - _cometPp.y * halfWidth,
+					_cometPt.z - _cometPp.z * halfWidth
+				);
+
+				// Nucleus: very bright tight white point at head
+				const nucleusGlow = Math.pow(t, 8.0);    // very concentrated at head tip
+				// Coma: softer glow just behind nucleus
+				const comaGlow = Math.pow(t, 3.0) * 0.4;
+				// Ion tail: colored, transparent, fading toward tip
+				const tipCutoff = Math.pow(Math.min(1, p / 3), 2.0);
+				const tailAlpha = Math.pow(t, 0.8) * tipCutoff * 0.25;
+
+				const fm = fadeMult * c.brightness;
+
+				// Nucleus is white, coma is tinted, tail is saturated color
+				const nr = nucleusGlow * fm * 0.8;  // white nucleus
+				const tr = c.color.r * tailAlpha * fm;  // colored tail
+				const comr = (c.color.r * 0.5 + 0.5) * comaGlow * fm;  // tinted coma
+
+				const ng = nucleusGlow * fm * 0.8;
+				const tg = c.color.g * tailAlpha * fm;
+				const comg = (c.color.g * 0.5 + 0.5) * comaGlow * fm;
+
+				const nb = nucleusGlow * fm * 0.8;
+				const tb = c.color.b * tailAlpha * fm;
+				const comb = (c.color.b * 0.5 + 0.5) * comaGlow * fm;
+
+				const cr = nr + comr + tr;
+				const cg = ng + comg + tg;
+				const cb = nb + comb + tb;
+				const totalAlpha = (nucleusGlow * 0.9 + comaGlow + tailAlpha) * fm;
+
+				colAttr.setXYZW(li, cr, cg, cb, totalAlpha);
+				colAttr.setXYZW(li + 1, cr, cg, cb, totalAlpha);
+			}
+
+			posAttr.needsUpdate = true;
+			colAttr.needsUpdate = true;
+
+			// --- Dust particles ---
+			// Spawn new dust particles at the comet head
+			c.dustSpawnTimer += dt;
+			const spawnInterval = 0.06; // ~16 particles/sec
+			while (c.dustSpawnTimer >= spawnInterval && c.dustParticles.length < MAX_DUST_PER_COMET) {
+				c.dustSpawnTimer -= spawnInterval;
+				// Current head position
+				const headPos = c.startPos.clone().applyAxisAngle(c.axis, headAngle).normalize();
+				// Tangent at head (direction of travel)
+				const headTangent = new THREE.Vector3().crossVectors(c.axis, headPos).normalize();
+				// Perpendicular on sphere
+				const headPerp = new THREE.Vector3().crossVectors(headTangent, headPos).normalize();
+				// Drift: opposite travel direction + random lateral spread
+				const driftSpeed = 0.003 + Math.random() * 0.005;
+				const lateralSpread = (Math.random() - 0.5) * 0.006;
+				const drift = headTangent.multiplyScalar(-driftSpeed).add(headPerp.multiplyScalar(lateralSpread));
+				const life = 1.5 + Math.random() * 2.5;
+				c.dustParticles.push({
+					pos: headPos.multiplyScalar(0.996),
+					drift,
+					life,
+					maxLife: life,
+				});
+			}
+
+			// Update dust particles
+			const dustPosAttr = c.dustPoints.geometry.getAttribute('position') as THREE.BufferAttribute;
+			const dustColAttr = c.dustPoints.geometry.getAttribute('color') as THREE.BufferAttribute;
+
+			for (let d = c.dustParticles.length - 1; d >= 0; d--) {
+				const dp = c.dustParticles[d];
+				dp.life -= dt;
+				if (dp.life <= 0) {
+					c.dustParticles.splice(d, 1);
+					continue;
+				}
+				// Move particle and re-project onto sphere surface
+				dp.pos.add(_cometPt.copy(dp.drift).multiplyScalar(dt));
+				dp.pos.normalize().multiplyScalar(0.996);
+			}
+
+			// Write dust particle positions and colors into buffers
+			for (let d = 0; d < MAX_DUST_PER_COMET; d++) {
+				if (d < c.dustParticles.length) {
+					const dp = c.dustParticles[d];
+					const alpha = (dp.life / dp.maxLife) * 0.3 * fadeMult * c.brightness;
+					dustPosAttr.setXYZ(d, dp.pos.x, dp.pos.y, dp.pos.z);
+					dustColAttr.setXYZW(d,
+						c.color.r * 0.6 + 0.4,  // slightly pale tint
+						c.color.g * 0.6 + 0.4,
+						c.color.b * 0.6 + 0.4,
+						alpha
+					);
+				} else {
+					// Hide unused particles
+					dustPosAttr.setXYZ(d, 0, 0, 0);
+					dustColAttr.setXYZW(d, 0, 0, 0, 0);
+				}
+			}
+			dustPosAttr.needsUpdate = true;
+			dustColAttr.needsUpdate = true;
+		}
+	}
+
+	function stopComets() {
+		cometsEnabled = false;
+		if (cometTimerId !== null) {
+			clearTimeout(cometTimerId);
+			cometTimerId = null;
+		}
+		for (const c of activeComets) {
+			cometGroup?.remove(c.mesh);
+			c.mesh.geometry.dispose();
+			(c.mesh.material as THREE.Material).dispose();
+			cometGroup?.remove(c.dustPoints);
+			c.dustPoints.geometry.dispose();
+			(c.dustPoints.material as THREE.Material).dispose();
+		}
+		activeComets = [];
+	}
+
+	function resumeComets() {
+		cometsEnabled = true;
+		scheduleComet();
+	}
+
 	// Ambient constellation cycling
 	interface AmbientConstellation {
 		name: string;
@@ -525,8 +869,9 @@
 		// Stop ambient constellations when showing user's result
 		if (!ambientPaused) stopAmbientCycle();
 
-		// Pause meteors during constellation display
+		// Pause meteors and comets during constellation display
 		if (meteorsEnabled) stopMeteors();
+		if (cometsEnabled) stopComets();
 
 		// Dim background stars
 		if (uniformsRef) uniformsRef.uDim.value = 0.55;
@@ -1373,6 +1718,7 @@
 		// Only resume ambient if IAU overlay is not active
 		if (!iauOverlayActive && resolvedConstellations.length > 0) resumeAmbientCycle();
 		if (!meteorsEnabled) resumeMeteors();
+		if (!cometsEnabled) resumeComets();
 
 		const startPos = cameraRef.position.clone();
 		const lookDir = controlsRef.target.clone().sub(startPos).normalize();
@@ -1585,6 +1931,12 @@
 		scene.add(mGroup);
 		scheduleMeteor();
 
+		// --- Comet group ---
+		const cGroup = new THREE.Group();
+		cometGroup = cGroup;
+		scene.add(cGroup);
+		scheduleComet();
+
 		// --- Hover-to-show star label ---
 		const starInfos: { label: string; pos: THREE.Vector3; idx: number }[] = [];
 		for (let i = 0; i < stars.length; i++) {
@@ -1674,8 +2026,9 @@
 			// Stars grow as you zoom in (lower FOV)
 			uniforms.uFovScale.value = DEFAULT_FOV / camera.fov;
 			debugFov = camera.fov;
-			// Update shooting stars
+			// Update shooting stars and comets
 			updateMeteors(dt);
+			updateComets(dt);
 			controls.update();
 			updateOverlayLabels(performance.now());
 			renderer.clear();
@@ -1709,11 +2062,13 @@
 			cancelAnimationFrame(animId);
 			stopAmbientCycle();
 			stopMeteors();
+			stopComets();
 		};
 		const onContextRestored = () => {
 			render();
 			startAmbientCycle();
 			scheduleMeteor();
+			scheduleComet();
 		};
 		renderer.domElement.addEventListener('webglcontextlost', onContextLost);
 		renderer.domElement.addEventListener('webglcontextrestored', onContextRestored);
@@ -1731,6 +2086,7 @@
 			}
 			iauLabelData = [];
 			stopMeteors();
+			stopComets();
 			window.removeEventListener('resize', onResize);
 			renderer.domElement.removeEventListener('wheel', onWheel);
 			renderer.domElement.removeEventListener('pointermove', onMouseMove);
