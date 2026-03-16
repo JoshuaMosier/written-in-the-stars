@@ -19,6 +19,7 @@
 
 	let inputText = $state('');
 	let isMatching = $state(false);
+	let isRerolling = $state(false);
 	let showInput = $state(true);
 	let starField: StarField;
 	let constellations: ConstellationEntry[] = $state([]);
@@ -157,7 +158,11 @@
 	worker.onmessage = (e: MessageEvent) => {
 		const { type, payload } = e.data;
 		if (type === 'result') {
-			showResult(pendingText, payload as MatchResult);
+			if (isRerolling) {
+				handleRerollResult(pendingText, payload as MatchResult);
+			} else {
+				showResult(pendingText, payload as MatchResult);
+			}
 		}
 	};
 
@@ -183,6 +188,31 @@
 		worker.postMessage({ type: 'match', payload: { text, usedStarIndices } });
 	}
 
+	function handleRerollResult(text: string, result: MatchResult) {
+		const entry = makeEntry(text, result);
+		constellations = [...constellations.slice(0, -1), entry];
+		isRerolling = false;
+		isMatching = false;
+
+		history.replaceState(null, '', '#' + encodeAllToHash(constellations));
+
+		starField?.clearLastConstellation();
+		starField?.animateToMatch(result);
+	}
+
+	function handleReroll() {
+		if (constellations.length === 0) return;
+
+		const lastEntry = constellations[constellations.length - 1];
+		isRerolling = true;
+		isMatching = true;
+		pendingText = lastEntry.text;
+
+		// Blacklist stars from ALL constellations (including the one being re-rolled)
+		const usedStarIndices = getUsedStarIndices();
+		worker.postMessage({ type: 'match', payload: { text: lastEntry.text, usedStarIndices } });
+	}
+
 	function handleAddAnother() {
 		showInput = true;
 		inputText = '';
@@ -198,6 +228,12 @@
 	}
 
 	let copied = $state(false);
+	let iauOverlay = $state(false);
+
+	function handleToggleIAU() {
+		iauOverlay = !iauOverlay;
+		starField?.toggleIAUOverlay(iauOverlay);
+	}
 
 	async function handleShare() {
 		try {
@@ -231,6 +267,25 @@
 <div class="app">
 	<StarField {stars} bind:this={starField} onReady={handleStarFieldReady} />
 
+	<button
+		class="iau-toggle"
+		class:active={iauOverlay}
+		onclick={handleToggleIAU}
+		title="Toggle IAU constellations"
+	>
+		<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5">
+			<circle cx="5" cy="5" r="1.5" fill="currentColor" stroke="none"/>
+			<circle cx="19" cy="4" r="1.5" fill="currentColor" stroke="none"/>
+			<circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+			<circle cx="4" cy="19" r="1.5" fill="currentColor" stroke="none"/>
+			<circle cx="20" cy="18" r="1.5" fill="currentColor" stroke="none"/>
+			<line x1="5" y1="5" x2="12" y2="12" />
+			<line x1="19" y1="4" x2="12" y2="12" />
+			<line x1="12" y1="12" x2="4" y2="19" />
+			<line x1="12" y1="12" x2="20" y2="18" />
+		</svg>
+	</button>
+
 	{#if showInput}
 		<div class="input-overlay" class:matching={isMatching}>
 			<input
@@ -262,6 +317,9 @@
 			{/each}
 			{#if !showInput}
 				<div class="result-actions">
+					<button class="reset-btn" onclick={handleReroll} disabled={isRerolling}>
+						{isRerolling ? 'Re-rolling...' : 'Re-roll'}
+					</button>
 					<button class="reset-btn" onclick={handleShare}>
 						{copied ? 'Copied!' : 'Share link'}
 					</button>
@@ -412,8 +470,43 @@
 		transition: all 0.2s;
 	}
 
-	.reset-btn:hover {
+	.reset-btn:hover:not(:disabled) {
 		border-color: rgba(255, 215, 0, 0.3);
 		color: rgba(255, 215, 0, 0.7);
+	}
+
+	.reset-btn:disabled {
+		opacity: 0.4;
+		cursor: default;
+	}
+
+	.iau-toggle {
+		position: absolute;
+		top: 16px;
+		right: 16px;
+		z-index: 10;
+		background: rgba(255, 255, 255, 0.06);
+		border: 1px solid rgba(255, 255, 255, 0.12);
+		color: rgba(255, 255, 255, 0.4);
+		border-radius: 8px;
+		padding: 8px;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: all 0.2s;
+		backdrop-filter: blur(4px);
+	}
+
+	.iau-toggle:hover {
+		background: rgba(255, 255, 255, 0.1);
+		color: rgba(255, 255, 255, 0.7);
+		border-color: rgba(255, 255, 255, 0.25);
+	}
+
+	.iau-toggle.active {
+		background: rgba(170, 200, 255, 0.12);
+		border-color: rgba(170, 200, 255, 0.3);
+		color: rgba(170, 200, 255, 0.8);
 	}
 </style>

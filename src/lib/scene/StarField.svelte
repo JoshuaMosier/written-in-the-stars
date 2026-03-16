@@ -22,6 +22,176 @@
 	let drawAnimationIds: number[] = [];
 	let starPointsRef: THREE.Points | null = null;
 
+	// --- Shooting stars (meteors) ---
+	interface Meteor {
+		head: THREE.Vector3;       // current head position on unit sphere
+		axis: THREE.Vector3;       // rotation axis (cross product of start pos and direction)
+		speed: number;             // radians per second
+		lifetime: number;          // total lifetime in seconds
+		elapsed: number;           // time elapsed
+		brightness: number;        // 0-1 peak brightness
+		trailLength: number;       // angular trail length in radians
+		mesh: THREE.Line;
+	}
+
+	const MAX_METEORS = 3;
+	const METEOR_TRAIL_POINTS = 20;
+	let activeMeteors: Meteor[] = [];
+	let meteorTimerId: ReturnType<typeof setTimeout> | null = null;
+	let meteorsEnabled = true;
+	let meteorGroup: THREE.Group | null = null;
+
+	function spawnMeteor() {
+		if (!meteorsEnabled || !sceneRef || !cameraRef || activeMeteors.length >= MAX_METEORS) {
+			scheduleMeteor();
+			return;
+		}
+
+		// Camera forward direction
+		const camForward = new THREE.Vector3(0, 0, -1).applyQuaternion(cameraRef.quaternion).normalize();
+
+		// Random point in visible hemisphere (dot with camera forward > 0.1)
+		let startPos: THREE.Vector3;
+		let attempts = 0;
+		do {
+			startPos = new THREE.Vector3(
+				Math.random() * 2 - 1,
+				Math.random() * 2 - 1,
+				Math.random() * 2 - 1
+			).normalize();
+			attempts++;
+		} while (startPos.dot(camForward) < 0.1 && attempts < 20);
+
+		if (startPos.dot(camForward) < 0.1) {
+			scheduleMeteor();
+			return;
+		}
+
+		// Random tangent direction on the sphere surface
+		const randomDir = new THREE.Vector3(
+			Math.random() * 2 - 1,
+			Math.random() * 2 - 1,
+			Math.random() * 2 - 1
+		).normalize();
+		// Project onto tangent plane and normalize
+		const tangent = randomDir.sub(startPos.clone().multiplyScalar(randomDir.dot(startPos))).normalize();
+
+		// Rotation axis: cross product of start position and tangent
+		const axis = new THREE.Vector3().crossVectors(startPos, tangent).normalize();
+
+		// Meteor properties — most are faint, occasional bright ones
+		const isBright = Math.random() < 0.2;
+		const brightness = isBright ? 0.6 + Math.random() * 0.4 : 0.15 + Math.random() * 0.25;
+		const speed = (0.8 + Math.random() * 1.5); // radians per second
+		const lifetime = 0.3 + Math.random() * 0.5; // 0.3-0.8 seconds
+		const trailLength = 0.03 + Math.random() * 0.04; // angular trail length
+
+		// Create trail geometry with vertex colors for fading
+		const positions = new Float32Array(METEOR_TRAIL_POINTS * 3);
+		const colors = new Float32Array(METEOR_TRAIL_POINTS * 4);
+
+		const geom = new THREE.BufferGeometry();
+		geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+		geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 4));
+
+		const mat = new THREE.LineBasicMaterial({
+			vertexColors: true,
+			transparent: true,
+			depthTest: false,
+			blending: THREE.AdditiveBlending,
+		});
+
+		const line = new THREE.Line(geom, mat);
+		line.renderOrder = 3;
+		meteorGroup!.add(line);
+
+		const meteor: Meteor = {
+			head: startPos.clone(),
+			axis,
+			speed,
+			lifetime,
+			elapsed: 0,
+			brightness,
+			trailLength,
+			mesh: line,
+		};
+
+		activeMeteors.push(meteor);
+		scheduleMeteor();
+	}
+
+	function scheduleMeteor() {
+		if (!meteorsEnabled) return;
+		const delay = 5000 + Math.random() * 10000; // 5-15 seconds
+		meteorTimerId = setTimeout(spawnMeteor, delay);
+	}
+
+	function updateMeteors(dt: number) {
+		for (let i = activeMeteors.length - 1; i >= 0; i--) {
+			const m = activeMeteors[i];
+			m.elapsed += dt;
+
+			if (m.elapsed >= m.lifetime) {
+				// Remove expired meteor
+				meteorGroup?.remove(m.mesh);
+				m.mesh.geometry.dispose();
+				(m.mesh.material as THREE.Material).dispose();
+				activeMeteors.splice(i, 1);
+				continue;
+			}
+
+			const progress = m.elapsed / m.lifetime;
+			const headAngle = m.elapsed * m.speed;
+
+			// Fade: ramp up quickly, then fade out
+			const fadeMult = progress < 0.15
+				? progress / 0.15
+				: 1.0 - Math.pow((progress - 0.15) / 0.85, 0.6);
+
+			const posAttr = m.mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+			const colAttr = m.mesh.geometry.getAttribute('color') as THREE.BufferAttribute;
+
+			for (let p = 0; p < METEOR_TRAIL_POINTS; p++) {
+				const t = p / (METEOR_TRAIL_POINTS - 1); // 0 = tail, 1 = head
+				const angle = headAngle - m.trailLength * (1 - t);
+
+				// Rotate start position around axis by angle (great circle arc)
+				const point = m.head.clone().applyAxisAngle(m.axis, angle);
+
+				posAttr.setXYZ(p, point.x * 0.998, point.y * 0.998, point.z * 0.998);
+
+				// Color: blue-white tint, fading along trail
+				const trailFade = Math.pow(t, 2.0); // quadratic fade from tail to head
+				const alpha = trailFade * fadeMult * m.brightness;
+				// Slight blue-white: (0.85, 0.9, 1.0)
+				colAttr.setXYZW(p, 0.85 * alpha, 0.9 * alpha, 1.0 * alpha, alpha);
+			}
+
+			posAttr.needsUpdate = true;
+			colAttr.needsUpdate = true;
+		}
+	}
+
+	function stopMeteors() {
+		meteorsEnabled = false;
+		if (meteorTimerId !== null) {
+			clearTimeout(meteorTimerId);
+			meteorTimerId = null;
+		}
+		// Remove active meteors
+		for (const m of activeMeteors) {
+			meteorGroup?.remove(m.mesh);
+			m.mesh.geometry.dispose();
+			(m.mesh.material as THREE.Material).dispose();
+		}
+		activeMeteors = [];
+	}
+
+	function resumeMeteors() {
+		meteorsEnabled = true;
+		scheduleMeteor();
+	}
+
 	// Ambient constellation cycling
 	interface AmbientConstellation {
 		name: string;
@@ -42,6 +212,17 @@
 	let uniformsRef: { uDim: THREE.Uniform<number>; uTime: THREE.Uniform<number>; uFovScale: THREE.Uniform<number>; uHoveredIndex: THREE.Uniform<number> } | null = null;
 	const DEFAULT_FOV = 60;
 	let rendererSize = new THREE.Vector2(1, 1);
+
+	// Touch support state
+	let isTouchDevice = false;
+	let pinchStartDist = 0;
+	let pinchStartFov = DEFAULT_FOV;
+
+	// IAU overlay state
+	let iauOverlayActive = false;
+	let iauOverlayGroup: THREE.Group | null = null;
+	let iauOverlayLabels: HTMLDivElement[] = [];
+	let iauLabelData: { label: HTMLDivElement; centroid: THREE.Vector3 }[] = [];
 
 	// Convert B-V color index to RGB using Ballesteros' formula (2012)
 	// Maps stellar temperature to perceptually accurate color
@@ -242,8 +423,20 @@
 		// Stop ambient constellations when showing user's result
 		if (!ambientPaused) stopAmbientCycle();
 
+		// Pause meteors during constellation display
+		if (meteorsEnabled) stopMeteors();
+
 		// Dim background stars
 		if (uniformsRef) uniformsRef.uDim.value = 0.55;
+
+		// Dim IAU overlay further when showing user constellation
+		if (iauOverlayActive && iauOverlayGroup) {
+			iauOverlayGroup.traverse((child) => {
+				if ((child as any).material && (child as any).material.opacity !== undefined) {
+					(child as any).material.opacity = 0.08;
+				}
+			});
+		}
 	}
 
 	function drawConstellationAnimated(result: MatchResult) {
@@ -757,6 +950,118 @@
 		ac.animId = requestAnimationFrame(animate);
 	}
 
+	export function clearLastConstellation() {
+		if (constellationGroups.length > 0) {
+			const last = constellationGroups.pop()!;
+			if (last.parent) sceneRef?.remove(last);
+		}
+		// Cancel the most recent draw animation if any
+		if (drawAnimationIds.length > 0) {
+			cancelAnimationFrame(drawAnimationIds.pop()!);
+		}
+	}
+
+	export function toggleIAUOverlay(show: boolean) {
+		if (show === iauOverlayActive) return;
+		iauOverlayActive = show;
+
+		if (show) {
+			if (!sceneRef || !cameraRef) return;
+
+			// Ensure constellations are resolved
+			if (resolvedConstellations.length === 0) resolveConstellations();
+
+			// Stop ambient cycling
+			stopAmbientCycle();
+
+			// Build a single batched LineSegments geometry for all 88 constellations
+			const group = new THREE.Group();
+			const allPositions: number[] = [];
+
+			for (const rc of resolvedConstellations) {
+				for (const { posA, posB } of rc.edges) {
+					allPositions.push(posA.x, posA.y, posA.z, posB.x, posB.y, posB.z);
+				}
+			}
+
+			if (allPositions.length > 0) {
+				const segGeom = new LineSegmentsGeometry();
+				segGeom.setPositions(allPositions);
+
+				const lineMat = new LineMaterial({
+					color: 0xaaccff,
+					linewidth: 1.2,
+					transparent: true,
+					opacity: 0.18,
+					depthTest: false,
+					blending: THREE.AdditiveBlending,
+				});
+				lineMat.resolution.copy(rendererSize);
+				const lines = new LineSegments2(segGeom, lineMat);
+				lines.renderOrder = 1;
+				group.add(lines);
+			}
+
+			sceneRef.add(group);
+			iauOverlayGroup = group;
+
+			// Create HTML labels for each constellation
+			iauLabelData = [];
+			iauOverlayLabels = [];
+			for (const rc of resolvedConstellations) {
+				const label = document.createElement('div');
+				label.className = 'iau-overlay-label';
+				label.textContent = rc.name;
+				label.style.opacity = '0';
+				labelContainer.appendChild(label);
+				iauOverlayLabels.push(label);
+				iauLabelData.push({ label, centroid: rc.centroid });
+			}
+		} else {
+			// Remove overlay
+			if (iauOverlayGroup && sceneRef) {
+				sceneRef.remove(iauOverlayGroup);
+				iauOverlayGroup = null;
+			}
+			for (const label of iauOverlayLabels) {
+				label.remove();
+			}
+			iauOverlayLabels = [];
+			iauLabelData = [];
+
+			// Resume ambient cycling if no user constellation is active
+			if (constellationGroups.length === 0) {
+				resumeAmbientCycle();
+			}
+		}
+	}
+
+	function updateIAUOverlayLabels() {
+		if (!iauOverlayActive || !cameraRef || !container) return;
+
+		const cameraDir = new THREE.Vector3();
+		cameraRef.getWorldDirection(cameraDir);
+		const rect = container.getBoundingClientRect();
+
+		for (const { label, centroid } of iauLabelData) {
+			const dot = centroid.dot(cameraDir);
+			if (dot > 0.3) {
+				const projected = centroid.clone().project(cameraRef);
+				if (projected.z < 1) {
+					const sx = (projected.x * 0.5 + 0.5) * rect.width;
+					const sy = (-projected.y * 0.5 + 0.5) * rect.height;
+					label.style.left = `${sx}px`;
+					label.style.top = `${sy}px`;
+					label.style.opacity = '0.6';
+				} else {
+					label.style.opacity = '0';
+				}
+			} else {
+				label.style.opacity = '0';
+			}
+		}
+	}
+
 	export function animateToMatch(result: MatchResult) {
 		if (!controlsRef || !cameraRef) return;
 
@@ -853,7 +1158,18 @@
 
 		clearAllConstellations();
 		if (uniformsRef) uniformsRef.uDim.value = 1.0;
-		if (resolvedConstellations.length > 0) resumeAmbientCycle();
+		// Restore IAU overlay opacity if it was dimmed
+		if (iauOverlayActive && iauOverlayGroup) {
+			iauOverlayGroup.traverse((child) => {
+				if ((child as any).material && (child as any).material.opacity !== undefined) {
+					(child as any).material.opacity = 0.18;
+				}
+			});
+		}
+
+		// Only resume ambient if IAU overlay is not active
+		if (!iauOverlayActive && resolvedConstellations.length > 0) resumeAmbientCycle();
+		if (!meteorsEnabled) resumeMeteors();
 
 		const startPos = cameraRef.position.clone();
 		const lookDir = controlsRef.target.clone().sub(startPos).normalize();
@@ -927,6 +1243,43 @@
 		};
 		renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
 
+		// --- Pinch-to-zoom touch support ---
+		function getTouchDistance(t1: Touch, t2: Touch): number {
+			const dx = t1.clientX - t2.clientX;
+			const dy = t1.clientY - t2.clientY;
+			return Math.sqrt(dx * dx + dy * dy);
+		}
+
+		const onTouchStart = (e: TouchEvent) => {
+			isTouchDevice = true;
+			if (e.touches.length === 2) {
+				pinchStartDist = getTouchDistance(e.touches[0], e.touches[1]);
+				pinchStartFov = camera.fov;
+			}
+		};
+
+		const onTouchMove = (e: TouchEvent) => {
+			if (e.touches.length === 2) {
+				e.preventDefault();
+				const currentDist = getTouchDistance(e.touches[0], e.touches[1]);
+				const scale = pinchStartDist / currentDist;
+				camera.fov = Math.max(10, Math.min(120, pinchStartFov * scale));
+				camera.updateProjectionMatrix();
+			}
+		};
+
+		const onTouchEnd = (_e: TouchEvent) => {
+			pinchStartDist = 0;
+		};
+
+		renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: true });
+		renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+		renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: true });
+
+		// Prevent iOS Safari pinch-to-zoom on the page
+		const onGestureStart = (e: Event) => { e.preventDefault(); };
+		renderer.domElement.addEventListener('gesturestart', onGestureStart, { passive: false } as any);
+
 		// --- Build star geometry with custom attributes ---
 		const count = stars.length;
 		const positions = new Float32Array(count * 3);
@@ -977,6 +1330,12 @@
 		starPointsRef = starPoints;
 		scene.add(starPoints);
 
+		// --- Meteor (shooting star) group ---
+		const mGroup = new THREE.Group();
+		meteorGroup = mGroup;
+		scene.add(mGroup);
+		scheduleMeteor();
+
 		// --- Hover-to-show star label ---
 		const starInfos: { label: string; pos: THREE.Vector3; idx: number }[] = [];
 		for (let i = 0; i < stars.length; i++) {
@@ -992,6 +1351,9 @@
 		const projected = new THREE.Vector3();
 
 		const onMouseMove = (e: MouseEvent) => {
+			// Suppress hover tooltips on touch devices
+			if (isTouchDevice) return;
+
 			const rect = container.getBoundingClientRect();
 			const mx = e.clientX - rect.left;
 			const my = e.clientY - rect.top;
@@ -1048,10 +1410,14 @@
 		const clock = new THREE.Clock();
 		function render() {
 			animId = requestAnimationFrame(render);
+			const dt = clock.getDelta();
 			uniforms.uTime.value = clock.getElapsedTime();
 			// Stars grow as you zoom in (lower FOV)
 			uniforms.uFovScale.value = DEFAULT_FOV / camera.fov;
+			// Update shooting stars
+			updateMeteors(dt);
 			controls.update();
+			updateIAUOverlayLabels();
 			renderer.render(scene, camera);
 		}
 		render();
@@ -1072,9 +1438,14 @@
 		return () => {
 			cancelAnimationFrame(animId);
 			stopAmbientCycle();
+			stopMeteors();
 			window.removeEventListener('resize', onResize);
 			renderer.domElement.removeEventListener('wheel', onWheel);
 			renderer.domElement.removeEventListener('mousemove', onMouseMove);
+			renderer.domElement.removeEventListener('touchstart', onTouchStart);
+			renderer.domElement.removeEventListener('touchmove', onTouchMove);
+			renderer.domElement.removeEventListener('touchend', onTouchEnd);
+			renderer.domElement.removeEventListener('gesturestart', onGestureStart);
 			renderer.dispose();
 			if (renderer.domElement.parentNode) {
 				renderer.domElement.parentNode.removeChild(renderer.domElement);
@@ -1093,6 +1464,7 @@
 		inset: 0;
 		width: 100%;
 		height: 100%;
+		touch-action: none;
 	}
 
 	.ambient-labels {
@@ -1100,6 +1472,20 @@
 		inset: 0;
 		pointer-events: none;
 		z-index: 1;
+	}
+
+	:global(.iau-overlay-label) {
+		position: absolute;
+		transform: translate(-50%, -50%);
+		color: rgba(170, 200, 255, 0.7);
+		font-size: 10px;
+		font-weight: 300;
+		letter-spacing: 2px;
+		text-transform: uppercase;
+		white-space: nowrap;
+		pointer-events: none;
+		opacity: 0;
+		text-shadow: 0 0 4px rgba(0, 0, 0, 0.9), 0 0 8px rgba(0, 0, 0, 0.6);
 	}
 
 	:global(.ambient-label) {

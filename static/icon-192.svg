@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <rect width="192" height="192" fill="#000005"/>
+  <defs>
+    <radialGradient id="glow">
+      <stop offset="0%" stop-color="rgba(170,200,255,0.4)"/>
+      <stop offset="100%" stop-color="rgba(170,200,255,0)"/>
+    </radialGradient>
+  </defs>
+  <circle cx="96" cy="96" r="100.79999999999998" fill="url(#glow)"/>
+  <polygon points="96,28.80000000000001 112.29174023853805,79.70825976146195 163.2,96 112.29174023853805,112.29174023853805 96,163.2 79.70825976146195,112.29174023853805 28.80000000000001,96.00000000000001 79.70825976146195,79.70825976146195" fill="white"/>
+</svg>
