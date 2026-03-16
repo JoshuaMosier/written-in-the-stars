@@ -22,8 +22,9 @@ self.onmessage = (e: MessageEvent) => {
 		stars = payload.stars;
 		self.postMessage({ type: 'ready' });
 	} else if (type === 'match') {
+		const requestId = e.data.requestId;
 		if (!stars) {
-			self.postMessage({ type: 'error', payload: 'Worker not initialized' });
+			self.postMessage({ type: 'error', payload: 'Worker not initialized', requestId });
 			return;
 		}
 		try {
@@ -32,13 +33,13 @@ self.onmessage = (e: MessageEvent) => {
 				? new Set<number>(payload.usedStarIndices as number[])
 				: null;
 			const onProgress = (pct: number) => {
-				self.postMessage({ type: 'progress', payload: pct });
+				self.postMessage({ type: 'progress', payload: pct, requestId });
 			};
 			const result = matchStarsToAnchors(stars, graph, blacklist, onProgress);
-			self.postMessage({ type: 'result', payload: result });
+			self.postMessage({ type: 'result', payload: result, requestId });
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
-			self.postMessage({ type: 'error', payload: message });
+			self.postMessage({ type: 'error', payload: message, requestId });
 		}
 	}
 };

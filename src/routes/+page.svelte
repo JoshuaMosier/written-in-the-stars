@@ -134,6 +134,7 @@
 	let errorMessage = $state('');
 	const MATCH_TIMEOUT_MS = 30_000;
 	let matchTimeoutId: ReturnType<typeof setTimeout> | null = null;
+	let matchRequestId = 0;
 
 	function clearMatchTimeout() {
 		if (matchTimeoutId !== null) {
@@ -156,7 +157,8 @@
 	}
 
 	worker.onmessage = (e: MessageEvent) => {
-		const { type, payload } = e.data;
+		const { type, payload, requestId } = e.data;
+		if (requestId !== undefined && requestId !== matchRequestId) return;
 		if (type === 'progress') {
 			matchProgress = payload as number;
 		} else if (type === 'result') {
@@ -209,8 +211,9 @@
 		startMatchingPhrases();
 		pendingText = text;
 		const usedStarIndices = getUsedStarIndices();
+		const requestId = ++matchRequestId;
 		startMatchTimeout();
-		worker.postMessage({ type: 'match', payload: { text, usedStarIndices } });
+		worker.postMessage({ type: 'match', payload: { text, usedStarIndices }, requestId });
 	}
 
 	let rerollIndex = -1;  // which constellation is being re-rolled
@@ -257,8 +260,9 @@
 
 		// Combine all active constellation stars + accumulated re-roll history
 		const usedStarIndices = [...getUsedStarIndices(), ...rerollBlacklist];
+		const requestId = ++matchRequestId;
 		startMatchTimeout();
-		worker.postMessage({ type: 'match', payload: { text: targetEntry.text, usedStarIndices } });
+		worker.postMessage({ type: 'match', payload: { text: targetEntry.text, usedStarIndices }, requestId });
 	}
 
 	function handleFocusConstellation(index: number) {
@@ -304,8 +308,8 @@
 		// Clear hash
 		history.replaceState(null, '', window.location.pathname);
 		starField?.resetView();
-		autoRotate = true;
-		starField?.toggleAutoRotate(true);
+		autoRotate = !reducedMotion;
+		starField?.toggleAutoRotate(!reducedMotion);
 	}
 
 	// --- Undo/redo for vertex drags ---
@@ -456,9 +460,12 @@
 		}
 	}
 
-	// Global undo/redo listener
+	// Global undo/redo listener — skip when focus is in an editable element
+	// so native input undo/redo still works
 	if (typeof window !== 'undefined') {
 		window.addEventListener('keydown', (e: KeyboardEvent) => {
+			const tag = (document.activeElement as HTMLElement)?.tagName;
+			if (tag === 'INPUT' || tag === 'TEXTAREA' || (document.activeElement as HTMLElement)?.isContentEditable) return;
 			if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
 				e.preventDefault();
 				handleUndo();
