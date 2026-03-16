@@ -463,7 +463,7 @@ function resolveDuplicates(
 // Main matching pipeline
 // ---------------------------------------------------------------------------
 
-export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph, blacklist: Set<number> | null = null): MatchResult {
+export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph, blacklist: Set<number> | null = null, onProgress?: (pct: number) => void): MatchResult {
   const { nodes, edges } = graph;
 
   if (nodes.length === 0 || stars.length === 0) {
@@ -678,6 +678,8 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph, blacklist:
     }
   }
 
+  onProgress?.(0.25);
+
   // ---------------------------------------------------------------------------
   // Edge-based candidate generation (RANSAC-style)
   // For anchor edges, hypothesize each star matches one endpoint, verify the
@@ -729,6 +731,8 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph, blacklist:
       }
     }
   }
+
+  onProgress?.(0.40);
 
   // =========================================================================
   // Phase 2: Gnomonic refinement of top candidates
@@ -788,7 +792,10 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph, blacklist:
   const gnoGridCache = new Map<string, { grid: StarGrid; ra0: number; dec0: number } | null>();
   const GNO_CACHE_RES = 0.02; // ~1° grid for caching
 
-  for (const candidate of best) {
+  const bestLen = best.length;
+  for (let ci = 0; ci < bestLen; ci++) {
+    const candidate = best[ci];
+    if (ci % 10 === 0) onProgress?.(0.40 + 0.50 * (ci / bestLen));
     const ra0 = candidate.tx * 2 * Math.PI;
     const dec0 = candidate.ty * Math.PI - Math.PI / 2;
 
@@ -839,6 +846,8 @@ export function matchStarsToAnchors(stars: Star[], graph: GlyphGraph, blacklist:
 
     gen = gnoGen;
   }
+
+  onProgress?.(0.90);
 
   // =========================================================================
   // Phase 3: Final pair assignment in gnomonic space

@@ -17,9 +17,51 @@
 		result: MatchResult;
 	}
 
+	const matchingPhrases = [
+		'consulting the fates',
+		'reading the heavens',
+		'charting the firmament',
+		'seeking augury',
+		'invoking the muses',
+		'divining the cosmos',
+		'aligning the stars',
+		'interpreting the omens',
+		'petitioning the muses',
+		'querying the gods',
+		'consulting Urania',
+		'beseeching the heavens',
+		'mapping the celestial sphere',
+		'tracing the ecliptic',
+		'surveying the heavens',
+		'scanning the zodiac',
+		'stargazing',
+		'connecting the dots',
+		'tuning the spheres',
+		'waiting for a clear night',
+		'asking the oracle',
+		'casting the horoscope',
+	];
+	let matchingPhrase = $state(matchingPhrases[Math.floor(Math.random() * matchingPhrases.length)]);
+	let matchingPhraseInterval: ReturnType<typeof setInterval> | null = null;
+
+	function startMatchingPhrases() {
+		matchingPhrase = matchingPhrases[Math.floor(Math.random() * matchingPhrases.length)];
+		matchingPhraseInterval = setInterval(() => {
+			matchingPhrase = matchingPhrases[Math.floor(Math.random() * matchingPhrases.length)];
+		}, 4000);
+	}
+
+	function stopMatchingPhrases() {
+		if (matchingPhraseInterval) {
+			clearInterval(matchingPhraseInterval);
+			matchingPhraseInterval = null;
+		}
+	}
+
 	let inputText = $state('');
 	let isMatching = $state(false);
 	let isRerolling = $state(false);
+	let matchProgress = $state(0);
 	let showInput = $state(true);
 	let starField: StarField;
 	let constellations: ConstellationEntry[] = $state([]);
@@ -127,6 +169,7 @@
 		constellations = [...constellations, entry];
 
 		showInput = false;
+		stopMatchingPhrases();
 		isMatching = false;
 
 		// Update URL hash with all constellations
@@ -163,13 +206,17 @@
 
 	worker.onmessage = (e: MessageEvent) => {
 		const { type, payload } = e.data;
-		if (type === 'result') {
+		if (type === 'progress') {
+			matchProgress = payload as number;
+		} else if (type === 'result') {
+			matchProgress = 1;
 			if (isRerolling) {
 				handleRerollResult(pendingText, payload as MatchResult);
 			} else {
 				showResult(pendingText, payload as MatchResult);
 			}
 		} else if (type === 'error') {
+			if (isRerolling) showInput = false;
 			isMatching = false;
 			isRerolling = false;
 			errorMessage = 'Something went wrong matching stars. Please try again.';
@@ -178,6 +225,8 @@
 	};
 
 	worker.onerror = () => {
+		stopMatchingPhrases();
+		if (isRerolling) showInput = false;
 		isMatching = false;
 		isRerolling = false;
 		errorMessage = 'Something went wrong. Please try again.';
@@ -202,6 +251,8 @@
 
 		rerollBlacklist = [];
 		isMatching = true;
+		matchProgress = 0;
+		startMatchingPhrases();
 		pendingText = text;
 		const usedStarIndices = getUsedStarIndices();
 		worker.postMessage({ type: 'match', payload: { text, usedStarIndices } });
@@ -211,7 +262,9 @@
 		const entry = makeEntry(text, result);
 		constellations = [...constellations.slice(0, -1), entry];
 		isRerolling = false;
+		stopMatchingPhrases();
 		isMatching = false;
+		showInput = false;
 
 		history.replaceState(null, '', '#' + encodeAllToHash(constellations));
 
@@ -225,6 +278,10 @@
 		const lastEntry = constellations[constellations.length - 1];
 		isRerolling = true;
 		isMatching = true;
+		matchProgress = 0;
+		showInput = true;
+		inputText = lastEntry.text;
+		startMatchingPhrases();
 		pendingText = lastEntry.text;
 
 		// Add the current result's stars to the accumulated re-roll blacklist
@@ -356,7 +413,7 @@
 				bind:value={inputText}
 				onkeydown={handleKeydown}
 
-				placeholder="Type anything..."
+				placeholder="Search the stars..."
 				maxlength={30}
 				disabled={isMatching}
 				autocomplete="off"
@@ -364,7 +421,10 @@
 				use:autoFocus
 			/>
 			{#if isMatching}
-				<div id="matching-status" class="matching-indicator" role="status" aria-live="polite">Finding stars...</div>
+				<div id="matching-status" class="matching-indicator" role="status" aria-live="polite">
+					<span class="matching-phrase">{matchingPhrase}...</span>
+					<span class="matching-pct">{Math.round(matchProgress * 100)}%</span>
+				</div>
 			{/if}
 		</div>
 	{/if}
@@ -513,10 +573,23 @@
 		position: absolute;
 		top: 100%;
 		margin-top: 12px;
-		color: rgba(255, 215, 0, 0.6);
-		font-size: 13px;
+		color: rgba(255, 215, 0, 0.85);
+		font-size: 15px;
 		letter-spacing: 3px;
 		text-transform: uppercase;
+		background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.85) 40%, transparent 100%);
+		padding: 12px 32px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.matching-pct {
+		font-size: 12px;
+		letter-spacing: 2px;
+		color: rgba(255, 215, 0, 0.5);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.error-toast {
@@ -579,7 +652,7 @@
 	.constellation-name {
 		font-size: 28px;
 		letter-spacing: 6px;
-		color: #ffe680;
+		color: rgba(255, 215, 0, 0.85);
 		text-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
 	}
 

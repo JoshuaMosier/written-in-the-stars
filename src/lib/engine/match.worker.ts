@@ -23,7 +23,10 @@ self.onmessage = (e: MessageEvent) => {
 		const blacklist = payload.usedStarIndices
 			? new Set<number>(payload.usedStarIndices as number[])
 			: null;
-		const result = matchStarsToAnchors(stars, graph, blacklist);
+		const onProgress = (pct: number) => {
+			self.postMessage({ type: 'progress', payload: pct });
+		};
+		const result = matchStarsToAnchors(stars, graph, blacklist, onProgress);
 		self.postMessage({ type: 'result', payload: result });
 	}
 };
