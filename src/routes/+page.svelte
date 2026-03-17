@@ -1599,6 +1599,7 @@
 
 	.input-overlay input {
 		background: rgba(0, 0, 0, 0.2);
+		backdrop-filter: blur(8px);
 		border: 1px solid rgba(255, 255, 255, 0.15);
 		border-radius: 8px;
 		color: #fff;
@@ -1610,7 +1611,6 @@
 		letter-spacing: 2px;
 		box-sizing: border-box;
 		outline: none;
-		backdrop-filter: blur(8px);
 		transition: border-color 0.2s;
 	}
 
@@ -1702,8 +1702,7 @@
 
 	.go-back-btn {
 		margin-top: 8px;
-		background: rgba(0, 0, 0, 0.2);
-		backdrop-filter: blur(8px);
+		background: rgba(0, 0, 0, 0.6);
 		padding: 8px 16px;
 		font-size: 12px;
 		display: inline-flex;
@@ -1718,14 +1717,13 @@
 		left: 50%;
 		transform: translateX(-50%);
 		z-index: 20;
-		background: rgba(200, 50, 50, 0.15);
+		background: rgba(200, 50, 50, 0.35);
 		border: 1px solid rgba(200, 50, 50, 0.3);
 		color: rgba(255, 150, 150, 0.9);
 		padding: 10px 24px;
 		border-radius: 8px;
 		font-size: 14px;
 		letter-spacing: 0.5px;
-		backdrop-filter: blur(8px);
 		animation: toast-in 0.3s ease-out;
 	}
 
@@ -1756,7 +1754,7 @@
 	}
 
 	.result-overlay.dimmed {
-		opacity: 0.3;
+		opacity: 0;
 		pointer-events: none;
 	}
 
@@ -1976,8 +1974,7 @@
 	}
 
 	.reset-btn {
-		background: rgba(0, 0, 0, 0.4);
-		backdrop-filter: blur(8px);
+		background: rgba(0, 0, 0, 0.7);
 		border: 1px solid rgba(255, 255, 255, 0.15);
 		color: rgba(255, 255, 255, 0.5);
 		padding: 8px 20px;
@@ -2083,7 +2080,6 @@
 		align-items: center;
 		justify-content: center;
 		transition: all 0.2s;
-		backdrop-filter: blur(4px);
 	}
 
 	.top-bar-btn:hover {
@@ -2107,8 +2103,7 @@
 		position: absolute;
 		top: calc(100% + 6px);
 		left: 0;
-		background: rgba(0, 0, 0, 0.5);
-		backdrop-filter: blur(12px);
+		background: rgba(0, 0, 0, 0.85);
 		border: 1px solid rgba(255, 255, 255, 0.1);
 		border-radius: 10px;
 		padding: 6px;
@@ -2309,7 +2304,6 @@
 		height: 36px;
 		box-sizing: border-box;
 		background: rgba(255, 255, 255, 0.06);
-		backdrop-filter: blur(4px);
 		border: 1px solid rgba(255, 255, 255, 0.12);
 		border-radius: 8px;
 		color: #fff;
@@ -2354,8 +2348,7 @@
 		left: 0;
 		right: 0;
 		margin-top: 4px;
-		background: rgba(0, 0, 0, 0.8);
-		backdrop-filter: blur(12px);
+		background: rgba(0, 0, 0, 0.9);
 		border: 1px solid rgba(255, 255, 255, 0.1);
 		border-radius: 8px;
 		max-height: 280px;
@@ -2437,8 +2430,7 @@
 		left: 16px;
 		z-index: 14;
 		width: 260px;
-		background: rgba(0, 0, 0, 0.6);
-		backdrop-filter: blur(12px);
+		background: rgba(0, 0, 0, 0.85);
 		border: 1px solid rgba(255, 255, 255, 0.1);
 		border-radius: 10px;
 		padding: 14px 16px;
@@ -2768,8 +2760,7 @@
 		left: 50%;
 		transform: translateX(-50%);
 		z-index: 25;
-		background: rgba(0, 0, 0, 0.55);
-		backdrop-filter: blur(12px);
+		background: rgba(0, 0, 0, 0.85);
 		border: 1px solid rgba(255, 215, 0, 0.15);
 		border-radius: 10px;
 		padding: 12px 16px;

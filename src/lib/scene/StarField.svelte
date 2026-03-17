@@ -3584,8 +3584,7 @@
 		font-size: 13px;
 		letter-spacing: 0.5px;
 		color: rgba(255, 255, 255, 0.5);
-		background: rgba(0, 0, 0, 0.35);
-		backdrop-filter: blur(4px);
+		background: rgba(0, 0, 0, 0.7);
 		padding: 6px 12px;
 		border-radius: 6px;
 		border: 1px solid rgba(68, 136, 204, 0.2);
