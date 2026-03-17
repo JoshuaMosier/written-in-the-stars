@@ -1970,6 +1970,10 @@
 
 	/* Mobile adjustments */
 	@media (max-width: 480px) {
+		.input-overlay {
+			bottom: 20%;
+		}
+
 		.input-sizer {
 			display: contents;
 		}
