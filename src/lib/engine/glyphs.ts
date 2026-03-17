@@ -83,7 +83,7 @@ const GLYPHS: Record<string, GlyphDef> = {
 
   // Hershey Simplex Roman lowercase (characters 599-624)
   // Y values flipped to match uppercase convention (Y=0 baseline, Y=21 cap top)
-  'a': { width: 19, data: [15, 14, 15, 3, -1, -1, 15, 8, 11, 14, 7, 14, 3, 10, 3, 4, 7, 0, 11, 0, 15, 3] },
+  'a': { width: 19, data: [15, 8, 15, 0, -1, -1, 15, 8, 11, 14, 7, 14, 3, 10, 3, 4, 7, 0, 11, 0, 15, 3] },
   'b': { width: 19, data: [4, 21, 4, 10, 11, 10, 13, 5, 11, 0, 4, 0, 4, 10] },
   'c': { width: 18, data: [15, 11, 11, 14, 6, 14, 3, 9, 3, 4, 6, 0, 11, 0, 15, 3] },
   'd': { width: 19, data: [15, 21, 15, 10, 8, 10, 6, 5, 8, 0, 15, 0, 15, 10] },
@@ -110,6 +110,9 @@ const GLYPHS: Record<string, GlyphDef> = {
   'y': { width: 16, data: [2, 14, 8, 0, -1, -1, 14, 14, 8, 0, 2, -7] },
   'z': { width: 17, data: [14,14, 3,0, -1,-1, 3,14, 14,14, -1,-1, 3,0, 14,0] },
 };
+
+/** Set of characters that have glyph definitions (case-insensitive: lowercase maps to uppercase). */
+export const SUPPORTED_CHARS = new Set(Object.keys(GLYPHS));
 
 // ---------------------------------------------------------------------------
 // Internal helpers

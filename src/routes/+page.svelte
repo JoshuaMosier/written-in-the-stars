@@ -2,6 +2,7 @@
 	import { encodeAllToHash, decodeHashToResults } from '$lib/engine/sharing';
 	import type { Star, MatchResult } from '$lib/engine/types';
 	import { CONSTELLATIONS } from '$lib/data/constellations';
+	import { SUPPORTED_CHARS } from '$lib/engine/glyphs';
 	import MatchWorker from '$lib/engine/match.worker?worker';
 
 	// Lazy-load StarField (pulls in Three.js tree)
@@ -87,6 +88,33 @@
 	}
 
 	let inputText = $state('');
+	let inputRejectMsg = $state('');
+	let inputRejectTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function filterInput(e: Event) {
+		const input = e.target as HTMLInputElement;
+		const raw = input.value;
+		let filtered = '';
+		const rejected: string[] = [];
+		for (const ch of raw) {
+			if (SUPPORTED_CHARS.has(ch) || SUPPORTED_CHARS.has(ch.toUpperCase())) {
+				filtered += ch;
+			} else if (!rejected.includes(ch)) {
+				rejected.push(ch);
+			}
+		}
+		if (rejected.length > 0) {
+			inputText = filtered;
+			// Re-trigger shake animation by removing and re-adding the class
+			input.classList.remove('shake');
+			void input.offsetWidth; // force reflow
+			input.classList.add('shake');
+			if (inputRejectTimer) clearTimeout(inputRejectTimer);
+			inputRejectMsg = `"${rejected.join('", "')}" not supported`;
+			inputRejectTimer = setTimeout(() => { inputRejectMsg = ''; }, 2000);
+		}
+	}
+
 	let isMatching = $state(false);
 	let isRerolling = $state(false);
 	let matchProgress = $state(0);
@@ -1036,10 +1064,14 @@
 	{#if showInput}
 		<div class="input-overlay" class:matching={isMatching}>
 			<label for="constellation-input" class="sr-only">Enter text to map to stars</label>
+			{#if inputRejectMsg}
+				<div class="input-reject-msg">{inputRejectMsg}</div>
+			{/if}
 			<input
 				id="constellation-input"
 				type="text"
 				bind:value={inputText}
+				oninput={filterInput}
 				onkeydown={handleKeydown}
 				placeholder="Search the stars..."
 				maxlength={30}
@@ -1428,6 +1460,35 @@
 
 	.input-overlay input:focus-visible {
 		box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.3);
+	}
+
+	.input-overlay input.shake {
+		animation: input-shake 0.3s ease-out;
+	}
+
+	@keyframes input-shake {
+		0%, 100% { transform: translateX(0); }
+		20% { transform: translateX(-4px); }
+		40% { transform: translateX(4px); }
+		60% { transform: translateX(-3px); }
+		80% { transform: translateX(2px); }
+	}
+
+	.input-reject-msg {
+		position: absolute;
+		bottom: 100%;
+		margin-bottom: 8px;
+		color: rgba(255, 150, 150, 0.9);
+		font-size: 13px;
+		letter-spacing: 0.5px;
+		white-space: nowrap;
+		pointer-events: none;
+		animation: reject-fade-in 0.2s ease-out;
+	}
+
+	@keyframes reject-fade-in {
+		from { opacity: 0; }
+		to { opacity: 1; }
 	}
 
 	.matching-indicator {
