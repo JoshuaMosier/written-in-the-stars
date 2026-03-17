@@ -1815,17 +1815,11 @@
 		align-items: center;
 		justify-content: center;
 		transition: opacity 0.2s;
-		opacity: 0;
 	}
 
 	.color-picker-btn:hover {
 		background: rgba(255, 255, 255, 0.12);
 		border-color: rgba(255, 255, 255, 0.2);
-	}
-
-	.constellation-card:hover .color-picker-btn,
-	.color-picker-btn:focus-visible {
-		opacity: 1;
 	}
 
 	.hue-ring-backdrop {
@@ -1917,15 +1911,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		transition: color 0.2s, background 0.2s, border-color 0.2s, opacity 0.2s;
-		opacity: 0;
+		transition: color 0.2s, background 0.2s, border-color 0.2s;
 		margin-left: 4px;
 		flex-shrink: 0;
-	}
-
-	.constellation-card:hover .delete-btn,
-	.delete-btn:focus-visible {
-		opacity: 1;
 	}
 
 	.delete-btn:hover {
@@ -2239,11 +2227,6 @@
 		.constellation-info {
 			font-size: 11px;
 			letter-spacing: 1.5px;
-		}
-
-		.delete-btn,
-		.color-picker-btn {
-			opacity: 1;
 		}
 
 		.result-actions {
