@@ -611,7 +611,7 @@
 	// --- Guided tour (first-run only) ---
 	const TOUR_STEPS = [
 		'Drag any vertex to snap it to a different star',
-		'Re-roll for a completely different star placement',
+		'Try again for a completely different star placement',
 		'Undo with Ctrl+Z, redo with Ctrl+Y',
 	];
 	let tourStep = $state(0);
@@ -1378,8 +1378,8 @@
 			{/each}
 			{#if !showInput}
 				<div class="result-actions" role="toolbar" aria-label="Constellation actions">
-					<button class="reset-btn" onclick={handleReroll} disabled={isRerolling} aria-label="Re-roll constellation placement">
-						{isRerolling ? 'Re-rolling...' : 'Re-roll'}
+					<button class="reset-btn" onclick={handleReroll} disabled={isRerolling} aria-label="Try again for a different constellation placement">
+						{isRerolling ? 'Trying...' : 'Try again'}
 					</button>
 					<button class="reset-btn" onclick={handleShare} aria-label={copied ? 'Link copied to clipboard' : 'Copy shareable link'}>
 						{copied ? 'Copied!' : 'Share'}
