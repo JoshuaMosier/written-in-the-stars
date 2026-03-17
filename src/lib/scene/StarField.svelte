@@ -3119,6 +3119,10 @@
 		controls.dampingFactor = 0.08;
 		controls.autoRotate = autoRotateActive;
 		controls.autoRotateSpeed = 0.15;
+		// Defer left-button orbit until the pointer clears the click threshold.
+		controls.mouseButtons.LEFT = -1 as THREE.MOUSE;
+		// Defer one-finger orbit until the touch clears the click threshold.
+		controls.touches.ONE = -1 as THREE.TOUCH;
 
 		// Scale rotation speed based on viewport and FOV so dragging feels
 		// consistent across screen sizes and zoom levels
@@ -3137,6 +3141,12 @@
 		controls.maxDistance = 0.01;
 		controls.update();
 		controlsRef = controls;
+		const controlsInternal = controls as OrbitControls & {
+			_handleMouseDownRotate: (event: { clientX: number; clientY: number }) => void;
+			_handleMouseMoveRotate: (event: { clientX: number; clientY: number }) => void;
+			_handleTouchStartRotate: (event: { pointerId?: number; pageX: number; pageY: number }) => void;
+			_handleTouchMoveRotate: (event: { pointerId?: number; pageX: number; pageY: number }) => void;
+		};
 
 		const onWheel = (e: WheelEvent) => {
 			e.preventDefault();
@@ -3155,11 +3165,9 @@
 		renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
 
 		// --- Pinch-to-zoom touch support ---
-		// Disable OrbitControls rotation during pinch and add a grace period
-		// so that a slightly staggered two-finger touch isn't read as a drag.
 		let isPinching = false;
-		let touchGraceTimer: ReturnType<typeof setTimeout> | null = null;
 		let pinchStartCamDist = GLOBE_DISTANCE;
+		let pinchResumeAutoRotate = false;
 
 		function getTouchDistance(t1: Touch, t2: Touch): number {
 			const dx = t1.clientX - t2.clientX;
@@ -3169,18 +3177,12 @@
 
 		const onTouchStart = (e: TouchEvent) => {
 			if (globeTransitionActive) return;
-			if (e.touches.length === 1) {
-				// First finger down — pause OrbitControls briefly in case
-				// a second finger is about to land (staggered pinch).
-				controls.enableRotate = false;
-				touchGraceTimer = setTimeout(() => {
-					if (!isPinching) controls.enableRotate = true;
-				}, 120);
-			}
 			if (e.touches.length === 2) {
-				if (touchGraceTimer) { clearTimeout(touchGraceTimer); touchGraceTimer = null; }
 				isPinching = true;
-				controls.enableRotate = false;
+				clickStart = null;
+				cleanupOrbitDrag();
+				pinchResumeAutoRotate = controls.autoRotate;
+				controls.autoRotate = false;
 				pinchStartDist = getTouchDistance(e.touches[0], e.touches[1]);
 				pinchStartFov = camera.fov;
 				pinchStartCamDist = camera.position.length();
@@ -3212,9 +3214,9 @@
 			if (e.touches.length < 2) {
 				isPinching = false;
 				pinchStartDist = 0;
-				// Re-enable rotation after all fingers lift
 				if (e.touches.length === 0) {
-					controls.enableRotate = true;
+					controls.autoRotate = pinchResumeAutoRotate;
+					pinchResumeAutoRotate = false;
 				}
 			}
 		};
@@ -3309,6 +3311,16 @@
 		// --- Vertex drag handlers (mouse + touch) ---
 		let longPressTimer: ReturnType<typeof setTimeout> | null = null;
 		const LONG_PRESS_MS = 400;
+		const CLICK_THRESHOLD = 8; // max px movement to count as click
+		const CLICK_MAX_MS = 300; // max duration
+		let orbitDragState: {
+			pointerId: number;
+			pointerType: 'mouse' | 'touch';
+			startMouse: { x: number; y: number };
+			startPage: { x: number; y: number };
+			committed: boolean;
+			resumeAutoRotate: boolean;
+		} | null = null;
 
 		function commitDrag() {
 			if (!dragState || dragState.committed) return;
@@ -3335,6 +3347,18 @@
 			dragState = null;
 			controls.enabled = true;
 			container.style.cursor = '';
+		}
+
+		function cleanupOrbitDrag() {
+			if (!orbitDragState) return;
+			if (orbitDragState.committed) {
+				controls.autoRotate = orbitDragState.resumeAutoRotate;
+				clickStart = null;
+			}
+			orbitDragState = null;
+			if (!dragState) {
+				container.style.cursor = '';
+			}
 		}
 
 		const onDragPointerDown = (e: PointerEvent) => {
@@ -3377,6 +3401,48 @@
 		};
 
 		const onDragPointerMove = (e: PointerEvent) => {
+			if (orbitDragState?.pointerId === e.pointerId && !dragState) {
+				const dx = e.clientX - orbitDragState.startMouse.x;
+				const dy = e.clientY - orbitDragState.startMouse.y;
+				const dist = Math.sqrt(dx * dx + dy * dy);
+
+				if (!orbitDragState.committed) {
+					if (dist < CLICK_THRESHOLD) return;
+					orbitDragState.committed = true;
+					orbitDragState.resumeAutoRotate = controls.autoRotate;
+					controls.autoRotate = false;
+					hoveredIdx = -1;
+					uniforms.uHoveredIndex.value = -1.0;
+					tooltip.style.opacity = '0';
+					container.style.cursor = 'grabbing';
+					if (orbitDragState.pointerType === 'touch') {
+						controlsInternal._handleTouchStartRotate({
+							pointerId: orbitDragState.pointerId,
+							pageX: orbitDragState.startPage.x,
+							pageY: orbitDragState.startPage.y,
+						});
+					} else {
+						controlsInternal._handleMouseDownRotate({
+							clientX: orbitDragState.startMouse.x,
+							clientY: orbitDragState.startMouse.y,
+						});
+					}
+				}
+
+				if (orbitDragState.pointerType === 'touch') {
+					if (isPinching) return;
+					controlsInternal._handleTouchMoveRotate({
+						pointerId: e.pointerId,
+						pageX: e.pageX,
+						pageY: e.pageY,
+					});
+				} else {
+					controlsInternal._handleMouseMoveRotate(e);
+				}
+				controls.update();
+				return;
+			}
+
 			if (!dragState || !dragState.active) return;
 			const dx = e.clientX - dragState.startMouse.x;
 			const dy = e.clientY - dragState.startMouse.y;
@@ -3419,8 +3485,11 @@
 			}
 		};
 
-		const onDragPointerUp = (_e: PointerEvent) => {
+		const onDragPointerUp = (e: PointerEvent) => {
 			cancelLongPress();
+			if (orbitDragState?.pointerId === e.pointerId) {
+				cleanupOrbitDrag();
+			}
 			if (!dragState || !dragState.active) return;
 
 			if (dragState.committed && dragState.candidateStar) {
@@ -3435,12 +3504,20 @@
 
 		// --- Star click detection (distinct from drag and orbit) ---
 		let clickStart: { x: number; y: number; time: number } | null = null;
-		const CLICK_THRESHOLD = 8; // max px movement to count as click
-		const CLICK_MAX_MS = 300;  // max duration
 
 		const onStarPointerDown = (e: PointerEvent) => {
 			if (e.button !== 0) return;
 			clickStart = { x: e.clientX, y: e.clientY, time: performance.now() };
+			if (!dragState) {
+				orbitDragState = {
+					pointerId: e.pointerId,
+					pointerType: e.pointerType === 'touch' ? 'touch' : 'mouse',
+					startMouse: { x: e.clientX, y: e.clientY },
+					startPage: { x: e.pageX, y: e.pageY },
+					committed: false,
+					resumeAutoRotate: controls.autoRotate,
+				};
+			}
 		};
 
 		const onStarPointerUp = (e: PointerEvent) => {
@@ -3477,7 +3554,7 @@
 			// Suppress hover tooltips on touch/pen devices
 			if (e.pointerType !== 'mouse') return;
 			// Suppress hover during vertex drag
-			if (dragState?.committed) return;
+			if (dragState?.committed || orbitDragState?.committed) return;
 
 			const rect = container.getBoundingClientRect();
 			const mx = e.clientX - rect.left;
