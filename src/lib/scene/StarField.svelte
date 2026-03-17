@@ -750,8 +750,12 @@
 	let ambientPaused = false;
 	let uniformsRef: { uDim: THREE.Uniform<number>; uTime: THREE.Uniform<number>; uFovScale: THREE.Uniform<number>; uHoveredIndex: THREE.Uniform<number>; uBrightness: THREE.Uniform<number>; uMonochrome: THREE.Uniform<number> } | null = null;
 	const DEFAULT_FOV = 90;
+	const GLOBE_DISTANCE = 3.0;
+	// Fixed FOV that frames the full sphere with some breathing room at GLOBE_DISTANCE
+	const GLOBE_FOV = 40;
 
 	let rendererSize = new THREE.Vector2(1, 1);
+	let globeViewActive = false;
 
 	// --- Auto-rotate (landing page drift) ---
 	let autoRotateActive = !reducedMotion;
@@ -823,6 +827,9 @@
 		if (!cameraRef || !container) return;
 
 		cameraRef.getWorldDirection(overlayCameraDir);
+		// In globe mode the camera looks inward, so flip the direction
+		// so that dot-product visibility checks still work the same way.
+		if (globeViewActive) overlayCameraDir.negate();
 
 		for (const ac of ambientConstellations) {
 			const phaseElapsed = now - ac.phaseStart;
@@ -1491,28 +1498,33 @@
 			Math.sin(centroidDec) * Math.sin(centroidRa)
 		).normalize();
 
-		const testCam = new THREE.PerspectiveCamera(60, cameraRef.aspect, 0.1, 10);
-		testCam.position.set(0, 0, 0.0001);
-		testCam.up.copy(localNorth);
-		testCam.lookAt(centroidDir.clone().multiplyScalar(10));
-		const fitMargin = 0.7;
-		const maxFov = cameraRef.aspect < 0.8 ? 120 : 80;
-		let lo = 5, hi = maxFov + 10;
-		for (let i = 0; i < 16; i++) {
-			const mid = (lo + hi) / 2;
-			testCam.fov = mid;
-			testCam.updateProjectionMatrix();
-			let fits = true;
-			for (const pos of positions) {
-				const ndc = pos.clone().project(testCam);
-				if (Math.abs(ndc.x) > fitMargin || Math.abs(ndc.y) > fitMargin) {
-					fits = false;
-					break;
+		let targetFov: number;
+		if (globeViewActive) {
+			targetFov = GLOBE_FOV;
+		} else {
+			const testCam = new THREE.PerspectiveCamera(60, cameraRef.aspect, 0.1, 10);
+			testCam.position.set(0, 0, 0.0001);
+			testCam.up.copy(localNorth);
+			testCam.lookAt(centroidDir.clone().multiplyScalar(10));
+			const fitMargin = 0.7;
+			const maxFov = cameraRef.aspect < 0.8 ? 120 : 80;
+			let lo = 5, hi = maxFov + 10;
+			for (let i = 0; i < 16; i++) {
+				const mid = (lo + hi) / 2;
+				testCam.fov = mid;
+				testCam.updateProjectionMatrix();
+				let fits = true;
+				for (const pos of positions) {
+					const ndc = pos.clone().project(testCam);
+					if (Math.abs(ndc.x) > fitMargin || Math.abs(ndc.y) > fitMargin) {
+						fits = false;
+						break;
+					}
 				}
+				if (fits) hi = mid; else lo = mid;
 			}
-			if (fits) hi = mid; else lo = mid;
+			targetFov = Math.min(maxFov, Math.max(15, hi));
 		}
-		const targetFov = Math.min(maxFov, Math.max(15, hi));
 
 		prepareForConstellation();
 		clearAllConstellations();
@@ -1521,8 +1533,13 @@
 			drawConstellationInstant(entry);
 		}
 
-		cameraRef.position.set(0, 0, 0.0001);
-		controlsRef.target.copy(cameraRef.position).addScaledVector(centroidDir, 0.001);
+		if (globeViewActive) {
+			cameraRef.position.copy(centroidDir.clone().negate().multiplyScalar(GLOBE_DISTANCE));
+			controlsRef.target.set(0, 0, 0);
+		} else {
+			cameraRef.position.set(0, 0, 0.0001);
+			controlsRef.target.copy(cameraRef.position).addScaledVector(centroidDir, 0.001);
+		}
 		cameraRef.up.copy(localNorth);
 		syncControlsUp(controlsRef, cameraRef.up);
 		cameraRef.fov = targetFov;
@@ -1591,36 +1608,77 @@
 			Math.sin(centroidDec) * Math.sin(centroidRa)
 		).normalize();
 
-		// Binary search for FOV that fits all stars
-		const testCam = new THREE.PerspectiveCamera(60, cameraRef.aspect, 0.1, 10);
-		testCam.position.set(0, 0, 0.0001);
-		testCam.up.copy(localNorth);
-		testCam.lookAt(centroidDir.clone().multiplyScalar(10));
-		const fitMargin = 0.7;
-		const maxFov = cameraRef.aspect < 0.8 ? 120 : 80;
-		let lo = 5, hi = maxFov + 10;
-		for (let i = 0; i < 16; i++) {
-			const mid = (lo + hi) / 2;
-			testCam.fov = mid;
-			testCam.updateProjectionMatrix();
-			let fits = true;
-			for (const pos of positions) {
-				const ndc = pos.clone().project(testCam);
-				if (Math.abs(ndc.x) > fitMargin || Math.abs(ndc.y) > fitMargin) {
-					fits = false;
-					break;
+		let targetFov: number;
+		const globeCamDir = centroidDir.clone().negate();
+		if (globeViewActive) {
+			targetFov = GLOBE_FOV;
+		} else {
+			const testCam = new THREE.PerspectiveCamera(60, cameraRef.aspect, 0.1, 10);
+			testCam.position.set(0, 0, 0.0001);
+			testCam.up.copy(localNorth);
+			testCam.lookAt(centroidDir.clone().multiplyScalar(10));
+			const fitMargin = 0.7;
+			const maxFov = cameraRef.aspect < 0.8 ? 120 : 80;
+			let lo = 5, hi = maxFov + 10;
+			for (let i = 0; i < 16; i++) {
+				const mid = (lo + hi) / 2;
+				testCam.fov = mid;
+				testCam.updateProjectionMatrix();
+				let fits = true;
+				for (const pos of positions) {
+					const ndc = pos.clone().project(testCam);
+					if (Math.abs(ndc.x) > fitMargin || Math.abs(ndc.y) > fitMargin) {
+						fits = false;
+						break;
+					}
 				}
+				if (fits) hi = mid; else lo = mid;
 			}
-			if (fits) hi = mid; else lo = mid;
+			targetFov = Math.min(maxFov, Math.max(15, hi));
 		}
-		const targetFov = Math.min(maxFov, Math.max(15, hi));
 
 		const startPos = cameraRef.position.clone();
-		const lookDir = controlsRef.target.clone().sub(startPos).normalize();
-		const endDir = centroidDir.clone();
 		const startUp = cameraRef.up.clone();
 		// Never zoom in tighter than what's already fitting
 		const startFov = Math.max(cameraRef.fov, targetFov);
+
+		if (globeViewActive) {
+			const endPos = globeCamDir.clone().multiplyScalar(GLOBE_DISTANCE);
+			const startDir = startPos.clone().normalize();
+			const angularDist = Math.acos(Math.min(1, Math.max(-1, startDir.dot(globeCamDir))));
+			const duration = 300 + 500 * Math.min(1, angularDist / Math.PI);
+			const startTime = performance.now();
+
+			const qStart = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), startDir);
+			const qEnd = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), globeCamDir);
+			const qSlerp = new THREE.Quaternion();
+			const slerpedDir = new THREE.Vector3();
+
+			function animate() {
+				const elapsed = performance.now() - startTime;
+				const t = Math.min(1, elapsed / duration);
+				const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+				qSlerp.slerpQuaternions(qStart, qEnd, ease);
+				slerpedDir.set(0, 0, 1).applyQuaternion(qSlerp);
+				cameraRef!.position.copy(slerpedDir.clone().multiplyScalar(GLOBE_DISTANCE));
+				controlsRef!.target.set(0, 0, 0);
+				cameraRef!.up.lerpVectors(startUp, localNorth, ease).normalize();
+				syncControlsUp(controlsRef!, cameraRef!.up);
+				cameraRef!.fov = startFov + (targetFov - startFov) * ease;
+				cameraRef!.updateProjectionMatrix();
+				controlsRef!.update();
+				if (t < 1) {
+					requestAnimationFrame(animate);
+				} else {
+					drawConstellationAnimated(result, true);
+				}
+			}
+			animate();
+			return;
+		}
+
+		const lookDir = controlsRef.target.clone().sub(startPos).normalize();
+		const endDir = centroidDir.clone();
 		const angularDist = Math.acos(Math.min(1, Math.max(-1, lookDir.dot(endDir))));
 		const duration = 300 + 500 * Math.min(1, angularDist / Math.PI);
 		const startTime = performance.now();
@@ -2069,41 +2127,82 @@
 			Math.sin(centroidDec) * Math.sin(centroidRa)
 		).normalize();
 
-		// Find the FOV where all stars fit within 70% of the viewport by
-		// projecting through a test camera with the final orientation.
-		const testCam = new THREE.PerspectiveCamera(60, cameraRef.aspect, 0.1, 10);
-		testCam.position.set(0, 0, 0.0001);
-		testCam.up.copy(localNorth);
-		testCam.lookAt(centroidDir.clone().multiplyScalar(10));
-		const fitMargin = 0.7; // stars must land within ±70% of NDC
+		let targetFov: number;
+		const globeCamDir = centroidDir.clone().negate();
+		if (globeViewActive) {
+			targetFov = GLOBE_FOV;
+		} else {
+			const testCam = new THREE.PerspectiveCamera(60, cameraRef.aspect, 0.1, 10);
+			testCam.position.set(0, 0, 0.0001);
+			testCam.up.copy(localNorth);
+			testCam.lookAt(centroidDir.clone().multiplyScalar(10));
+			const fitMargin = 0.7; // stars must land within ±70% of NDC
 
-		// Allow higher max FOV on portrait viewports to fit wide constellations
-		const maxFov = cameraRef.aspect < 0.8 ? 120 : 80;
-		let lo = 5, hi = maxFov + 10;
-		for (let i = 0; i < 16; i++) {
-			const mid = (lo + hi) / 2;
-			testCam.fov = mid;
-			testCam.updateProjectionMatrix();
-			let fits = true;
-			for (const pos of positions) {
-				const ndc = pos.clone().project(testCam);
-				if (Math.abs(ndc.x) > fitMargin || Math.abs(ndc.y) > fitMargin) {
-					fits = false;
-					break;
+			// Allow higher max FOV on portrait viewports to fit wide constellations
+			const maxFov = cameraRef.aspect < 0.8 ? 120 : 80;
+			let lo = 5, hi = maxFov + 10;
+			for (let i = 0; i < 16; i++) {
+				const mid = (lo + hi) / 2;
+				testCam.fov = mid;
+				testCam.updateProjectionMatrix();
+				let fits = true;
+				for (const pos of positions) {
+					const ndc = pos.clone().project(testCam);
+					if (Math.abs(ndc.x) > fitMargin || Math.abs(ndc.y) > fitMargin) {
+						fits = false;
+						break;
+					}
 				}
+				if (fits) hi = mid; else lo = mid;
 			}
-			if (fits) hi = mid; else lo = mid;
+			targetFov = Math.min(maxFov, Math.max(15, hi));
 		}
-		const targetFov = Math.min(maxFov, Math.max(15, hi));
-		const target = centroidDir.clone().multiplyScalar(0.001);
 
 		// Derive start direction from the actual camera look direction,
 		// not just the target — after orbiting, the camera has moved off origin.
 		const startPos = cameraRef.position.clone();
-		const lookDir = controlsRef.target.clone().sub(startPos).normalize();
-		const endDir = centroidDir.clone();
 		const startUp = cameraRef.up.clone();
 		const startFov = cameraRef.fov;
+
+		if (globeViewActive) {
+			const endPos = globeCamDir.clone().multiplyScalar(GLOBE_DISTANCE);
+			const startDir = startPos.clone().normalize();
+			const angularDist = Math.acos(Math.min(1, Math.max(-1, startDir.dot(globeCamDir))));
+			const baseDuration = fast ? 800 : 1200;
+			const minDuration = fast ? 300 : 400;
+			const duration = minDuration + (baseDuration - minDuration) * Math.min(1, angularDist / Math.PI);
+			const startTime = performance.now();
+
+			const qStart = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), startDir);
+			const qEnd = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), globeCamDir);
+			const qSlerp = new THREE.Quaternion();
+			const slerpedDir = new THREE.Vector3();
+
+			function animate() {
+				const elapsed = performance.now() - startTime;
+				const t = Math.min(1, elapsed / duration);
+				const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+				qSlerp.slerpQuaternions(qStart, qEnd, ease);
+				slerpedDir.set(0, 0, 1).applyQuaternion(qSlerp);
+				cameraRef!.position.copy(slerpedDir.clone().multiplyScalar(GLOBE_DISTANCE));
+				controlsRef!.target.set(0, 0, 0);
+				cameraRef!.up.lerpVectors(startUp, localNorth, ease).normalize();
+				syncControlsUp(controlsRef!, cameraRef!.up);
+				cameraRef!.fov = startFov + (targetFov - startFov) * ease;
+				cameraRef!.updateProjectionMatrix();
+				controlsRef!.update();
+				if (t < 1) {
+					requestAnimationFrame(animate);
+				} else {
+					drawConstellationAnimated(result, fast);
+				}
+			}
+			animate();
+			return;
+		}
+
+		const lookDir = controlsRef.target.clone().sub(startPos).normalize();
+		const endDir = centroidDir.clone();
 		// Scale camera pan duration by angular distance (0° → minimum, 180° → full)
 		const angularDist = Math.acos(Math.min(1, Math.max(-1, lookDir.dot(endDir))));
 		const baseDuration = fast ? 800 : 1200;
@@ -2168,7 +2267,6 @@
 		if (!cometsEnabled) resumeComets();
 
 		const startPos = cameraRef.position.clone();
-		const lookDir = controlsRef.target.clone().sub(startPos).normalize();
 		const defaultTilt = 15 * Math.PI / 180;
 		const endDir = new THREE.Vector3(0, -Math.sin(defaultTilt), -Math.cos(defaultTilt));
 		const startUp = cameraRef.up.clone();
@@ -2177,6 +2275,38 @@
 		const duration = 800;
 		const startTime = performance.now();
 
+		if (globeViewActive) {
+			const endPos = endDir.clone().negate().multiplyScalar(GLOBE_DISTANCE);
+			const startDir = startPos.clone().normalize();
+			const endDirNorm = endPos.clone().normalize();
+
+			const qStart = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), startDir);
+			const qEnd = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), endDirNorm);
+			const qSlerp = new THREE.Quaternion();
+			const slerpedDir = new THREE.Vector3();
+			const startDist = startPos.length() || GLOBE_DISTANCE;
+
+			function animate() {
+				const elapsed = performance.now() - startTime;
+				const t = Math.min(1, elapsed / duration);
+				const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+				qSlerp.slerpQuaternions(qStart, qEnd, ease);
+				slerpedDir.set(0, 0, 1).applyQuaternion(qSlerp);
+				const dist = startDist + (GLOBE_DISTANCE - startDist) * ease;
+				cameraRef!.position.copy(slerpedDir.multiplyScalar(dist));
+				controlsRef!.target.set(0, 0, 0);
+				cameraRef!.up.lerpVectors(startUp, defaultUp, ease).normalize();
+				syncControlsUp(controlsRef!, cameraRef!.up);
+				cameraRef!.fov = startFov + (GLOBE_FOV - startFov) * ease;
+				cameraRef!.updateProjectionMatrix();
+				controlsRef!.update();
+				if (t < 1) requestAnimationFrame(animate);
+			}
+			animate();
+			return;
+		}
+
+		const lookDir = controlsRef.target.clone().sub(startPos).normalize();
 		const qStart = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), lookDir);
 		const qEnd = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), endDir);
 		const qSlerp = new THREE.Quaternion();
@@ -2436,6 +2566,38 @@
 		if (uniformsRef) uniformsRef.uShowSun.value = show ? 1.0 : 0.0;
 	}
 
+	export function toggleGlobeView(on: boolean) {
+		if (!controlsRef || !cameraRef) return;
+		globeViewActive = on;
+
+		if (on) {
+			// Move camera outside the sphere, facing back toward the constellation
+			const lookDir = cameraRef.position.clone().sub(controlsRef.target).normalize();
+			cameraRef.position.copy(lookDir.multiplyScalar(GLOBE_DISTANCE));
+			controlsRef.target.set(0, 0, 0);
+			// Keep enableZoom false — custom onWheel handler manages globe distance
+			controlsRef.minDistance = 1.5;
+			controlsRef.maxDistance = 6.0;
+			controlsRef.rotateSpeed = Math.abs(controlsRef.rotateSpeed);
+			controlsRef.autoRotateSpeed = -Math.abs(controlsRef.autoRotateSpeed);
+			cameraRef.fov = GLOBE_FOV;
+			cameraRef.updateProjectionMatrix();
+		} else {
+			// Move camera back inside the sphere
+			const lookDir = new THREE.Vector3().subVectors(controlsRef.target, cameraRef.position).normalize();
+			cameraRef.position.set(0, 0, 0.0001);
+			controlsRef.target.copy(cameraRef.position).addScaledVector(lookDir, 0.001);
+			controlsRef.enableZoom = false;
+			controlsRef.minDistance = 0.0001;
+			controlsRef.maxDistance = 0.01;
+			controlsRef.rotateSpeed = -Math.abs(controlsRef.rotateSpeed);
+			controlsRef.autoRotateSpeed = Math.abs(controlsRef.autoRotateSpeed);
+			cameraRef.fov = DEFAULT_FOV;
+			cameraRef.updateProjectionMatrix();
+		}
+		controlsRef.update();
+	}
+
 	// --- Star highlight (large label + ring) for search/click ---
 	let starHighlightGroup: THREE.Group | null = null;
 	let starHighlightLabel: Text | null = null;
@@ -2594,7 +2756,55 @@
 			Math.sin(dec) * Math.sin(ra)
 		).normalize();
 
-		const targetFov = fov ?? Math.min(60, cameraRef.fov);
+		const targetFov = globeViewActive ? GLOBE_FOV : (fov ?? Math.min(60, cameraRef.fov));
+
+		if (globeViewActive) {
+			const camDist = GLOBE_DISTANCE;
+			const globeCamDir = targetDir.clone().negate();
+			const endPos = globeCamDir.clone().multiplyScalar(camDist);
+
+			if (reducedMotion) {
+				cameraRef.position.copy(endPos);
+				controlsRef.target.set(0, 0, 0);
+				cameraRef.up.copy(localNorth);
+				syncControlsUp(controlsRef, cameraRef.up);
+				cameraRef.fov = targetFov;
+				cameraRef.updateProjectionMatrix();
+				controlsRef.update();
+				return;
+			}
+
+			const startPos = cameraRef.position.clone();
+			const startUp = cameraRef.up.clone();
+			const startFov = cameraRef.fov;
+			const startDir = startPos.clone().normalize();
+			const angularDist = Math.acos(Math.min(1, Math.max(-1, startDir.dot(globeCamDir))));
+			const duration = 300 + 500 * Math.min(1, angularDist / Math.PI);
+			const startTime = performance.now();
+
+			const qStart = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), startDir);
+			const qEnd = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), globeCamDir);
+			const qSlerp = new THREE.Quaternion();
+			const slerpedDir = new THREE.Vector3();
+
+			function animate() {
+				const elapsed = performance.now() - startTime;
+				const t = Math.min(1, elapsed / duration);
+				const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+				qSlerp.slerpQuaternions(qStart, qEnd, ease);
+				slerpedDir.set(0, 0, 1).applyQuaternion(qSlerp);
+				cameraRef!.position.copy(slerpedDir.multiplyScalar(camDist));
+				controlsRef!.target.set(0, 0, 0);
+				cameraRef!.up.lerpVectors(startUp, localNorth, ease).normalize();
+				syncControlsUp(controlsRef!, cameraRef!.up);
+				cameraRef!.fov = startFov + (targetFov - startFov) * ease;
+				cameraRef!.updateProjectionMatrix();
+				controlsRef!.update();
+				if (t < 1) requestAnimationFrame(animate);
+			}
+			animate();
+			return;
+		}
 
 		// Reduced motion: jump instantly
 		if (reducedMotion) {
@@ -2657,26 +2867,30 @@
 			Math.sin(centroidDec) * Math.sin(centroidRa)
 		).normalize();
 
-		// Binary search for FOV
-		const testCam = new THREE.PerspectiveCamera(60, cameraRef.aspect, 0.1, 10);
-		testCam.position.set(0, 0, 0.0001);
-		testCam.up.copy(localNorth);
-		testCam.lookAt(centroidDir.clone().multiplyScalar(10));
-		const fitMargin = 0.85;
-		const maxFov = cameraRef.aspect < 0.8 ? 110 : 80;
-		let lo = 5, hi = maxFov + 10;
-		for (let i = 0; i < 16; i++) {
-			const mid = (lo + hi) / 2;
-			testCam.fov = mid;
-			testCam.updateProjectionMatrix();
-			let fits = true;
-			for (const pos of rc.hlPositions) {
-				const ndc = pos.clone().project(testCam);
-				if (Math.abs(ndc.x) > fitMargin || Math.abs(ndc.y) > fitMargin) { fits = false; break; }
+		let targetFov: number;
+		if (globeViewActive) {
+			targetFov = GLOBE_FOV;
+		} else {
+			const testCam = new THREE.PerspectiveCamera(60, cameraRef.aspect, 0.1, 10);
+			testCam.position.set(0, 0, 0.0001);
+			testCam.up.copy(localNorth);
+			testCam.lookAt(centroidDir.clone().multiplyScalar(10));
+			const fitMargin = 0.85;
+			const maxFov = cameraRef.aspect < 0.8 ? 110 : 80;
+			let lo = 5, hi = maxFov + 10;
+			for (let i = 0; i < 16; i++) {
+				const mid = (lo + hi) / 2;
+				testCam.fov = mid;
+				testCam.updateProjectionMatrix();
+				let fits = true;
+				for (const pos of rc.hlPositions) {
+					const ndc = pos.clone().project(testCam);
+					if (Math.abs(ndc.x) > fitMargin || Math.abs(ndc.y) > fitMargin) { fits = false; break; }
+				}
+				if (fits) hi = mid; else lo = mid;
 			}
-			if (fits) hi = mid; else lo = mid;
+			targetFov = Math.min(maxFov, Math.max(15, hi));
 		}
-		const targetFov = Math.min(maxFov, Math.max(15, hi));
 
 		panToRaDec(centroidRa, centroidDec, targetFov);
 	}
@@ -2738,7 +2952,8 @@
 			const baseFov = DEFAULT_FOV;
 			const fovScale = camera.fov / baseFov;
 			const sizeScale = Math.min(container.clientWidth, container.clientHeight) / 800;
-			controls.rotateSpeed = -0.25 * fovScale / sizeScale;
+			const sign = globeViewActive ? 1 : -1;
+			controls.rotateSpeed = sign * 0.25 * fovScale / sizeScale;
 		}
 		updateRotateSpeed();
 		// Tilt default view 15° below the equator for a better sense of the sphere
@@ -2751,9 +2966,16 @@
 
 		const onWheel = (e: WheelEvent) => {
 			e.preventDefault();
-			camera.fov = Math.max(10, Math.min(120, camera.fov + e.deltaY * 0.05));
-			camera.updateProjectionMatrix();
-			updateRotateSpeed();
+			if (globeViewActive) {
+				// Zoom by changing camera distance
+				const dist = camera.position.length();
+				const newDist = Math.max(1.5, Math.min(6.0, dist + e.deltaY * 0.003));
+				camera.position.normalize().multiplyScalar(newDist);
+			} else {
+				camera.fov = Math.max(10, Math.min(120, camera.fov + e.deltaY * 0.05));
+				camera.updateProjectionMatrix();
+				updateRotateSpeed();
+			}
 		};
 		renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
 
@@ -2762,6 +2984,7 @@
 		// so that a slightly staggered two-finger touch isn't read as a drag.
 		let isPinching = false;
 		let touchGraceTimer: ReturnType<typeof setTimeout> | null = null;
+		let pinchStartCamDist = GLOBE_DISTANCE;
 
 		function getTouchDistance(t1: Touch, t2: Touch): number {
 			const dx = t1.clientX - t2.clientX;
@@ -2784,6 +3007,7 @@
 				controls.enableRotate = false;
 				pinchStartDist = getTouchDistance(e.touches[0], e.touches[1]);
 				pinchStartFov = camera.fov;
+				pinchStartCamDist = camera.position.length();
 			}
 		};
 
@@ -2792,9 +3016,14 @@
 				e.preventDefault();
 				const currentDist = getTouchDistance(e.touches[0], e.touches[1]);
 				const scale = pinchStartDist / currentDist;
-				camera.fov = Math.max(10, Math.min(120, pinchStartFov * scale));
-				camera.updateProjectionMatrix();
-				updateRotateSpeed();
+				if (globeViewActive) {
+					const newDist = Math.max(1.5, Math.min(6.0, pinchStartCamDist * scale));
+					camera.position.normalize().multiplyScalar(newDist);
+				} else {
+					camera.fov = Math.max(10, Math.min(120, pinchStartFov * scale));
+					camera.updateProjectionMatrix();
+					updateRotateSpeed();
+				}
 			}
 		};
 
@@ -3147,12 +3376,19 @@
 			const dt = clock.getDelta();
 			const elapsedTime = clock.getElapsedTime();
 			uniforms.uTime.value = elapsedTime;
-			// Stars grow as you zoom in (lower FOV)
-			uniforms.uFovScale.value = DEFAULT_FOV / camera.fov;
+			// Stars grow as you zoom in (lower FOV or closer distance in globe mode)
+			if (globeViewActive) {
+				// Only scale by distance — ignore FOV since it's fixed for framing
+				uniforms.uFovScale.value = GLOBE_DISTANCE / camera.position.length() * 0.4;
+			} else {
+				uniforms.uFovScale.value = DEFAULT_FOV / camera.fov;
+			}
 
 			// Update camera heading readout when grid is active
 			if (coordGridActive) {
 				const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+				// In globe mode the camera faces inward; show the far-side sky direction
+				if (globeViewActive) dir.negate();
 				const dec = Math.asin(Math.max(-1, Math.min(1, dir.y)));
 				let ra = Math.atan2(-dir.z, dir.x);
 				if (ra < 0) ra += Math.PI * 2;

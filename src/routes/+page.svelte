@@ -457,6 +457,7 @@
 	let brightness = $state(1.0);
 	let monoColor = $state(false);
 	let showSun = $state(false);
+	let globeView = $state(false);
 	let settingsOpen = $state(false);
 	let aboutOpen = $state(false);
 
@@ -498,6 +499,11 @@
 	function handleToggleSun() {
 		showSun = !showSun;
 		starField?.toggleSun(showSun);
+	}
+
+	function handleToggleGlobeView() {
+		globeView = !globeView;
+		starField?.toggleGlobeView(globeView);
 	}
 
 	async function handleShare() {
@@ -962,6 +968,14 @@
 								<line x1="16.95" y1="7.05" x2="19.07" y2="4.93" />
 							</svg>
 							<span>Sun</span>
+						</button>
+						<button class="settings-item" class:active={globeView} onclick={handleToggleGlobeView} role="menuitemcheckbox" aria-checked={globeView}>
+							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+								<circle cx="12" cy="12" r="9" />
+								<ellipse cx="12" cy="12" rx="9" ry="4" />
+								<ellipse cx="12" cy="12" rx="4" ry="9" />
+							</svg>
+							<span>Globe</span>
 						</button>
 						<div class="settings-item slider-row">
 							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
