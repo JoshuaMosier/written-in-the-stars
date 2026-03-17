@@ -1476,7 +1476,7 @@
 		box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.3);
 	}
 
-	.input-overlay input.shake {
+	.input-overlay :global(input.shake) {
 		animation: input-shake 0.3s ease-out;
 	}
 

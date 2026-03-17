@@ -748,7 +748,17 @@
 	let ambientQueue: number[] = [];
 	let ambientTimerId: ReturnType<typeof setTimeout> | null = null;
 	let ambientPaused = false;
-	let uniformsRef: { uDim: THREE.Uniform<number>; uTime: THREE.Uniform<number>; uFovScale: THREE.Uniform<number>; uHoveredIndex: THREE.Uniform<number>; uBrightness: THREE.Uniform<number>; uMonochrome: THREE.Uniform<number> } | null = null;
+	type StarUniforms = {
+		uDim: THREE.Uniform<number>;
+		uTime: THREE.Uniform<number>;
+		uFovScale: THREE.Uniform<number>;
+		uHoveredIndex: THREE.Uniform<number>;
+		uBrightness: THREE.Uniform<number>;
+		uMonochrome: THREE.Uniform<number>;
+		uShowSun: THREE.Uniform<number>;
+	};
+
+	let uniformsRef: StarUniforms | null = null;
 	const DEFAULT_FOV = 90;
 	const GLOBE_DISTANCE = 3.0;
 	// Fixed FOV that frames the full sphere with some breathing room at GLOBE_DISTANCE
