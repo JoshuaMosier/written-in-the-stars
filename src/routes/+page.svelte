@@ -44,6 +44,7 @@
 		starCount: number;
 		catalogId: string;
 		result: MatchResult;
+		color: string;
 	}
 
 	const matchingPhrases = [
@@ -124,6 +125,72 @@
 	let focusedIndex = $state(-1);
 	let rerollBlacklist: number[] = [];  // accumulates stars from previous re-rolls
 
+	// --- Hue ring color picker ---
+	let colorPickerOpen = $state<number | null>(null);
+	let colorDragActive = false;
+	let colorUpdateRaf = 0;
+
+	function hslToHex(h: number): string {
+		const s = 1, l = 0.5;
+		const a = s * Math.min(l, 1 - l);
+		const f = (n: number) => {
+			const k = (n + h / 30) % 12;
+			const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+			return Math.round(255 * color).toString(16).padStart(2, '0');
+		};
+		return `#${f(0)}${f(8)}${f(4)}`;
+	}
+
+	function hexToHue(hex: string): number | null {
+		const r = parseInt(hex.slice(1, 3), 16) / 255;
+		const g = parseInt(hex.slice(3, 5), 16) / 255;
+		const b = parseInt(hex.slice(5, 7), 16) / 255;
+		const max = Math.max(r, g, b), min = Math.min(r, g, b);
+		if (max - min < 0.01) return null;
+		const d = max - min;
+		let h = 0;
+		if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+		else if (max === g) h = ((b - r) / d + 2) / 6;
+		else h = ((r - g) / d + 4) / 6;
+		return h * 360;
+	}
+
+	function updateConstellationColor(index: number, color: string) {
+		constellations[index] = { ...constellations[index], color };
+		cancelAnimationFrame(colorUpdateRaf);
+		colorUpdateRaf = requestAnimationFrame(() => {
+			starField?.redrawConstellations(constellations.map(c => c.result), constellations.map(c => c.color));
+		});
+	}
+
+	function hueFromPointer(e: PointerEvent, container: HTMLElement): number {
+		const rect = container.getBoundingClientRect();
+		const dx = e.clientX - (rect.left + rect.width / 2);
+		const dy = e.clientY - (rect.top + rect.height / 2);
+		return ((Math.atan2(dy, dx) * 180 / Math.PI) + 90 + 360) % 360;
+	}
+
+	function handleRingStart(e: PointerEvent, index: number) {
+		if ((e.target as HTMLElement).closest('.hue-ring-center')) return;
+		const container = e.currentTarget as HTMLElement;
+		container.setPointerCapture(e.pointerId);
+		colorDragActive = true;
+		updateConstellationColor(index, hslToHex(hueFromPointer(e, container)));
+	}
+
+	function handleRingMove(e: PointerEvent, index: number) {
+		if (!colorDragActive) return;
+		const container = e.currentTarget as HTMLElement;
+		updateConstellationColor(index, hslToHex(hueFromPointer(e, container)));
+	}
+
+	function handleRingEnd() {
+		if (colorDragActive) {
+			colorDragActive = false;
+			colorPickerOpen = null;
+		}
+	}
+
 	function makeEntry(text: string, result: MatchResult): ConstellationEntry {
 		const now = new Date();
 		return {
@@ -132,6 +199,7 @@
 			starCount: result.pairs.length,
 			catalogId: `WSC ${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`,
 			result,
+			color: '#ffffff',
 		};
 	}
 
@@ -147,7 +215,7 @@
 		// Update URL hash with all constellations
 		history.replaceState(null, '', '#' + encodeAllToHash(constellations));
 
-		starField?.animateToMatch(result);
+		starField?.animateToMatch(result, false, entry.color);
 	}
 
 	// --- Check URL hash on load ---
@@ -195,7 +263,7 @@
 				showInput = false;
 				// Use refocusConstellation to draw all and animate camera to the last one
 				const allResults = constellations.map(c => c.result);
-				starField?.refocusConstellation(allResults, focusedIndex);
+				starField?.refocusConstellation(allResults, focusedIndex, constellations.map(c => c.color));
 			});
 		} else if (hashWasPresent) {
 			// Hash was in the URL but nothing decoded — show error and clean up URL
@@ -322,7 +390,7 @@
 
 		// Redraw all constellations with focus on the re-rolled one
 		const allResults = constellations.map(c => c.result);
-		starField?.refocusConstellation(allResults, focusedIndex);
+		starField?.refocusConstellation(allResults, focusedIndex, constellations.map(c => c.color));
 	}
 
 	function handleReroll() {
@@ -356,7 +424,7 @@
 		if (showInput || isMatching) return;
 		focusedIndex = index;
 		const allResults = constellations.map(c => c.result);
-		starField?.panToConstellation(allResults, index);
+		starField?.panToConstellation(allResults, index, constellations.map(c => c.color));
 	}
 
 	function handleDeleteConstellation(index: number, event: MouseEvent) {
@@ -376,7 +444,7 @@
 		}
 		history.replaceState(null, '', '#' + encodeAllToHash(constellations));
 		const allResults = constellations.map(c => c.result);
-		starField?.refocusConstellation(allResults, focusedIndex);
+		starField?.refocusConstellation(allResults, focusedIndex, constellations.map(c => c.color));
 	}
 
 	function handleAddAnother() {
@@ -428,7 +496,7 @@
 			...constellations.slice(action.constellationIndex + 1),
 		];
 		history.replaceState(null, '', '#' + encodeAllToHash(constellations));
-		starField?.redrawConstellations(constellations.map(c => c.result));
+		starField?.redrawConstellations(constellations.map(c => c.result), constellations.map(c => c.color));
 	}
 
 	function handleUndo() {
@@ -1355,7 +1423,7 @@
 					onclick={() => handleFocusConstellation(i)}
 					disabled={showInput || isMatching}
 				>
-					<div class="constellation-name">{entry.name}</div>
+					<div class="constellation-name" style="color: {entry.color}; text-shadow: -1px -1px 2px rgba(0,0,0,0.9), 1px -1px 2px rgba(0,0,0,0.9), -1px 1px 2px rgba(0,0,0,0.9), 1px 1px 2px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6), 0 0 14px {entry.color}70, 0 0 28px {entry.color}35;">{entry.name}</div>
 					<div class="constellation-info">
 						<span class="catalog-id">{entry.catalogId}</span>
 						<span class="separator" aria-hidden="true">·</span>
@@ -1363,6 +1431,40 @@
 					</div>
 				</button>
 				{#if !showInput && !isMatching}
+					<div class="color-picker-wrapper">
+						<button
+							class="color-picker-btn"
+							onclick={(e) => { e.stopPropagation(); colorPickerOpen = colorPickerOpen === i ? null : i; }}
+							aria-label="Change color for {entry.name}"
+						>
+							<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+								<circle cx="12" cy="12" r="5" fill={entry.color} stroke="none" />
+								<circle cx="12" cy="12" r="8" />
+							</svg>
+						</button>
+						{#if colorPickerOpen === i}
+							<div class="hue-ring-backdrop" onclick={() => colorPickerOpen = null} role="none"></div>
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div
+								class="hue-ring-container"
+								onpointerdown={(e) => handleRingStart(e, i)}
+								onpointermove={(e) => handleRingMove(e, i)}
+								onpointerup={handleRingEnd}
+							>
+								<div class="hue-ring"></div>
+								{#if hexToHue(entry.color) !== null}
+									<div class="hue-ring-indicator" style="transform: rotate({hexToHue(entry.color)}deg)">
+										<div class="hue-ring-dot" style="background: {entry.color}; box-shadow: 0 0 6px {entry.color};"></div>
+									</div>
+								{/if}
+								<button
+									class="hue-ring-center"
+									onclick={() => { updateConstellationColor(i, '#ffffff'); colorPickerOpen = null; }}
+									aria-label="Reset to white"
+								></button>
+							</div>
+						{/if}
+					</div>
 					<button
 						class="delete-btn"
 						onclick={(e) => handleDeleteConstellation(i, e)}
@@ -1663,8 +1765,117 @@
 	}
 
 	.delete-spacer {
-		width: 26px;
+		width: 56px;
 		flex-shrink: 0;
+	}
+
+	.color-picker-wrapper {
+		position: relative;
+		flex-shrink: 0;
+		margin-left: 4px;
+	}
+
+	.color-picker-btn {
+		background: rgba(255, 255, 255, 0.06);
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		color: rgba(255, 255, 255, 0.35);
+		cursor: pointer;
+		padding: 5px;
+		border-radius: 4px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: opacity 0.2s;
+		opacity: 0;
+	}
+
+	.color-picker-btn:hover {
+		background: rgba(255, 255, 255, 0.12);
+		border-color: rgba(255, 255, 255, 0.2);
+	}
+
+	.constellation-card:hover .color-picker-btn,
+	.color-picker-btn:focus-visible {
+		opacity: 1;
+	}
+
+	.hue-ring-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 99;
+	}
+
+	.hue-ring-container {
+		position: absolute;
+		width: 80px;
+		height: 80px;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		z-index: 100;
+		touch-action: none;
+		animation: ring-appear 0.15s ease-out;
+	}
+
+	@keyframes ring-appear {
+		from { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+		to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+	}
+
+	.hue-ring {
+		position: absolute;
+		inset: 0;
+		border-radius: 50%;
+		background: conic-gradient(
+			hsl(0, 100%, 50%),
+			hsl(60, 100%, 50%),
+			hsl(120, 100%, 50%),
+			hsl(180, 100%, 50%),
+			hsl(240, 100%, 50%),
+			hsl(300, 100%, 50%),
+			hsl(360, 100%, 50%)
+		);
+		-webkit-mask: radial-gradient(circle, transparent 55%, black 60%);
+		mask: radial-gradient(circle, transparent 55%, black 60%);
+		cursor: crosshair;
+	}
+
+	.hue-ring-indicator {
+		position: absolute;
+		top: 0;
+		left: 50%;
+		width: 0;
+		height: 50%;
+		transform-origin: bottom center;
+		pointer-events: none;
+	}
+
+	.hue-ring-dot {
+		position: absolute;
+		top: 2px;
+		left: -6px;
+		width: 12px;
+		height: 12px;
+		border-radius: 50%;
+		border: 2px solid white;
+	}
+
+	.hue-ring-center {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		width: 32px;
+		height: 32px;
+		border-radius: 50%;
+		background: #ffffff;
+		border: 2px solid rgba(255, 255, 255, 0.25);
+		cursor: pointer;
+		transition: border-color 0.15s;
+	}
+
+	.hue-ring-center:hover {
+		border-color: rgba(255, 255, 255, 0.6);
 	}
 
 	.delete-btn {
@@ -1702,8 +1913,6 @@
 	.constellation-name {
 		font-size: 28px;
 		letter-spacing: 6px;
-		color: rgba(255, 215, 0, 0.85);
-		text-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
 	}
 
 	.constellation-entry:not(.focused) .constellation-name {
@@ -2005,7 +2214,8 @@
 			letter-spacing: 1.5px;
 		}
 
-		.delete-btn {
+		.delete-btn,
+		.color-picker-btn {
 			opacity: 1;
 		}
 

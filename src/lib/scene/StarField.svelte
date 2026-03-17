@@ -52,6 +52,7 @@
 
 	// --- Draggable constellation vertices ---
 	let currentResults: MatchResult[] = [];
+	let currentColors: string[] = [];
 	let dragState: {
 		active: boolean;
 		constellationIndex: number;
@@ -1140,6 +1141,7 @@
 		}
 		constellationGroups = [];
 		currentResults = [];
+		currentColors = [];
 	}
 
 	function prepareForConstellation() {
@@ -1168,12 +1170,16 @@
 		}
 	}
 
-	function drawConstellationAnimated(result: MatchResult, fast = false) {
+	function drawConstellationAnimated(result: MatchResult, fast = false, color?: string) {
 		if (!sceneRef) return;
 
 		const constellationGroup = new THREE.Group();
 		constellationGroups.push(constellationGroup);
 		sceneRef.add(constellationGroup);
+
+		const tColor = new THREE.Color(color || '#ffffff');
+		const colorHex = tColor.getHex();
+		const cr = tColor.r, cg = tColor.g, cb = tColor.b;
 
 		const nodeToPos = new Map<number, THREE.Vector3>();
 		for (const pair of result.pairs) {
@@ -1213,6 +1219,7 @@
 		const starKey = (v: THREE.Vector3) => `${v.x.toFixed(6)},${v.y.toFixed(6)},${v.z.toFixed(6)}`;
 
 		const hlMat = new THREE.ShaderMaterial({
+			uniforms: { uColor: { value: new THREE.Vector3(cr, cg, cb) } },
 			vertexShader: `
 				void main() {
 					vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
@@ -1221,12 +1228,12 @@
 				}
 			`,
 			fragmentShader: `
+				uniform vec3 uColor;
 				void main() {
 					float d = length(gl_PointCoord - 0.5) * 2.0;
 					if (d > 1.0) discard;
 					float alpha = exp(-d * d * 4.0) * 0.9;
-					vec3 color = vec3(1.0, 1.0, 1.0);
-					gl_FragColor = vec4(color * alpha, alpha);
+					gl_FragColor = vec4(uColor * alpha, alpha);
 				}
 			`,
 			transparent: true,
@@ -1236,6 +1243,7 @@
 
 		// Ring shader for isolated nodes (periods/dots)
 		const ringMat = new THREE.ShaderMaterial({
+			uniforms: { uColor: { value: new THREE.Vector3(cr, cg, cb) } },
 			vertexShader: `
 				void main() {
 					vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
@@ -1244,6 +1252,7 @@
 				}
 			`,
 			fragmentShader: `
+				uniform vec3 uColor;
 				void main() {
 					float d = length(gl_PointCoord - 0.5) * 2.0;
 					if (d > 1.0) discard;
@@ -1252,8 +1261,7 @@
 					// Soft inner glow
 					float glow = exp(-d * d * 6.0) * 0.15;
 					float alpha = (ring * 0.7 + glow);
-					vec3 color = vec3(1.0, 1.0, 1.0);
-					gl_FragColor = vec4(color * alpha, alpha);
+					gl_FragColor = vec4(uColor * alpha, alpha);
 				}
 			`,
 			transparent: true,
@@ -1316,7 +1324,7 @@
 
 				// Halo pass - wider, soft glow
 				const haloMat = new LineMaterial({
-					color: 0xffffff,
+					color: colorHex,
 					linewidth: 8,
 					transparent: true,
 					opacity: 0.1,
@@ -1330,7 +1338,7 @@
 
 				// Core pass - thinner, brighter
 				const coreMat = new LineMaterial({
-					color: 0xffffff,
+					color: colorHex,
 					linewidth: 2.5,
 					transparent: true,
 					opacity: 0.4,
@@ -1392,12 +1400,16 @@
 		drawAnimationIds.push(id);
 	}
 
-	function drawConstellationInstant(result: MatchResult) {
+	function drawConstellationInstant(result: MatchResult, color?: string) {
 		if (!sceneRef) return;
 
 		const constellationGroup = new THREE.Group();
 		constellationGroups.push(constellationGroup);
 		sceneRef.add(constellationGroup);
+
+		const tColor = new THREE.Color(color || '#ffffff');
+		const colorHex = tColor.getHex();
+		const cr = tColor.r, cg = tColor.g, cb = tColor.b;
 
 		const nodeToPos = new Map<number, THREE.Vector3>();
 		for (const pair of result.pairs) {
@@ -1420,7 +1432,7 @@
 			segGeom.setPositions(linePositions);
 
 			const haloMat = new LineMaterial({
-				color: 0xffffff,
+				color: colorHex,
 				linewidth: 8,
 				transparent: true,
 				opacity: 0.1,
@@ -1431,7 +1443,7 @@
 			constellationGroup.add(new LineSegments2(segGeom, haloMat));
 
 			const coreMat = new LineMaterial({
-				color: 0xffffff,
+				color: colorHex,
 				linewidth: 2.5,
 				transparent: true,
 				opacity: 0.4,
@@ -1450,8 +1462,9 @@
 
 		if (hlPositions.length > 0) {
 			const hlMat = new THREE.ShaderMaterial({
+				uniforms: { uColor: { value: new THREE.Vector3(cr, cg, cb) } },
 				vertexShader: `void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_PointSize = 12.0; }`,
-				fragmentShader: `void main() { float d = length(gl_PointCoord - 0.5) * 2.0; if (d > 1.0) discard; float alpha = exp(-d * d * 4.0) * 0.9; gl_FragColor = vec4(vec3(alpha), alpha); }`,
+				fragmentShader: `uniform vec3 uColor; void main() { float d = length(gl_PointCoord - 0.5) * 2.0; if (d > 1.0) discard; float alpha = exp(-d * d * 4.0) * 0.9; gl_FragColor = vec4(uColor * alpha, alpha); }`,
 				transparent: true,
 				depthTest: false,
 				blending: THREE.AdditiveBlending,
@@ -1473,8 +1486,9 @@
 		}
 		if (isoPositions.length > 0) {
 			const ringMat = new THREE.ShaderMaterial({
+				uniforms: { uColor: { value: new THREE.Vector3(cr, cg, cb) } },
 				vertexShader: `void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_PointSize = 28.0; }`,
-				fragmentShader: `void main() { float d = length(gl_PointCoord - 0.5) * 2.0; if (d > 1.0) discard; float ring = smoothstep(0.35, 0.55, d) * smoothstep(0.95, 0.7, d); float glow = exp(-d * d * 6.0) * 0.15; float alpha = ring * 0.7 + glow; gl_FragColor = vec4(vec3(alpha), alpha); }`,
+				fragmentShader: `uniform vec3 uColor; void main() { float d = length(gl_PointCoord - 0.5) * 2.0; if (d > 1.0) discard; float ring = smoothstep(0.35, 0.55, d) * smoothstep(0.95, 0.7, d); float glow = exp(-d * d * 6.0) * 0.15; float alpha = ring * 0.7 + glow; gl_FragColor = vec4(uColor * alpha, alpha); }`,
 				transparent: true,
 				depthTest: false,
 				blending: THREE.AdditiveBlending,
@@ -1487,7 +1501,7 @@
 		}
 	}
 
-	function focusConstellationInstant(allResults: MatchResult[], focusIndex: number) {
+	function focusConstellationInstant(allResults: MatchResult[], focusIndex: number, colors?: string[]) {
 		if (!controlsRef || !cameraRef) return;
 
 		const result = allResults[focusIndex];
@@ -1545,8 +1559,9 @@
 		prepareForConstellation();
 		clearAllConstellations();
 		currentResults = [...allResults];
-		for (const entry of allResults) {
-			drawConstellationInstant(entry);
+		currentColors = colors ? [...colors] : allResults.map(() => '#ffffff');
+		for (let i = 0; i < allResults.length; i++) {
+			drawConstellationInstant(allResults[i], currentColors[i]);
 		}
 
 		if (globeViewActive) {
@@ -1563,46 +1578,49 @@
 		controlsRef.update();
 	}
 
-	export function refocusConstellation(allResults: MatchResult[], focusIndex: number) {
+	export function refocusConstellation(allResults: MatchResult[], focusIndex: number, colors?: string[]) {
 		if (reducedMotion) {
-			focusConstellationInstant(allResults, focusIndex);
+			focusConstellationInstant(allResults, focusIndex, colors);
 			return;
 		}
 
 		clearAllConstellations();
 		currentResults = [...allResults];
+		currentColors = colors ? [...colors] : allResults.map(() => '#ffffff');
 		// Instantly draw all non-focused constellations
 		for (let i = 0; i < allResults.length; i++) {
-			if (i !== focusIndex) drawConstellationInstant(allResults[i]);
+			if (i !== focusIndex) drawConstellationInstant(allResults[i], currentColors[i]);
 		}
 		// Animate camera to focused one (fast replay)
-		animateToMatch(allResults[focusIndex], true);
+		animateToMatch(allResults[focusIndex], true, currentColors[focusIndex]);
 	}
 
 	/** Redraw all constellations instantly without camera animation (used after vertex drag) */
-	export function redrawConstellations(allResults: MatchResult[]) {
+	export function redrawConstellations(allResults: MatchResult[], colors?: string[]) {
 		clearAllConstellations();
 		currentResults = [...allResults];
-		for (const result of allResults) {
-			drawConstellationInstant(result);
+		currentColors = colors ? [...colors] : allResults.map(() => '#ffffff');
+		for (let i = 0; i < allResults.length; i++) {
+			drawConstellationInstant(allResults[i], currentColors[i]);
 		}
 	}
 
 	/** Smooth pan to focused constellation, then draw it animated; others stay instant */
-	export function panToConstellation(allResults: MatchResult[], focusIndex: number) {
+	export function panToConstellation(allResults: MatchResult[], focusIndex: number, colors?: string[]) {
 		if (!controlsRef || !cameraRef) return;
 
 		// Reduced motion: jump instantly
 		if (reducedMotion) {
-			focusConstellationInstant(allResults, focusIndex);
+			focusConstellationInstant(allResults, focusIndex, colors);
 			return;
 		}
 
 		// Redraw everything instantly first (non-focused stay, focused will be redrawn animated on arrival)
 		clearAllConstellations();
 		currentResults = [...allResults];
+		currentColors = colors ? [...colors] : allResults.map(() => '#ffffff');
 		for (let i = 0; i < allResults.length; i++) {
-			if (i !== focusIndex) drawConstellationInstant(allResults[i]);
+			if (i !== focusIndex) drawConstellationInstant(allResults[i], currentColors[i]);
 		}
 
 		const result = allResults[focusIndex];
@@ -1686,7 +1704,7 @@
 				if (t < 1) {
 					requestAnimationFrame(animate);
 				} else {
-					drawConstellationAnimated(result, true);
+					drawConstellationAnimated(result, true, currentColors[focusIndex]);
 				}
 			}
 			animate();
@@ -1722,7 +1740,7 @@
 				requestAnimationFrame(animate);
 			} else {
 				// Camera arrived — draw the focused constellation with animation
-				drawConstellationAnimated(result, true);
+				drawConstellationAnimated(result, true, currentColors[focusIndex]);
 			}
 		}
 		animate();
@@ -2094,17 +2112,18 @@
 		}
 	}
 
-	export function animateToMatch(result: MatchResult, fast = false) {
+	export function animateToMatch(result: MatchResult, fast = false, color?: string) {
 		if (!controlsRef || !cameraRef) return;
 
 		// Track this result if not already tracked (single-add case)
 		if (!currentResults.includes(result)) {
 			currentResults.push(result);
+			currentColors.push(color || '#ffffff');
 		}
 
 		// Reduced motion: skip camera animation, draw instantly
 		if (reducedMotion) {
-			focusConstellationInstant(currentResults, currentResults.indexOf(result));
+			focusConstellationInstant(currentResults, currentResults.indexOf(result), currentColors);
 			return;
 		}
 
@@ -2210,7 +2229,7 @@
 				if (t < 1) {
 					requestAnimationFrame(animate);
 				} else {
-					drawConstellationAnimated(result, fast);
+					drawConstellationAnimated(result, fast, color);
 				}
 			}
 			animate();
@@ -2254,7 +2273,7 @@
 				requestAnimationFrame(animate);
 			} else {
 				// Camera arrived — start drawing the constellation
-				drawConstellationAnimated(result, fast);
+				drawConstellationAnimated(result, fast, color);
 			}
 		}
 		animate();
