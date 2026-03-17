@@ -779,6 +779,8 @@
 	let globeTransitionActive = false;
 	let globeTransitionFovOverride = false;
 	let globeTransitionRestore: { enableRotate: boolean } | null = null;
+	let overlayLabelGlobeViewActive = false;
+	let overlayLabelTransitionOpacity = 1;
 
 	// --- Auto-rotate (landing page drift) ---
 	let autoRotateActive = !reducedMotion;
@@ -852,7 +854,8 @@
 		cameraRef.getWorldDirection(overlayCameraDir);
 		// In globe mode the camera looks inward, so flip the direction
 		// so that dot-product visibility checks still work the same way.
-		if (globeViewActive) overlayCameraDir.negate();
+		if (overlayLabelGlobeViewActive) overlayCameraDir.negate();
+		const transitionOpacity = overlayLabelTransitionOpacity;
 
 		for (const ac of ambientConstellations) {
 			const phaseElapsed = now - ac.phaseStart;
@@ -862,7 +865,7 @@
 				: 1 - phaseElapsed / AMBIENT_FADE;
 
 			if (updateOverlayLabelPosition(ac.label, ac.centroid, AMBIENT_LABEL_OFFSET)) {
-				setOverlayLabelOpacity(ac.label, labelOpacity * 0.85);
+				setOverlayLabelOpacity(ac.label, labelOpacity * 0.85 * transitionOpacity);
 			} else {
 				setOverlayLabelOpacity(ac.label, 0);
 			}
@@ -878,7 +881,7 @@
 
 				if (updateOverlayLabelPosition(label, centroid, 0)) {
 					const fade = Math.min(1, (dot - 0.2) / 0.3);
-					setOverlayLabelOpacity(label, fade * 0.6);
+					setOverlayLabelOpacity(label, fade * 0.6 * transitionOpacity);
 				} else {
 					setOverlayLabelOpacity(label, 0);
 				}
@@ -896,7 +899,7 @@
 					// Brighter stars (lower mag) get more opaque labels
 					const magFade = Math.max(0.3, 1 - sl.mag / STAR_LABEL_MAG_LIMIT);
 					const angleFade = Math.min(1, (dot - 0.15) / 0.3);
-					setOverlayLabelOpacity(sl.label, angleFade * magFade * 0.75);
+					setOverlayLabelOpacity(sl.label, angleFade * magFade * 0.75 * transitionOpacity);
 				} else {
 					setOverlayLabelOpacity(sl.label, 0);
 				}
@@ -914,7 +917,7 @@
 				}
 				if (updateOverlayLabelPosition(label, worldPos, 0)) {
 					const fade = Math.min(1, (dot - 0.1) / 0.3);
-					setOverlayLabelOpacity(label, fade * 0.4);
+					setOverlayLabelOpacity(label, fade * 0.4 * transitionOpacity);
 				} else {
 					setOverlayLabelOpacity(label, 0);
 				}
@@ -925,7 +928,7 @@
 		if (starHighlightLabel && (starHighlightLabel as any)._hlWorldPos) {
 			const worldPos = (starHighlightLabel as any)._hlWorldPos as THREE.Vector3;
 			if (updateOverlayLabelPosition(starHighlightLabel, worldPos, -20)) {
-				setOverlayLabelOpacity(starHighlightLabel, 0.9);
+				setOverlayLabelOpacity(starHighlightLabel, 0.9 * transitionOpacity);
 			} else {
 				setOverlayLabelOpacity(starHighlightLabel, 0);
 			}
@@ -936,7 +939,7 @@
 			const centroid = (tempConstellationLabel as any)._tcCentroid as THREE.Vector3;
 			const dot = centroid.dot(overlayCameraDir);
 			if (dot > 0.2 && updateOverlayLabelPosition(tempConstellationLabel, centroid, 0)) {
-				setOverlayLabelOpacity(tempConstellationLabel, 0.7);
+				setOverlayLabelOpacity(tempConstellationLabel, 0.7 * transitionOpacity);
 			} else {
 				setOverlayLabelOpacity(tempConstellationLabel, 0);
 			}
@@ -2684,6 +2687,8 @@
 
 		applyCameraFrame(position, target, up, fov, fovScale);
 		globeViewActive = on;
+		overlayLabelGlobeViewActive = on;
+		overlayLabelTransitionOpacity = 1;
 		applyViewInteractionState(on);
 		syncControlsUp(controlsRef, cameraRef.up);
 		resetControlsMotion(controlsRef);
@@ -2744,11 +2749,15 @@
 
 		const startTime = performance.now();
 		const duration = 2000;
+		const labelFadeOutEnd = 0.16;
+		const labelFadeInStart = 0.84;
 		const startPos = cameraRef.position.clone();
 		const startTarget = controlsRef.target.clone();
 		const startUp = cameraRef.up.clone();
 		const startFov = cameraRef.fov;
 		const startFovScale = getCurrentFrameFovScale(startPos, startFov);
+		const startLabelOpacity = overlayLabelTransitionOpacity;
+		const startLabelGlobeView = overlayLabelGlobeViewActive;
 		const framePos = new THREE.Vector3();
 		const frameTarget = new THREE.Vector3();
 
@@ -2760,6 +2769,18 @@
 			const fov = startFov + (endFov - startFov) * ease;
 			const fovScale = startFovScale + (endFovScale - startFovScale) * ease;
 			applyCameraFrame(framePos, frameTarget, startUp, fov, fovScale);
+			if (t < labelFadeOutEnd) {
+				const fadeOut = easeInOutQuad(t / labelFadeOutEnd);
+				overlayLabelGlobeViewActive = startLabelGlobeView;
+				overlayLabelTransitionOpacity = startLabelOpacity * (1 - fadeOut);
+			} else if (t < labelFadeInStart) {
+				overlayLabelGlobeViewActive = on;
+				overlayLabelTransitionOpacity = 0;
+			} else {
+				const fadeIn = easeInOutQuad((t - labelFadeInStart) / (1 - labelFadeInStart));
+				overlayLabelGlobeViewActive = on;
+				overlayLabelTransitionOpacity = fadeIn;
+			}
 
 			if (t < 1) {
 				globeTransitionId = requestAnimationFrame(animate);
