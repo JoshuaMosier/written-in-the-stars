@@ -1081,19 +1081,22 @@
 			{#if inputRejectMsg}
 				<div class="input-reject-msg">{inputRejectMsg}</div>
 			{/if}
-			<input
-				id="constellation-input"
-				type="text"
-				bind:value={inputText}
-				oninput={filterInput}
-				onkeydown={handleKeydown}
-				placeholder="Search the stars..."
-				maxlength={30}
-				disabled={isMatching || !starsReady}
-				autocomplete="off"
-				aria-describedby={isMatching ? 'matching-status' : undefined}
-				use:autoFocus
-			/>
+			<div class="input-sizer">
+				<span class="input-measure" aria-hidden="true">{inputText || 'Search the stars...'}</span>
+				<input
+					id="constellation-input"
+					type="text"
+					bind:value={inputText}
+					oninput={filterInput}
+					onkeydown={handleKeydown}
+					placeholder="Search the stars..."
+					maxlength={30}
+					disabled={isMatching || !starsReady}
+					autocomplete="off"
+					aria-describedby={isMatching ? 'matching-status' : undefined}
+					use:autoFocus
+				/>
+			</div>
 			{#if isMatching}
 				<div id="matching-status" class="matching-indicator" role="status" aria-live="polite">
 					<span class="matching-phrase">{matchingPhrase}...</span>
@@ -1447,6 +1450,35 @@
 		pointer-events: none;
 	}
 
+	.input-sizer {
+		display: inline-grid;
+		align-items: center;
+		min-width: 320px;
+		max-width: 90vw;
+	}
+
+	.input-sizer::after,
+	.input-sizer > .input-measure {
+		display: none;
+	}
+
+	.input-sizer > input,
+	.input-sizer > .input-measure {
+		grid-area: 1 / 1;
+		font-size: 24px;
+		font-family: inherit;
+		padding: 16px 28px;
+		letter-spacing: 2px;
+		white-space: pre;
+	}
+
+	.input-sizer > .input-measure {
+		display: inline-block;
+		visibility: hidden;
+		pointer-events: none;
+		text-align: center;
+	}
+
 	.input-overlay input {
 		background: rgba(0, 0, 0, 0.2);
 		border: 1px solid rgba(255, 255, 255, 0.15);
@@ -1455,8 +1487,7 @@
 		font-size: 24px;
 		font-family: inherit;
 		padding: 16px 28px;
-		width: 420px;
-		max-width: 85vw;
+		width: 100%;
 		text-align: center;
 		letter-spacing: 2px;
 		outline: none;
@@ -1939,10 +1970,20 @@
 
 	/* Mobile adjustments */
 	@media (max-width: 480px) {
+		.input-sizer {
+			display: contents;
+		}
+
+		.input-sizer > .input-measure {
+			display: none;
+		}
+
 		.input-overlay input {
 			font-size: 18px;
 			padding: 14px 20px;
 			letter-spacing: 1.5px;
+			width: 85vw;
+			max-width: 85vw;
 		}
 
 		.constellation-name {
