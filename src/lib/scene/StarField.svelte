@@ -774,6 +774,12 @@
 	let rendererSize = new THREE.Vector2(1, 1);
 	let globeViewActive = false;
 
+	// --- Globe view transition ---
+	let globeTransitionId: number | null = null;
+	let globeTransitionActive = false;
+	let globeTransitionFovOverride = false;
+	let globeTransitionRestore: { enableRotate: boolean } | null = null;
+
 	// --- Auto-rotate (landing page drift) ---
 	let autoRotateActive = !reducedMotion;
 
@@ -2597,6 +2603,101 @@
 		if (uniformsRef) uniformsRef.uBrightness.value = value;
 	}
 
+	function getViewFovScale(position: THREE.Vector3, fov: number, globeView: boolean) {
+		if (globeView) {
+			const distance = position.length();
+			return distance > 0.0001 ? GLOBE_DISTANCE / distance * 0.4 : 0.4;
+		}
+		return DEFAULT_FOV / fov;
+	}
+
+	function easeInOutQuad(t: number) {
+		return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+	}
+
+	function applyViewInteractionState(globeView: boolean) {
+		if (!controlsRef) return;
+		controlsRef.enableZoom = false;
+
+		if (globeView) {
+			controlsRef.minDistance = 1.5;
+			controlsRef.maxDistance = 6.0;
+			controlsRef.rotateSpeed = Math.abs(controlsRef.rotateSpeed);
+			controlsRef.autoRotateSpeed = -Math.abs(controlsRef.autoRotateSpeed);
+			return;
+		}
+
+		controlsRef.minDistance = 0.0001;
+		controlsRef.maxDistance = 0.01;
+		controlsRef.rotateSpeed = -Math.abs(controlsRef.rotateSpeed);
+		controlsRef.autoRotateSpeed = Math.abs(controlsRef.autoRotateSpeed);
+	}
+
+	function resetControlsMotion(controls: OrbitControls) {
+		(controls as any)._sphericalDelta.set(0, 0, 0);
+		(controls as any)._panOffset.set(0, 0, 0);
+		(controls as any)._scale = 1;
+	}
+
+	function applyCameraFrame(
+		position: THREE.Vector3,
+		target: THREE.Vector3,
+		up: THREE.Vector3,
+		fov: number,
+		fovScale: number
+	) {
+		if (!cameraRef || !controlsRef) return;
+		cameraRef.position.copy(position);
+		controlsRef.target.copy(target);
+		cameraRef.up.copy(up);
+		cameraRef.fov = fov;
+		cameraRef.updateProjectionMatrix();
+		if (uniformsRef) uniformsRef.uFovScale.value = fovScale;
+		cameraRef.lookAt(target);
+		cameraRef.updateMatrixWorld();
+	}
+
+	function getCurrentViewDirection() {
+		if (!cameraRef || !controlsRef) return new THREE.Vector3(0, 0, -1);
+
+		const viewDir = controlsRef.target.clone().sub(cameraRef.position);
+		if (viewDir.lengthSq() > 1e-8) return viewDir.normalize();
+		if (cameraRef.position.lengthSq() > 1e-8) return cameraRef.position.clone().normalize().negate();
+		return new THREE.Vector3(0, 0, -1);
+	}
+
+	function getCurrentFrameFovScale(position: THREE.Vector3, fov: number) {
+		if (uniformsRef) return uniformsRef.uFovScale.value;
+		return getViewFovScale(position, fov, position.length() > 0.1);
+	}
+
+	function finalizeGlobeTransition(
+		on: boolean,
+		position: THREE.Vector3,
+		target: THREE.Vector3,
+		up: THREE.Vector3,
+		fov: number,
+		fovScale: number,
+		enableRotate: boolean
+	) {
+		if (!controlsRef || !cameraRef) return;
+
+		applyCameraFrame(position, target, up, fov, fovScale);
+		globeViewActive = on;
+		applyViewInteractionState(on);
+		syncControlsUp(controlsRef, cameraRef.up);
+		resetControlsMotion(controlsRef);
+		controlsRef.enableRotate = enableRotate;
+		controlsRef.autoRotate = false;
+		controlsRef.enabled = true;
+		globeTransitionFovOverride = false;
+		globeTransitionActive = false;
+		controlsRef.update();
+		controlsRef.autoRotate = autoRotateActive;
+		globeTransitionId = null;
+		globeTransitionRestore = null;
+	}
+
 	export function setMonochrome(on: boolean) {
 		if (uniformsRef) uniformsRef.uMonochrome.value = on ? 1.0 : 0.0;
 	}
@@ -2607,34 +2708,68 @@
 
 	export function toggleGlobeView(on: boolean) {
 		if (!controlsRef || !cameraRef) return;
-		globeViewActive = on;
+		if (on === globeViewActive && !globeTransitionActive) return;
 
-		if (on) {
-			// Move camera outside the sphere, facing back toward the constellation
-			const lookDir = cameraRef.position.clone().sub(controlsRef.target).normalize();
-			cameraRef.position.copy(lookDir.multiplyScalar(GLOBE_DISTANCE));
-			controlsRef.target.set(0, 0, 0);
-			// Keep enableZoom false — custom onWheel handler manages globe distance
-			controlsRef.minDistance = 1.5;
-			controlsRef.maxDistance = 6.0;
-			controlsRef.rotateSpeed = Math.abs(controlsRef.rotateSpeed);
-			controlsRef.autoRotateSpeed = -Math.abs(controlsRef.autoRotateSpeed);
-			cameraRef.fov = getGlobeFov();
-			cameraRef.updateProjectionMatrix();
-		} else {
-			// Move camera back inside the sphere
-			const lookDir = new THREE.Vector3().subVectors(controlsRef.target, cameraRef.position).normalize();
-			cameraRef.position.set(0, 0, 0.0001);
-			controlsRef.target.copy(cameraRef.position).addScaledVector(lookDir, 0.001);
-			controlsRef.enableZoom = false;
-			controlsRef.minDistance = 0.0001;
-			controlsRef.maxDistance = 0.01;
-			controlsRef.rotateSpeed = -Math.abs(controlsRef.rotateSpeed);
-			controlsRef.autoRotateSpeed = Math.abs(controlsRef.autoRotateSpeed);
-			cameraRef.fov = DEFAULT_FOV;
-			cameraRef.updateProjectionMatrix();
+		if (globeTransitionId !== null) {
+			cancelAnimationFrame(globeTransitionId);
+			globeTransitionId = null;
 		}
-		controlsRef.update();
+
+		const enableRotate = globeTransitionRestore?.enableRotate ?? controlsRef.enableRotate;
+		const viewDir = getCurrentViewDirection();
+		const endPos = on
+			? viewDir.clone().negate().multiplyScalar(GLOBE_DISTANCE)
+			: new THREE.Vector3(0, 0, 0.0001);
+		const endTarget = on
+			? new THREE.Vector3(0, 0, 0)
+			: endPos.clone().addScaledVector(viewDir, 0.001);
+		const endUp = cameraRef.up.clone();
+		const endFov = on ? getGlobeFov() : DEFAULT_FOV;
+		const endFovScale = getViewFovScale(endPos, endFov, on);
+
+		if (reducedMotion) {
+			finalizeGlobeTransition(on, endPos, endTarget, endUp, endFov, endFovScale, enableRotate);
+			return;
+		}
+
+		if (!globeTransitionRestore) {
+			globeTransitionRestore = { enableRotate: controlsRef.enableRotate };
+		}
+
+		globeTransitionActive = true;
+		controlsRef.autoRotate = false;
+		controlsRef.enabled = false;
+		resetControlsMotion(controlsRef);
+		globeTransitionFovOverride = true;
+
+		const startTime = performance.now();
+		const duration = 2000;
+		const startPos = cameraRef.position.clone();
+		const startTarget = controlsRef.target.clone();
+		const startUp = cameraRef.up.clone();
+		const startFov = cameraRef.fov;
+		const startFovScale = getCurrentFrameFovScale(startPos, startFov);
+		const framePos = new THREE.Vector3();
+		const frameTarget = new THREE.Vector3();
+
+		function animate() {
+			const t = Math.min(1, (performance.now() - startTime) / duration);
+			const ease = easeInOutQuad(t);
+			framePos.lerpVectors(startPos, endPos, ease);
+			frameTarget.lerpVectors(startTarget, endTarget, ease);
+			const fov = startFov + (endFov - startFov) * ease;
+			const fovScale = startFovScale + (endFovScale - startFovScale) * ease;
+			applyCameraFrame(framePos, frameTarget, startUp, fov, fovScale);
+
+			if (t < 1) {
+				globeTransitionId = requestAnimationFrame(animate);
+				return;
+			}
+
+			finalizeGlobeTransition(on, endPos, endTarget, endUp, endFov, endFovScale, enableRotate);
+		}
+
+		globeTransitionId = requestAnimationFrame(animate);
 	}
 
 	// --- Star highlight (large label + ring) for search/click ---
@@ -3005,6 +3140,7 @@
 
 		const onWheel = (e: WheelEvent) => {
 			e.preventDefault();
+			if (globeTransitionActive) return;
 			if (globeViewActive) {
 				// Zoom by changing camera distance
 				const dist = camera.position.length();
@@ -3032,6 +3168,7 @@
 		}
 
 		const onTouchStart = (e: TouchEvent) => {
+			if (globeTransitionActive) return;
 			if (e.touches.length === 1) {
 				// First finger down — pause OrbitControls briefly in case
 				// a second finger is about to land (staggered pinch).
@@ -3051,6 +3188,10 @@
 		};
 
 		const onTouchMove = (e: TouchEvent) => {
+			if (globeTransitionActive) {
+				e.preventDefault();
+				return;
+			}
 			if (e.touches.length === 2 && isPinching) {
 				e.preventDefault();
 				const currentDist = getTouchDistance(e.touches[0], e.touches[1]);
@@ -3067,6 +3208,7 @@
 		};
 
 		const onTouchEnd = (e: TouchEvent) => {
+			if (globeTransitionActive) return;
 			if (e.touches.length < 2) {
 				isPinching = false;
 				pinchStartDist = 0;
@@ -3416,11 +3558,14 @@
 			const elapsedTime = clock.getElapsedTime();
 			uniforms.uTime.value = elapsedTime;
 			// Stars grow as you zoom in (lower FOV or closer distance in globe mode)
-			if (globeViewActive) {
-				// Only scale by distance — ignore FOV since it's fixed for framing
-				uniforms.uFovScale.value = GLOBE_DISTANCE / camera.position.length() * 0.4;
-			} else {
-				uniforms.uFovScale.value = DEFAULT_FOV / camera.fov;
+			// Globe view transitions manage their own fovScale
+			if (!globeTransitionFovOverride) {
+				if (globeViewActive) {
+					// Only scale by distance — ignore FOV since it's fixed for framing
+					uniforms.uFovScale.value = GLOBE_DISTANCE / camera.position.length() * 0.4;
+				} else {
+					uniforms.uFovScale.value = DEFAULT_FOV / camera.fov;
+				}
 			}
 
 			// Update camera heading readout when grid is active
@@ -3449,7 +3594,11 @@
 			// Update shooting stars and comets
 			updateMeteors(dt);
 			updateComets(dt);
-			controls.update();
+			if (!globeTransitionFovOverride) {
+				controls.update();
+			} else {
+				camera.updateMatrixWorld();
+			}
 			updateOverlayLabels(performance.now());
 			renderer.clear();
 			renderer.render(scene, camera);
