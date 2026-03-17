@@ -50,6 +50,160 @@
 		(controls as any)._quatInverse.copy((controls as any)._quat).invert();
 	}
 
+	function collectObjectResources(node: THREE.Object3D) {
+		const geometries = new Set<THREE.BufferGeometry>();
+		const materials = new Set<THREE.Material>();
+		const texts = new Set<Text>();
+
+		node.traverse((child) => {
+			if (child instanceof Text) {
+				texts.add(child);
+				return;
+			}
+
+			const objectWithResources = child as THREE.Object3D & {
+				geometry?: THREE.BufferGeometry;
+				material?: THREE.Material | THREE.Material[];
+			};
+
+			if (objectWithResources.geometry) geometries.add(objectWithResources.geometry);
+
+			const { material } = objectWithResources;
+			if (Array.isArray(material)) {
+				for (const entry of material) materials.add(entry);
+			} else if (material) {
+				materials.add(material);
+			}
+		});
+
+		return { geometries, materials, texts };
+	}
+
+	type TroikaTextMesh = Text & {
+		_baseMaterial?: THREE.Material;
+		_defaultMaterial?: THREE.Material;
+	};
+
+	function disposeTextLabel(label: Text) {
+		const troikaLabel = label as TroikaTextMesh;
+		const baseMaterial = troikaLabel._baseMaterial ?? troikaLabel._defaultMaterial ?? null;
+		label.removeFromParent();
+		label.dispose();
+		baseMaterial?.dispose();
+	}
+
+	function disposeObject3D(node: THREE.Object3D | null) {
+		if (!node) return;
+
+		const { geometries, materials, texts } = collectObjectResources(node);
+		node.removeFromParent();
+
+		for (const text of texts) disposeTextLabel(text);
+		for (const geometry of geometries) geometry.dispose();
+		for (const material of materials) material.dispose();
+	}
+
+	function clearObjectChildren(node: THREE.Object3D) {
+		while (node.children.length > 0) {
+			disposeObject3D(node.children[0]);
+		}
+	}
+
+	interface DynamicLinePair {
+		geometry: LineSegmentsGeometry;
+		positions: Float32Array;
+		haloMaterial: LineMaterial;
+		coreMaterial: LineMaterial;
+		halo: LineSegments2;
+		core: LineSegments2;
+	}
+
+	function createDynamicLinePair(
+		maxSegments: number,
+		color: number,
+		haloWidth: number,
+		haloOpacity: number,
+		coreWidth: number,
+		coreOpacity: number,
+	) {
+		const positions = new Float32Array(Math.max(1, maxSegments) * 6);
+		const geometry = new LineSegmentsGeometry();
+		geometry.setPositions(positions);
+		geometry.instanceCount = 0;
+
+		const haloMaterial = new LineMaterial({
+			color,
+			linewidth: haloWidth,
+			transparent: true,
+			opacity: haloOpacity,
+			depthTest: false,
+			blending: THREE.AdditiveBlending,
+		});
+		haloMaterial.resolution.copy(rendererSize);
+
+		const coreMaterial = new LineMaterial({
+			color,
+			linewidth: coreWidth,
+			transparent: true,
+			opacity: coreOpacity,
+			depthTest: false,
+			blending: THREE.AdditiveBlending,
+		});
+		coreMaterial.resolution.copy(rendererSize);
+
+		const halo = new LineSegments2(geometry, haloMaterial);
+		halo.renderOrder = 1;
+		halo.visible = false;
+		halo.frustumCulled = false;
+
+		const core = new LineSegments2(geometry, coreMaterial);
+		core.renderOrder = 1;
+		core.visible = false;
+		core.frustumCulled = false;
+
+		return { geometry, positions, haloMaterial, coreMaterial, halo, core };
+	}
+
+	function updateDynamicLinePair(pair: DynamicLinePair, segmentCount: number) {
+		pair.geometry.instanceCount = segmentCount;
+		const instanceStart = pair.geometry.attributes.instanceStart as THREE.InterleavedBufferAttribute | undefined;
+		const instanceEnd = pair.geometry.attributes.instanceEnd as THREE.InterleavedBufferAttribute | undefined;
+		if (instanceStart) instanceStart.data.needsUpdate = true;
+		if (instanceEnd) instanceEnd.data.needsUpdate = true;
+		const visible = segmentCount > 0;
+		pair.halo.visible = visible;
+		pair.core.visible = visible;
+	}
+
+	interface DynamicPointCloud {
+		geometry: THREE.BufferGeometry;
+		attribute: THREE.BufferAttribute;
+		positions: Float32Array;
+		points: THREE.Points;
+	}
+
+	function createDynamicPointCloud(material: THREE.Material, maxPoints: number, renderOrder: number) {
+		const positions = new Float32Array(Math.max(1, maxPoints) * 3);
+		const attribute = new THREE.Float32BufferAttribute(positions, 3);
+		attribute.setUsage(THREE.DynamicDrawUsage);
+		const geometry = new THREE.BufferGeometry();
+		geometry.setAttribute('position', attribute);
+		geometry.setDrawRange(0, 0);
+
+		const points = new THREE.Points(geometry, material);
+		points.renderOrder = renderOrder;
+		points.visible = false;
+		points.frustumCulled = false;
+
+		return { geometry, attribute, positions, points };
+	}
+
+	function updateDynamicPointCloud(cloud: DynamicPointCloud, pointCount: number) {
+		cloud.geometry.setDrawRange(0, pointCount);
+		cloud.attribute.needsUpdate = true;
+		cloud.points.visible = pointCount > 0;
+	}
+
 	// --- Draggable constellation vertices ---
 	let currentResults: MatchResult[] = [];
 	let currentColors: string[] = [];
@@ -124,7 +278,7 @@
 
 		// Remove old drag visual
 		if (dragState.dragGroup) {
-			sceneRef.remove(dragState.dragGroup);
+			disposeObject3D(dragState.dragGroup);
 			dragState.dragGroup = null;
 		}
 		if (!candidateStar) return;
@@ -747,7 +901,7 @@
 	}
 	let ambientConstellations: AmbientConstellation[] = [];
 	let ambientQueue: number[] = [];
-	let ambientTimerId: ReturnType<typeof setTimeout> | null = null;
+	let ambientTimerIds = new Set<ReturnType<typeof setTimeout>>();
 	let ambientPaused = false;
 	type StarUniforms = {
 		uDim: THREE.Uniform<number>;
@@ -824,8 +978,7 @@
 	}
 
 	function disposeOverlayLabel(label: Text) {
-		label.removeFromParent();
-		label.dispose();
+		disposeTextLabel(label);
 	}
 
 	function setOverlayLabelOpacity(label: Text, opacity: number) {
@@ -1146,7 +1299,7 @@
 		}
 		drawAnimationIds = [];
 		for (const group of constellationGroups) {
-			if (group.parent) sceneRef?.remove(group);
+			disposeObject3D(group);
 		}
 		constellationGroups = [];
 		currentResults = [];
@@ -1198,13 +1351,19 @@
 		}
 
 		// Collect valid edges with positions
-		const edgeData: { posA: THREE.Vector3; posB: THREE.Vector3 }[] = [];
+		const edgeData: { posA: THREE.Vector3; posB: THREE.Vector3; keyA: string; keyB: string }[] = [];
 		const connectedNodes = new Set<number>();
+		const starKey = (v: THREE.Vector3) => `${v.x.toFixed(6)},${v.y.toFixed(6)},${v.z.toFixed(6)}`;
 		for (const [nA, nB] of result.graph.edges) {
 			const posA = nodeToPos.get(nA);
 			const posB = nodeToPos.get(nB);
 			if (!posA || !posB) continue;
-			edgeData.push({ posA: posA.clone(), posB: posB.clone() });
+			edgeData.push({
+				posA: posA.clone(),
+				posB: posB.clone(),
+				keyA: starKey(posA),
+				keyB: starKey(posB),
+			});
 			connectedNodes.add(nA);
 			connectedNodes.add(nB);
 		}
@@ -1225,9 +1384,8 @@
 			}
 		}
 
-		// Track which stars have been revealed (by position key)
 		const revealedStars = new Set<string>();
-		const starKey = (v: THREE.Vector3) => `${v.x.toFixed(6)},${v.y.toFixed(6)},${v.z.toFixed(6)}`;
+		const hlKeys = hlPositions.map(starKey);
 
 		const hlMat = new THREE.ShaderMaterial({
 			uniforms: { uColor: { value: new THREE.Vector3(cr, cg, cb) } },
@@ -1280,135 +1438,118 @@
 			blending: THREE.AdditiveBlending,
 		});
 
+		const linePair = edgeData.length > 0
+			? createDynamicLinePair(edgeData.length, colorHex, 8, 0.1, 2.5, 0.4)
+			: null;
+		if (linePair) {
+			constellationGroup.add(linePair.halo);
+			constellationGroup.add(linePair.core);
+		}
+
+		const starCloud = hlPositions.length > 0 ? createDynamicPointCloud(hlMat, hlPositions.length, 2) : null;
+		if (starCloud) constellationGroup.add(starCloud.points);
+
+		const ringCloud = isolatedPositions.length > 0 ? createDynamicPointCloud(ringMat, isolatedPositions.length, 2) : null;
+		if (ringCloud) constellationGroup.add(ringCloud.points);
+
 		const drawDuration = fast ? 80 : 300; // ms per edge to draw
 		const stagger = fast ? 15 : 60; // ms between starting each edge
 		const startTime = performance.now();
+		const totalItems = edgeData.length + isolatedPositions.length;
+		const totalDuration = totalItems > 0 ? (totalItems - 1) * stagger + drawDuration : 0;
+		let animId: number | null = null;
+
+		function releaseTrackedAnimationId() {
+			if (animId === null) return;
+			const idx = drawAnimationIds.indexOf(animId);
+			if (idx !== -1) drawAnimationIds.splice(idx, 1);
+			animId = null;
+		}
 
 		function animateDraw() {
-			if (!constellationGroup) return;
+			releaseTrackedAnimationId();
+			if (!constellationGroup.parent) return;
 
 			const now = performance.now();
 			const elapsed = now - startTime;
-
-			// Remove old lines/points and rebuild
-			while (constellationGroup.children.length > 0) {
-				constellationGroup.remove(constellationGroup.children[0]);
-			}
-
-			const linePositions: number[] = [];
-			const newStarsThisFrame: THREE.Vector3[] = [];
+			let activeLineCount = 0;
 
 			for (let i = 0; i < edgeData.length; i++) {
 				const edgeStart = i * stagger;
 				const t = Math.min(1, Math.max(0, (elapsed - edgeStart) / drawDuration));
 				if (t <= 0) continue;
 
-				const { posA, posB } = edgeData[i];
+				const { posA, posB, keyA, keyB } = edgeData[i];
 
 				// Interpolate endpoint for drawing effect
 				const currentX = posA.x + (posB.x - posA.x) * t;
 				const currentY = posA.y + (posB.y - posA.y) * t;
 				const currentZ = posA.z + (posB.z - posA.z) * t;
 
-				linePositions.push(posA.x, posA.y, posA.z, currentX, currentY, currentZ);
+				if (linePair) {
+					const base = activeLineCount * 6;
+					linePair.positions[base] = posA.x;
+					linePair.positions[base + 1] = posA.y;
+					linePair.positions[base + 2] = posA.z;
+					linePair.positions[base + 3] = currentX;
+					linePair.positions[base + 4] = currentY;
+					linePair.positions[base + 5] = currentZ;
+				}
+				activeLineCount++;
 
 				// Reveal start star
-				const keyA = starKey(posA);
 				if (!revealedStars.has(keyA)) {
 					revealedStars.add(keyA);
-					newStarsThisFrame.push(posA);
 				}
 
 				// Reveal end star when edge is complete
 				if (t >= 1) {
-					const keyB = starKey(posB);
 					if (!revealedStars.has(keyB)) {
 						revealedStars.add(keyB);
-						newStarsThisFrame.push(posB);
 					}
 				}
 			}
 
-			if (linePositions.length > 0) {
-				const segGeom = new LineSegmentsGeometry();
-				segGeom.setPositions(linePositions);
+			if (linePair) updateDynamicLinePair(linePair, activeLineCount);
 
-				// Halo pass - wider, soft glow
-				const haloMat = new LineMaterial({
-					color: colorHex,
-					linewidth: 8,
-					transparent: true,
-					opacity: 0.1,
-					depthTest: false,
-					blending: THREE.AdditiveBlending,
-				});
-				haloMat.resolution.copy(rendererSize);
-				const halo = new LineSegments2(segGeom, haloMat);
-				halo.renderOrder = 1;
-				constellationGroup.add(halo);
-
-				// Core pass - thinner, brighter
-				const coreMat = new LineMaterial({
-					color: colorHex,
-					linewidth: 2.5,
-					transparent: true,
-					opacity: 0.4,
-					depthTest: false,
-					blending: THREE.AdditiveBlending,
-				});
-				coreMat.resolution.copy(rendererSize);
-				const core = new LineSegments2(segGeom, coreMat);
-				core.renderOrder = 1;
-				constellationGroup.add(core);
-			}
-
-			// Build highlighted stars geometry from all revealed stars
-			const starPositions: number[] = [];
-			for (const pos of hlPositions) {
-				if (revealedStars.has(starKey(pos))) {
-					starPositions.push(pos.x, pos.y, pos.z);
+			if (starCloud) {
+				let starCount = 0;
+				for (let i = 0; i < hlPositions.length; i++) {
+					if (!revealedStars.has(hlKeys[i])) continue;
+					const pos = hlPositions[i];
+					const base = starCount * 3;
+					starCloud.positions[base] = pos.x;
+					starCloud.positions[base + 1] = pos.y;
+					starCloud.positions[base + 2] = pos.z;
+					starCount++;
 				}
+				updateDynamicPointCloud(starCloud, starCount);
 			}
 
-			if (starPositions.length > 0) {
-				const hlGeom = new THREE.BufferGeometry();
-				hlGeom.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
-				const points = new THREE.Points(hlGeom, hlMat);
-				points.renderOrder = 2;
-				constellationGroup.add(points);
-			}
-
-			// Render rings around isolated nodes (periods/dots)
-			// Staggered after edges, each fading in over drawDuration
-			if (isolatedPositions.length > 0) {
-				const ringPositions: number[] = [];
+			if (ringCloud) {
+				let ringCount = 0;
 				for (let j = 0; j < isolatedPositions.length; j++) {
 					const ringStart = (edgeData.length + j) * stagger;
 					const t = Math.min(1, Math.max(0, (elapsed - ringStart) / drawDuration));
-					if (t > 0) {
-						ringPositions.push(isolatedPositions[j].x, isolatedPositions[j].y, isolatedPositions[j].z);
-					}
+					if (t <= 0) continue;
+					const pos = isolatedPositions[j];
+					const base = ringCount * 3;
+					ringCloud.positions[base] = pos.x;
+					ringCloud.positions[base + 1] = pos.y;
+					ringCloud.positions[base + 2] = pos.z;
+					ringCount++;
 				}
-				if (ringPositions.length > 0) {
-					const ringGeom = new THREE.BufferGeometry();
-					ringGeom.setAttribute('position', new THREE.Float32BufferAttribute(ringPositions, 3));
-					const ringPoints = new THREE.Points(ringGeom, ringMat);
-					ringPoints.renderOrder = 2;
-					constellationGroup.add(ringPoints);
-				}
+				updateDynamicPointCloud(ringCloud, ringCount);
 			}
 
-			// Continue until all elements are fully drawn
-			const totalItems = edgeData.length + isolatedPositions.length;
-			const totalDuration = totalItems > 0 ? (totalItems - 1) * stagger + drawDuration : 0;
-			if (elapsed < totalDuration) {
-				const id = requestAnimationFrame(animateDraw);
-				drawAnimationIds.push(id);
+			if (elapsed < totalDuration && constellationGroup.parent) {
+				animId = requestAnimationFrame(animateDraw);
+				drawAnimationIds.push(animId);
 			}
 		}
 
-		const id = requestAnimationFrame(animateDraw);
-		drawAnimationIds.push(id);
+		animId = requestAnimationFrame(animateDraw);
+		drawAnimationIds.push(animId);
 	}
 
 	function drawConstellationInstant(result: MatchResult, color?: string) {
@@ -1816,6 +1957,11 @@
 	}
 
 	function startAmbientCycle() {
+		ambientPaused = false;
+		for (const timerId of ambientTimerIds) {
+			clearTimeout(timerId);
+		}
+		ambientTimerIds.clear();
 		resolveConstellations();
 		if (resolvedConstellations.length === 0) return;
 		shuffleQueue();
@@ -1829,7 +1975,8 @@
 
 	function scheduleNext(delay: number) {
 		if (ambientPaused) return;
-		ambientTimerId = setTimeout(() => {
+		const timerId = setTimeout(() => {
+			ambientTimerIds.delete(timerId);
 			if (ambientPaused) return;
 			if (ambientQueue.length === 0) shuffleQueue();
 			const idx = ambientQueue.pop()!;
@@ -1837,18 +1984,19 @@
 			// Schedule the next one
 			scheduleNext(3000 + Math.random() * 2000);
 		}, delay);
+		ambientTimerIds.add(timerId);
 	}
 
 	function stopAmbientCycle() {
 		ambientPaused = true;
-		if (ambientTimerId !== null) {
-			clearTimeout(ambientTimerId);
-			ambientTimerId = null;
+		for (const timerId of ambientTimerIds) {
+			clearTimeout(timerId);
 		}
+		ambientTimerIds.clear();
 		// Fade out all active ambient constellations
 		for (const ac of ambientConstellations) {
 			if (ac.animId !== null) cancelAnimationFrame(ac.animId);
-			if (ac.group.parent) sceneRef?.remove(ac.group);
+			disposeObject3D(ac.group);
 			disposeOverlayLabel(ac.label);
 		}
 		ambientConstellations = [];
@@ -1856,6 +2004,10 @@
 
 	function resumeAmbientCycle() {
 		ambientPaused = false;
+		for (const timerId of ambientTimerIds) {
+			clearTimeout(timerId);
+		}
+		ambientTimerIds.clear();
 		scheduleNext(1000);
 		scheduleNext(2500);
 		scheduleNext(4000);
@@ -1892,6 +2044,47 @@
 
 		const revealedStars = new Set<string>();
 		const starKey = (v: THREE.Vector3) => `${v.x.toFixed(6)},${v.y.toFixed(6)},${v.z.toFixed(6)}`;
+		const edgeData = rc.edges.map(({ posA, posB }) => ({
+			posA,
+			posB,
+			keyA: starKey(posA),
+			keyB: starKey(posB),
+		}));
+		const hlKeys = rc.hlPositions.map(starKey);
+
+		const linePair = edgeData.length > 0
+			? createDynamicLinePair(edgeData.length, 0xffffff, 6, 0.1, 2, 0.32)
+			: null;
+		if (linePair) {
+			group.add(linePair.halo);
+			group.add(linePair.core);
+		}
+
+		const hlMat = new THREE.ShaderMaterial({
+			vertexShader: `
+				void main() {
+					vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+					gl_Position = projectionMatrix * mvPosition;
+					gl_PointSize = 8.0;
+				}
+			`,
+			fragmentShader: `
+				uniform float uOpacity;
+				void main() {
+					float d = length(gl_PointCoord - 0.5) * 2.0;
+					if (d > 1.0) discard;
+					float alpha = exp(-d * d * 4.0) * 0.6 * uOpacity;
+					vec3 color = vec3(1.0, 1.0, 1.0);
+					gl_FragColor = vec4(color * alpha, alpha);
+				}
+			`,
+			uniforms: { uOpacity: new THREE.Uniform(0) },
+			transparent: true,
+			depthTest: false,
+			blending: THREE.AdditiveBlending,
+		});
+		const starCloud = rc.hlPositions.length > 0 ? createDynamicPointCloud(hlMat, rc.hlPositions.length, 2) : null;
+		if (starCloud) group.add(starCloud.points);
 
 		function animate() {
 			if (ambientPaused || !group.parent) return;
@@ -1908,7 +2101,7 @@
 				ac.phaseStart = now;
 			} else if (ac.phase === 'fade' && phaseElapsed >= AMBIENT_FADE) {
 				// Remove
-				sceneRef?.remove(group);
+				disposeObject3D(group);
 				disposeOverlayLabel(ac.label);
 				ambientConstellations = ambientConstellations.filter(a => a !== ac);
 				return;
@@ -1922,100 +2115,54 @@
 				opacity = 1 - phaseElapsed / AMBIENT_FADE;
 			}
 
-			// Clear and rebuild group
-			while (group.children.length > 0) group.remove(group.children[0]);
-
 			const drawElapsed = ac.phase === 'draw' ? phaseElapsed : totalDrawTime;
-			const linePositions: number[] = [];
+			let activeLineCount = 0;
 
-			for (let i = 0; i < rc.edges.length; i++) {
+			for (let i = 0; i < edgeData.length; i++) {
 				const edgeStart = i * AMBIENT_STAGGER;
 				const t = Math.min(1, Math.max(0, (drawElapsed - edgeStart) / AMBIENT_DRAW_DURATION));
 				if (t <= 0) continue;
 
-				const { posA, posB } = rc.edges[i];
+				const { posA, posB, keyA, keyB } = edgeData[i];
 				const cx = posA.x + (posB.x - posA.x) * t;
 				const cy = posA.y + (posB.y - posA.y) * t;
 				const cz = posA.z + (posB.z - posA.z) * t;
-				linePositions.push(posA.x, posA.y, posA.z, cx, cy, cz);
+				if (linePair) {
+					const base = activeLineCount * 6;
+					linePair.positions[base] = posA.x;
+					linePair.positions[base + 1] = posA.y;
+					linePair.positions[base + 2] = posA.z;
+					linePair.positions[base + 3] = cx;
+					linePair.positions[base + 4] = cy;
+					linePair.positions[base + 5] = cz;
+				}
+				activeLineCount++;
 
-				const kA = starKey(posA);
-				if (!revealedStars.has(kA)) revealedStars.add(kA);
+				if (!revealedStars.has(keyA)) revealedStars.add(keyA);
 				if (t >= 1) {
-					const kB = starKey(posB);
-					if (!revealedStars.has(kB)) revealedStars.add(kB);
+					if (!revealedStars.has(keyB)) revealedStars.add(keyB);
 				}
 			}
 
-			if (linePositions.length > 0) {
-				const segGeom = new LineSegmentsGeometry();
-				segGeom.setPositions(linePositions);
-
-				// Halo pass - wider, soft glow
-				const haloMat = new LineMaterial({
-					color: 0xffffff,
-					linewidth: 6,
-					transparent: true,
-					opacity: 0.1 * opacity,
-					depthTest: false,
-					blending: THREE.AdditiveBlending,
-				});
-				haloMat.resolution.copy(rendererSize);
-				const halo = new LineSegments2(segGeom, haloMat);
-				halo.renderOrder = 1;
-				group.add(halo);
-
-				// Core pass - thinner, brighter
-				const coreMat = new LineMaterial({
-					color: 0xffffff,
-					linewidth: 2,
-					transparent: true,
-					opacity: 0.32 * opacity,
-					depthTest: false,
-					blending: THREE.AdditiveBlending,
-				});
-				coreMat.resolution.copy(rendererSize);
-				const core = new LineSegments2(segGeom, coreMat);
-				core.renderOrder = 1;
-				group.add(core);
+			if (linePair) {
+				linePair.haloMaterial.opacity = 0.1 * opacity;
+				linePair.coreMaterial.opacity = 0.32 * opacity;
+				updateDynamicLinePair(linePair, activeLineCount);
 			}
 
-			const starPositions: number[] = [];
-			for (const pos of rc.hlPositions) {
-				if (revealedStars.has(starKey(pos))) {
-					starPositions.push(pos.x, pos.y, pos.z);
+			if (starCloud) {
+				let starCount = 0;
+				for (let i = 0; i < rc.hlPositions.length; i++) {
+					if (!revealedStars.has(hlKeys[i])) continue;
+					const pos = rc.hlPositions[i];
+					const base = starCount * 3;
+					starCloud.positions[base] = pos.x;
+					starCloud.positions[base + 1] = pos.y;
+					starCloud.positions[base + 2] = pos.z;
+					starCount++;
 				}
-			}
-
-			if (starPositions.length > 0) {
-				const hlGeom = new THREE.BufferGeometry();
-				hlGeom.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
-				const hlMat = new THREE.ShaderMaterial({
-					vertexShader: `
-						void main() {
-							vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-							gl_Position = projectionMatrix * mvPosition;
-							gl_PointSize = 8.0;
-						}
-					`,
-					fragmentShader: `
-						uniform float uOpacity;
-						void main() {
-							float d = length(gl_PointCoord - 0.5) * 2.0;
-							if (d > 1.0) discard;
-							float alpha = exp(-d * d * 4.0) * 0.6 * uOpacity;
-							vec3 color = vec3(1.0, 1.0, 1.0);
-							gl_FragColor = vec4(color * alpha, alpha);
-						}
-					`,
-					uniforms: { uOpacity: new THREE.Uniform(opacity) },
-					transparent: true,
-					depthTest: false,
-					blending: THREE.AdditiveBlending,
-				});
-				const points = new THREE.Points(hlGeom, hlMat);
-				points.renderOrder = 2;
-				group.add(points);
+				(hlMat.uniforms.uOpacity as THREE.Uniform<number>).value = opacity;
+				updateDynamicPointCloud(starCloud, starCount);
 			}
 
 			ac.animId = requestAnimationFrame(animate);
@@ -2027,7 +2174,7 @@
 	export function clearLastConstellation() {
 		if (constellationGroups.length > 0) {
 			const last = constellationGroups.pop()!;
-			if (last.parent) sceneRef?.remove(last);
+			disposeObject3D(last);
 		}
 		// Cancel the most recent draw animation if any
 		if (drawAnimationIds.length > 0) {
@@ -2110,7 +2257,7 @@
 		} else {
 			// Remove overlay
 			if (iauOverlayGroup && sceneRef) {
-				sceneRef.remove(iauOverlayGroup);
+				disposeObject3D(iauOverlayGroup);
 				iauOverlayGroup = null;
 			}
 			for (const { label } of iauLabelData) {
@@ -2416,8 +2563,7 @@
 			}
 		} else {
 			for (const sl of starLabelData) {
-				sl.label.removeFromParent();
-				sl.label.dispose();
+				disposeOverlayLabel(sl.label);
 			}
 			starLabelData = [];
 		}
@@ -2581,12 +2727,11 @@
 			coordGridGroup = group;
 		} else {
 			if (coordGridGroup && sceneRef) {
-				sceneRef.remove(coordGridGroup);
+				disposeObject3D(coordGridGroup);
 				coordGridGroup = null;
 			}
 			for (const label of coordGridLabels) {
-				label.removeFromParent();
-				label.dispose();
+				disposeOverlayLabel(label);
 			}
 			coordGridLabels = [];
 		}
@@ -2861,7 +3006,7 @@
 
 	export function clearStarHighlight() {
 		if (starHighlightGroup && sceneRef) {
-			sceneRef.remove(starHighlightGroup);
+			disposeObject3D(starHighlightGroup);
 			starHighlightGroup = null;
 		}
 		if (starHighlightLabel) {
@@ -2931,7 +3076,7 @@
 
 	export function clearTempConstellation() {
 		if (tempConstellationGroup && sceneRef) {
-			sceneRef.remove(tempConstellationGroup);
+			disposeObject3D(tempConstellationGroup);
 			tempConstellationGroup = null;
 		}
 		if (tempConstellationLabel) {
@@ -3363,7 +3508,7 @@
 		function cleanupDrag() {
 			cancelLongPress();
 			if (dragState?.dragGroup && sceneRef) {
-				sceneRef.remove(dragState.dragGroup);
+				disposeObject3D(dragState.dragGroup);
 			}
 			dragState = null;
 			controls.enabled = true;
@@ -3764,18 +3909,19 @@
 		return () => {
 			cancelAnimationFrame(animId);
 			stopAmbientCycle();
+			clearAllConstellations();
+			clearStarHighlight();
+			clearTempConstellation();
 			for (const { label } of iauLabelData) {
 				disposeOverlayLabel(label);
 			}
 			iauLabelData = [];
 			for (const sl of starLabelData) {
-				sl.label.removeFromParent();
-				sl.label.dispose();
+				disposeOverlayLabel(sl.label);
 			}
 			starLabelData = [];
 			for (const label of coordGridLabels) {
-				label.removeFromParent();
-				label.dispose();
+				disposeOverlayLabel(label);
 			}
 			coordGridLabels = [];
 			stopMeteors();
@@ -3795,12 +3941,25 @@
 			renderer.domElement.removeEventListener('gesturestart', onGestureStart);
 			renderer.domElement.removeEventListener('webglcontextlost', onContextLost);
 			renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored);
+			controls.dispose();
+			clearObjectChildren(scene);
+			clearObjectChildren(overlayScene);
 			renderer.dispose();
 			if (renderer.domElement.parentNode) {
 				renderer.domElement.parentNode.removeChild(renderer.domElement);
 			}
+			sceneRef = null;
 			overlaySceneRef = null;
+			cameraRef = null;
 			overlayCameraRef = null;
+			controlsRef = null;
+			starPointsRef = null;
+			meteorGroup = null;
+			cometGroup = null;
+			coordGridGroup = null;
+			iauOverlayGroup = null;
+			starHighlightGroup = null;
+			tempConstellationGroup = null;
 		};
 	});
 </script>

@@ -11,6 +11,7 @@
 	// Fetch star catalog at runtime instead of bundling it
 	// Keep a plain (non-proxy) reference for worker postMessage
 	let starsRaw: Star[] = [];
+	let matchableStars: Star[] = [];
 	let stars: Star[] = $state([]);
 	let starByIdx = new Map<number, Star>();
 	let starsReady = $state(false);
@@ -29,6 +30,7 @@
 				data.push({ idx: sunIdx, id: 0, ra: 0, dec: 0, mag: -26.7, ci: 0.66, name: 'Sol' });
 			}
 			starsRaw = data;
+			matchableStars = starsRaw.filter(s => s.mag > -10);
 			stars = starsRaw;
 			for (const s of starsRaw) starByIdx.set(s.idx, s);
 			initAfterStarsLoaded();
@@ -232,19 +234,16 @@
 		return w;
 	}
 
-	// Stars suitable for matching (excludes the Sun and other extreme objects)
-	const matchableStars = () => starsRaw.filter(s => s.mag > -10);
-
 	function respawnWorker() {
 		worker.terminate();
 		worker = newWorker();
 		if (starsReady) {
-			worker.postMessage({ type: 'init', payload: { stars: matchableStars() } });
+			worker.postMessage({ type: 'init', payload: { stars: matchableStars } });
 		}
 	}
 
 	function initAfterStarsLoaded() {
-		worker.postMessage({ type: 'init', payload: { stars: matchableStars() } });
+		worker.postMessage({ type: 'init', payload: { stars: matchableStars } });
 		if (hashWasPresent) {
 			pendingHashResults = decodeHashToResults(window.location.hash.slice(1), starByIdx);
 		}
