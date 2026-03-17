@@ -2371,12 +2371,17 @@
 		.top-bar {
 			top: 12px;
 			left: 12px;
+			right: 12px;
 			gap: 6px;
 		}
 
 		.star-search-container {
-			width: calc(100vw - 80px);
-			max-width: 260px;
+			flex: 1;
+			min-width: 0;
+		}
+
+		.star-search-input {
+			font-size: 16px;
 		}
 
 		.star-panel {
