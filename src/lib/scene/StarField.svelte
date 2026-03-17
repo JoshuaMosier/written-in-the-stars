@@ -3383,7 +3383,7 @@
 		}
 
 		const onDragPointerDown = (e: PointerEvent) => {
-			if (e.button !== 0 || currentResults.length === 0) return;
+			if (e.button !== 0 || currentResults.length === 0 || globeTransitionActive) return;
 			const rect = container.getBoundingClientRect();
 			const mx = e.clientX - rect.left;
 			const my = e.clientY - rect.top;
@@ -3528,6 +3528,7 @@
 
 		const onStarPointerDown = (e: PointerEvent) => {
 			if (e.button !== 0) return;
+			if (globeTransitionActive) return;
 			clickStart = { x: e.clientX, y: e.clientY, time: performance.now() };
 			if (!dragState) {
 				orbitDragState = {
