@@ -237,6 +237,17 @@
 		setTimeout(() => (errorMessage = ''), 4000);
 	}
 
+	function cancelMatch() {
+		if (!isMatching) return;
+		matchRequestId++;
+		clearMatchTimeout();
+		respawnWorker();
+		stopMatchingPhrases();
+		if (isRerolling) showInput = false;
+		isMatching = false;
+		isRerolling = false;
+	}
+
 	let pendingText = '';
 
 	function getUsedStarIndices(): number[] {
@@ -793,6 +804,7 @@
 
 		// Escape: dismiss overlays in order of priority
 		if (e.key === 'Escape') {
+			if (isMatching) { cancelMatch(); return; }
 			if (aboutOpen) { aboutOpen = false; return; }
 			if (searchOpen) { searchOpen = false; searchInputEl?.blur(); return; }
 			if (selectedStar || selectedConstellation) {
@@ -1040,6 +1052,12 @@
 				<div id="matching-status" class="matching-indicator" role="status" aria-live="polite">
 					<span class="matching-phrase">{matchingPhrase}...</span>
 					<span class="matching-pct">{Math.round(matchProgress * 100)}%</span>
+					<button class="cancel-match" onclick={cancelMatch} aria-label="Cancel matching">
+						<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+							<line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
+						</svg>
+						esc
+					</button>
 				</div>
 			{/if}
 		</div>
@@ -1433,6 +1451,28 @@
 		letter-spacing: 2px;
 		color: rgba(255, 215, 0, 0.5);
 		font-variant-numeric: tabular-nums;
+	}
+
+	.cancel-match {
+		margin-top: 4px;
+		background: none;
+		border: 1px solid rgba(255, 255, 255, 0.15);
+		border-radius: 4px;
+		color: rgba(255, 255, 255, 0.45);
+		font-size: 11px;
+		letter-spacing: 1.5px;
+		text-transform: uppercase;
+		padding: 4px 10px;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		gap: 5px;
+		transition: color 0.2s, border-color 0.2s;
+	}
+
+	.cancel-match:hover {
+		color: rgba(255, 255, 255, 0.8);
+		border-color: rgba(255, 255, 255, 0.3);
 	}
 
 	.error-toast {
