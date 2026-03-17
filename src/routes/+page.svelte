@@ -22,7 +22,12 @@
 			return r.json();
 		})
 		.then((data: Star[]) => {
-			starsRaw = data.filter(s => s.mag > -10);
+			// Add the Sun if not already present (filtered out of older star catalog builds)
+			if (!data.some(s => s.mag < -10)) {
+				const sunIdx = data.length;
+				data.push({ idx: sunIdx, id: 0, ra: 0, dec: 0, mag: -26.7, ci: 0.66, name: 'Sol' });
+			}
+			starsRaw = data;
 			stars = starsRaw;
 			for (const s of starsRaw) starByIdx.set(s.idx, s);
 			initAfterStarsLoaded();
@@ -131,16 +136,19 @@
 		return w;
 	}
 
+	// Stars suitable for matching (excludes the Sun and other extreme objects)
+	const matchableStars = () => starsRaw.filter(s => s.mag > -10);
+
 	function respawnWorker() {
 		worker.terminate();
 		worker = newWorker();
 		if (starsReady) {
-			worker.postMessage({ type: 'init', payload: { stars: starsRaw } });
+			worker.postMessage({ type: 'init', payload: { stars: matchableStars() } });
 		}
 	}
 
 	function initAfterStarsLoaded() {
-		worker.postMessage({ type: 'init', payload: { stars: starsRaw } });
+		worker.postMessage({ type: 'init', payload: { stars: matchableStars() } });
 		if (hashWasPresent) {
 			pendingHashResults = decodeHashToResults(window.location.hash.slice(1), starByIdx);
 		}
@@ -409,6 +417,7 @@
 	let shootingStars = $state(!reducedMotion);
 	let brightness = $state(1.0);
 	let monoColor = $state(false);
+	let showSun = $state(false);
 	let settingsOpen = $state(false);
 	let aboutOpen = $state(false);
 
@@ -445,6 +454,11 @@
 	function handleToggleMonoColor() {
 		monoColor = !monoColor;
 		starField?.setMonochrome(monoColor);
+	}
+
+	function handleToggleSun() {
+		showSun = !showSun;
+		starField?.toggleSun(showSun);
 	}
 
 	async function handleShare() {
@@ -894,6 +908,20 @@
 								<circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" />
 							</svg>
 							<span>Star color</span>
+						</button>
+						<button class="settings-item" class:active={showSun} onclick={handleToggleSun} role="menuitemcheckbox" aria-checked={showSun}>
+							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+								<circle cx="12" cy="12" r="4" />
+								<line x1="12" y1="2" x2="12" y2="5" />
+								<line x1="12" y1="19" x2="12" y2="22" />
+								<line x1="2" y1="12" x2="5" y2="12" />
+								<line x1="19" y1="12" x2="22" y2="12" />
+								<line x1="4.93" y1="4.93" x2="7.05" y2="7.05" />
+								<line x1="16.95" y1="16.95" x2="19.07" y2="19.07" />
+								<line x1="4.93" y1="19.07" x2="7.05" y2="16.95" />
+								<line x1="16.95" y1="7.05" x2="19.07" y2="4.93" />
+							</svg>
+							<span>Sun</span>
 						</button>
 						<div class="settings-item slider-row">
 							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">

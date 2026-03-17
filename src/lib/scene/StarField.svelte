@@ -978,6 +978,8 @@
 		varying float vNamed;
 		varying float vSeed;
 
+		uniform float uShowSun;
+
 		void main() {
 			vMag = aMag;
 			vColorIndex = aColorIndex;
@@ -988,6 +990,12 @@
 
 			vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
 			gl_Position = projectionMatrix * mvPosition;
+
+			// Hide the Sun when toggled off (only the Sun has mag < -10)
+			if (aMag < -10.0 && uShowSun < 0.5) {
+				gl_PointSize = 0.0;
+				return;
+			}
 
 			// Apparent size based on magnitude (logarithmic flux)
 			float flux = pow(10.0, -0.4 * (aMag - (-1.46)));
@@ -2206,6 +2214,7 @@
 			// Create labels for named stars brighter than the limit
 			for (const s of stars) {
 				if (!s.name || s.mag > STAR_LABEL_MAG_LIMIT) continue;
+				if (s.mag < -10 && uniformsRef && uniformsRef.uShowSun.value < 0.5) continue;
 				const pos = raDecToXYZ(s.ra, s.dec);
 				const label = new Text();
 				label.text = s.name;
@@ -2421,6 +2430,10 @@
 
 	export function setMonochrome(on: boolean) {
 		if (uniformsRef) uniformsRef.uMonochrome.value = on ? 1.0 : 0.0;
+	}
+
+	export function toggleSun(show: boolean) {
+		if (uniformsRef) uniformsRef.uShowSun.value = show ? 1.0 : 0.0;
 	}
 
 	// --- Star highlight (large label + ring) for search/click ---
@@ -2840,6 +2853,7 @@
 			uHoveredIndex: new THREE.Uniform(-1.0),
 			uBrightness: new THREE.Uniform(1.0),
 			uMonochrome: new THREE.Uniform(0.0),
+			uShowSun: new THREE.Uniform(0.0),
 		};
 		uniformsRef = uniforms;
 
