@@ -1751,6 +1751,7 @@
 		max-width: 100vw;
 		padding: 0 16px;
 		box-sizing: border-box;
+		pointer-events: none;
 	}
 
 	.result-overlay.dimmed {
@@ -1762,6 +1763,7 @@
 		position: relative;
 		display: flex;
 		align-items: center;
+		pointer-events: auto;
 	}
 
 	.constellation-entry {
@@ -1971,6 +1973,7 @@
 		flex-wrap: wrap;
 		justify-content: center;
 		padding: 0 8px;
+		pointer-events: auto;
 	}
 
 	.reset-btn {
