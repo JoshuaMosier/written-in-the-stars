@@ -1179,7 +1179,9 @@
 
 		const tColor = new THREE.Color(color || '#ffffff');
 		const colorHex = tColor.getHex();
-		const cr = tColor.r, cg = tColor.g, cb = tColor.b;
+		// ShaderMaterial doesn't include colorspace_fragment, so use sRGB values directly
+		const srgb = tColor.clone().convertLinearToSRGB();
+		const cr = srgb.r, cg = srgb.g, cb = srgb.b;
 
 		const nodeToPos = new Map<number, THREE.Vector3>();
 		for (const pair of result.pairs) {
@@ -1409,7 +1411,9 @@
 
 		const tColor = new THREE.Color(color || '#ffffff');
 		const colorHex = tColor.getHex();
-		const cr = tColor.r, cg = tColor.g, cb = tColor.b;
+		// ShaderMaterial doesn't include colorspace_fragment, so use sRGB values directly
+		const srgb = tColor.clone().convertLinearToSRGB();
+		const cr = srgb.r, cg = srgb.g, cb = srgb.b;
 
 		const nodeToPos = new Map<number, THREE.Vector3>();
 		for (const pair of result.pairs) {
