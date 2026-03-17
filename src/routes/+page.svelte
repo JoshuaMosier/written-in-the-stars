@@ -452,6 +452,13 @@
 		inputText = '';
 	}
 
+	function cancelAddMore() {
+		if (showInput && constellations.length > 0 && !isMatching) {
+			showInput = false;
+			inputText = '';
+		}
+	}
+
 	function handleReset() {
 		matchRequestId++; // invalidate any in-flight request
 		clearMatchTimeout();
@@ -907,6 +914,7 @@
 		// Escape: dismiss overlays in order of priority
 		if (e.key === 'Escape') {
 			if (isMatching) { cancelMatch(); return; }
+			if (showInput && constellations.length > 0) { cancelAddMore(); return; }
 			if (aboutOpen) { aboutOpen = false; return; }
 			if (searchOpen) { searchOpen = false; searchInputEl?.blur(); return; }
 			if (selectedStar || selectedConstellation) {
@@ -1176,6 +1184,13 @@
 						esc
 					</button>
 				</div>
+			{:else if constellations.length > 0}
+				<button class="cancel-match go-back-btn" onclick={cancelAddMore} aria-label="Go back to constellation view">
+					<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+						<polyline points="15 18 9 12 15 6" />
+					</svg>
+					Go back
+				</button>
 			{/if}
 		</div>
 	{/if}
@@ -1545,6 +1560,7 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
+		text-align: center;
 	}
 
 	.input-overlay.matching input {
@@ -1592,6 +1608,7 @@
 		width: 100%;
 		text-align: center;
 		letter-spacing: 2px;
+		box-sizing: border-box;
 		outline: none;
 		backdrop-filter: blur(8px);
 		transition: border-color 0.2s;
@@ -1681,6 +1698,18 @@
 	.cancel-match:hover {
 		color: rgba(255, 255, 255, 0.8);
 		border-color: rgba(255, 255, 255, 0.3);
+	}
+
+	.go-back-btn {
+		margin-top: 8px;
+		background: rgba(0, 0, 0, 0.2);
+		backdrop-filter: blur(8px);
+		padding: 8px 16px;
+		font-size: 12px;
+		display: inline-flex;
+		align-items: center;
+		align-self: center;
+		gap: 5px;
 	}
 
 	.error-toast {
