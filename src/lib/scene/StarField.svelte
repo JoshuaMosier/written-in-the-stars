@@ -762,7 +762,13 @@
 	const DEFAULT_FOV = 90;
 	const GLOBE_DISTANCE = 3.0;
 	// Fixed FOV that frames the full sphere with some breathing room at GLOBE_DISTANCE
-	const GLOBE_FOV = 40;
+	// Use a wider FOV on mobile (portrait) so the globe doesn't feel cramped
+	const GLOBE_FOV_DESKTOP = 40;
+	const GLOBE_FOV_MOBILE = 55;
+	function getGlobeFov() {
+		return (typeof window !== 'undefined' && window.innerWidth <= 480)
+			? GLOBE_FOV_MOBILE : GLOBE_FOV_DESKTOP;
+	}
 
 	let rendererSize = new THREE.Vector2(1, 1);
 	let globeViewActive = false;
@@ -1510,7 +1516,7 @@
 
 		let targetFov: number;
 		if (globeViewActive) {
-			targetFov = GLOBE_FOV;
+			targetFov = getGlobeFov();
 		} else {
 			const testCam = new THREE.PerspectiveCamera(60, cameraRef.aspect, 0.1, 10);
 			testCam.position.set(0, 0, 0.0001);
@@ -1621,7 +1627,7 @@
 		let targetFov: number;
 		const globeCamDir = centroidDir.clone().negate();
 		if (globeViewActive) {
-			targetFov = GLOBE_FOV;
+			targetFov = getGlobeFov();
 		} else {
 			const testCam = new THREE.PerspectiveCamera(60, cameraRef.aspect, 0.1, 10);
 			testCam.position.set(0, 0, 0.0001);
@@ -2140,7 +2146,7 @@
 		let targetFov: number;
 		const globeCamDir = centroidDir.clone().negate();
 		if (globeViewActive) {
-			targetFov = GLOBE_FOV;
+			targetFov = getGlobeFov();
 		} else {
 			const testCam = new THREE.PerspectiveCamera(60, cameraRef.aspect, 0.1, 10);
 			testCam.position.set(0, 0, 0.0001);
@@ -2307,7 +2313,7 @@
 				controlsRef!.target.set(0, 0, 0);
 				cameraRef!.up.lerpVectors(startUp, defaultUp, ease).normalize();
 				syncControlsUp(controlsRef!, cameraRef!.up);
-				cameraRef!.fov = startFov + (GLOBE_FOV - startFov) * ease;
+				cameraRef!.fov = startFov + (getGlobeFov() - startFov) * ease;
 				cameraRef!.updateProjectionMatrix();
 				controlsRef!.update();
 				if (t < 1) requestAnimationFrame(animate);
@@ -2590,7 +2596,7 @@
 			controlsRef.maxDistance = 6.0;
 			controlsRef.rotateSpeed = Math.abs(controlsRef.rotateSpeed);
 			controlsRef.autoRotateSpeed = -Math.abs(controlsRef.autoRotateSpeed);
-			cameraRef.fov = GLOBE_FOV;
+			cameraRef.fov = getGlobeFov();
 			cameraRef.updateProjectionMatrix();
 		} else {
 			// Move camera back inside the sphere
@@ -2766,7 +2772,7 @@
 			Math.sin(dec) * Math.sin(ra)
 		).normalize();
 
-		const targetFov = globeViewActive ? GLOBE_FOV : (fov ?? Math.min(60, cameraRef.fov));
+		const targetFov = globeViewActive ? getGlobeFov() : (fov ?? Math.min(60, cameraRef.fov));
 
 		if (globeViewActive) {
 			const camDist = GLOBE_DISTANCE;
@@ -2879,7 +2885,7 @@
 
 		let targetFov: number;
 		if (globeViewActive) {
-			targetFov = GLOBE_FOV;
+			targetFov = getGlobeFov();
 		} else {
 			const testCam = new THREE.PerspectiveCamera(60, cameraRef.aspect, 0.1, 10);
 			testCam.position.set(0, 0, 0.0001);
@@ -3431,8 +3437,21 @@
 		}
 		render();
 
+		function applyMobileViewOffset() {
+			const w = container.clientWidth;
+			const h = container.clientHeight;
+			if (w <= 480) {
+				// Shift the view upward by 8% of the viewport height
+				const offsetY = Math.round(h * 0.08);
+				camera.setViewOffset(w, h, 0, offsetY, w, h);
+			} else {
+				camera.clearViewOffset();
+			}
+		}
+
 		const onResize = () => {
 			camera.aspect = container.clientWidth / container.clientHeight;
+			applyMobileViewOffset();
 			camera.updateProjectionMatrix();
 			if (overlayCameraRef) {
 				overlayCameraRef.left = -container.clientWidth / 2;
@@ -3445,6 +3464,8 @@
 			rendererSize.set(container.clientWidth, container.clientHeight);
 			updateRotateSpeed();
 		};
+		applyMobileViewOffset();
+		camera.updateProjectionMatrix();
 		window.addEventListener('resize', onResize);
 
 		// Handle WebGL context loss
