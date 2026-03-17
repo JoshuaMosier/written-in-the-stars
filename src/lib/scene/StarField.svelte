@@ -28,6 +28,7 @@
 	let cameraRef: THREE.PerspectiveCamera | null = null;
 	let overlayCameraRef: THREE.OrthographicCamera | null = null;
 	let controlsRef: OrbitControls | null = null;
+	let rendererRef: THREE.WebGLRenderer | null = null;
 	let constellationGroups: THREE.Group[] = [];
 	let drawAnimationIds: number[] = [];
 	let starPointsRef: THREE.Points | null = null;
@@ -218,32 +219,128 @@
 	} | null = null;
 	const DRAG_COMMIT_THRESHOLD = 5; // pixels before drag starts
 	const VERTEX_PICK_THRESHOLD = 25; // pixels to pick a constellation vertex
+	const STAR_PICK_THRESHOLD = 50;
+	const STAR_HOVER_THRESHOLD = 40;
+	const STAR_PICK_CELL_PX = 64;
+	const STAR_PICK_MARGIN_PX = 64;
+	let starPositionData: Float32Array | null = null;
+	let starScreenX = new Float32Array(0);
+	let starScreenY = new Float32Array(0);
+	let starScreenVisible = new Uint8Array(0);
+	let starGridNext = new Int32Array(0);
+	let starGridHeads = new Int32Array(0);
+	let starGridCols = 1;
+	let starGridRows = 1;
+	const starProjectionVector = new THREE.Vector3();
+
+	function ensureStarProjectionCache(count: number, width: number, height: number) {
+		if (starScreenX.length !== count) {
+			starScreenX = new Float32Array(count);
+			starScreenY = new Float32Array(count);
+			starScreenVisible = new Uint8Array(count);
+			starGridNext = new Int32Array(count);
+		}
+
+		const cols = Math.max(1, Math.ceil(width / STAR_PICK_CELL_PX));
+		const rows = Math.max(1, Math.ceil(height / STAR_PICK_CELL_PX));
+		if (starGridHeads.length !== cols * rows) {
+			starGridHeads = new Int32Array(cols * rows);
+		}
+		starGridCols = cols;
+		starGridRows = rows;
+	}
+
+	function updateStarProjectionCache(camera: THREE.PerspectiveCamera, width: number, height: number) {
+		if (!starPositionData) return;
+		const count = starPositionData.length / 3;
+		ensureStarProjectionCache(count, width, height);
+		starGridHeads.fill(-1);
+
+		for (let i = 0; i < count; i++) {
+			const base = i * 3;
+			starProjectionVector.set(
+				starPositionData[base],
+				starPositionData[base + 1],
+				starPositionData[base + 2]
+			).project(camera);
+
+			if (starProjectionVector.z > 1) {
+				starScreenVisible[i] = 0;
+				starGridNext[i] = -1;
+				continue;
+			}
+
+			const sx = (starProjectionVector.x * 0.5 + 0.5) * width;
+			const sy = (-starProjectionVector.y * 0.5 + 0.5) * height;
+
+			if (!Number.isFinite(sx) || !Number.isFinite(sy)) {
+				starScreenVisible[i] = 0;
+				starGridNext[i] = -1;
+				continue;
+			}
+
+			starScreenX[i] = sx;
+			starScreenY[i] = sy;
+
+			const inRange = sx >= -STAR_PICK_MARGIN_PX
+				&& sx <= width + STAR_PICK_MARGIN_PX
+				&& sy >= -STAR_PICK_MARGIN_PX
+				&& sy <= height + STAR_PICK_MARGIN_PX;
+			if (!inRange) {
+				starScreenVisible[i] = 0;
+				starGridNext[i] = -1;
+				continue;
+			}
+
+			starScreenVisible[i] = 1;
+			const clampedX = Math.min(Math.max(sx, 0), Math.max(0, width - 1));
+			const clampedY = Math.min(Math.max(sy, 0), Math.max(0, height - 1));
+			const col = Math.min(starGridCols - 1, Math.floor(clampedX / STAR_PICK_CELL_PX));
+			const row = Math.min(starGridRows - 1, Math.floor(clampedY / STAR_PICK_CELL_PX));
+			const bucket = row * starGridCols + col;
+			starGridNext[i] = starGridHeads[bucket];
+			starGridHeads[bucket] = i;
+		}
+	}
 
 	// Build a spatial index for fast star lookup by screen position
 	function findNearestStarToScreen(
 		mx: number, my: number, camera: THREE.PerspectiveCamera,
-		w: number, h: number, excludeIdx?: number
+		w: number, h: number, excludeIdx?: number, threshold = STAR_PICK_THRESHOLD
 	): Star | null {
-		const projected = new THREE.Vector3();
-		let bestDist = Infinity;
-		let bestStar: Star | null = null;
-		const threshold = 50;
-		for (const s of stars) {
-			if (excludeIdx !== undefined && s.idx === excludeIdx) continue;
-			projected.copy(raDecToXYZ(s.ra, s.dec));
-			projected.project(camera);
-			if (projected.z > 1) continue;
-			const sx = (projected.x * 0.5 + 0.5) * w;
-			const sy = (-projected.y * 0.5 + 0.5) * h;
-			const dx = sx - mx;
-			const dy = sy - my;
-			const dist = Math.sqrt(dx * dx + dy * dy);
-			if (dist < threshold && dist < bestDist) {
-				bestDist = dist;
-				bestStar = s;
+		if (!starPositionData || stars.length === 0) return null;
+		if (starGridHeads.length === 0) updateStarProjectionCache(camera, w, h);
+
+		const thresholdSq = threshold * threshold;
+		let bestDistSq = thresholdSq;
+		let bestStarIdx = -1;
+		const minCol = Math.max(0, Math.floor((mx - threshold) / STAR_PICK_CELL_PX));
+		const maxCol = Math.min(starGridCols - 1, Math.floor((mx + threshold) / STAR_PICK_CELL_PX));
+		const minRow = Math.max(0, Math.floor((my - threshold) / STAR_PICK_CELL_PX));
+		const maxRow = Math.min(starGridRows - 1, Math.floor((my + threshold) / STAR_PICK_CELL_PX));
+
+		for (let row = minRow; row <= maxRow; row++) {
+			for (let col = minCol; col <= maxCol; col++) {
+				let starIdx = starGridHeads[row * starGridCols + col];
+				while (starIdx !== -1) {
+					if (starScreenVisible[starIdx]) {
+						const star = stars[starIdx];
+						if (excludeIdx === undefined || star.idx !== excludeIdx) {
+							const dx = starScreenX[starIdx] - mx;
+							const dy = starScreenY[starIdx] - my;
+							const distSq = dx * dx + dy * dy;
+							if (distSq < bestDistSq) {
+								bestDistSq = distSq;
+								bestStarIdx = starIdx;
+							}
+						}
+					}
+					starIdx = starGridNext[starIdx];
+				}
 			}
 		}
-		return bestStar;
+
+		return bestStarIdx >= 0 ? stars[bestStarIdx] : null;
 	}
 
 	function findPickedVertex(
@@ -251,7 +348,8 @@
 		w: number, h: number
 	): { constellationIndex: number; nodeIndex: number; star: Star } | null {
 		const projected = new THREE.Vector3();
-		let bestDist = Infinity;
+		const thresholdSq = VERTEX_PICK_THRESHOLD * VERTEX_PICK_THRESHOLD;
+		let bestDistSq = thresholdSq;
 		let bestPick: { constellationIndex: number; nodeIndex: number; star: Star } | null = null;
 		for (let ci = 0; ci < currentResults.length; ci++) {
 			const result = currentResults[ci];
@@ -263,9 +361,9 @@
 				const sy = (-projected.y * 0.5 + 0.5) * h;
 				const dx = sx - mx;
 				const dy = sy - my;
-				const dist = Math.sqrt(dx * dx + dy * dy);
-				if (dist < VERTEX_PICK_THRESHOLD && dist < bestDist) {
-					bestDist = dist;
+				const distSq = dx * dx + dy * dy;
+				if (distSq < bestDistSq) {
+					bestDistSq = distSq;
 					bestPick = { constellationIndex: ci, nodeIndex: pair.nodeIndex, star: pair.star };
 				}
 			}
@@ -470,9 +568,12 @@
 	}
 
 	function scheduleMeteor() {
-		if (!meteorsEnabled) return;
+		if (!meteorsEnabled || meteorTimerId !== null) return;
 		const delay = 200 + Math.random() * 400; // ~200-600ms
-		meteorTimerId = setTimeout(spawnMeteor, delay);
+		meteorTimerId = setTimeout(() => {
+			meteorTimerId = null;
+			spawnMeteor();
+		}, delay);
 	}
 
 	function updateMeteors(dt: number) {
@@ -537,6 +638,7 @@
 	}
 
 	function resumeMeteors() {
+		if (meteorsEnabled) return;
 		meteorsEnabled = true;
 		scheduleMeteor();
 	}
@@ -695,9 +797,12 @@
 	}
 
 	function scheduleComet() {
-		if (!cometsEnabled) return;
+		if (!cometsEnabled || cometTimerId !== null) return;
 		const delay = 2000 + Math.random() * 4000;
-		cometTimerId = setTimeout(spawnComet, delay);
+		cometTimerId = setTimeout(() => {
+			cometTimerId = null;
+			spawnComet();
+		}, delay);
 	}
 
 	const _cometPt = new THREE.Vector3();
@@ -881,6 +986,7 @@
 	}
 
 	function resumeComets() {
+		if (cometsEnabled) return;
 		cometsEnabled = true;
 		scheduleComet();
 	}
@@ -935,6 +1041,8 @@
 	let globeTransitionRestore: { enableRotate: boolean } | null = null;
 	let overlayLabelGlobeViewActive = false;
 	let overlayLabelTransitionOpacity = 1;
+	let cameraAnimationId: number | null = null;
+	let cameraAnimationToken = 0;
 
 	// --- Auto-rotate (landing page drift) ---
 	let autoRotateActive = !reducedMotion;
@@ -1660,6 +1768,8 @@
 
 		const result = allResults[focusIndex];
 		if (!result) return;
+		cancelGlobeTransition();
+		cancelCameraAnimation();
 
 		let cx = 0, cy = 0, cz = 0;
 		const positions: THREE.Vector3[] = [];
@@ -1762,6 +1872,8 @@
 	/** Smooth pan to focused constellation, then draw it animated; others stay instant */
 	export function panToConstellation(allResults: MatchResult[], focusIndex: number, colors?: string[]) {
 		if (!controlsRef || !cameraRef) return;
+		cancelGlobeTransition();
+		cancelCameraAnimation();
 
 		// Reduced motion: jump instantly
 		if (reducedMotion) {
@@ -1842,26 +1954,24 @@
 			const qSlerp = new THREE.Quaternion();
 			const slerpedDir = new THREE.Vector3();
 
-			function animate() {
+			runCameraAnimation(() => {
+				if (!cameraRef || !controlsRef) return false;
 				const elapsed = performance.now() - startTime;
 				const t = Math.min(1, elapsed / duration);
 				const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 				qSlerp.slerpQuaternions(qStart, qEnd, ease);
 				slerpedDir.set(0, 0, 1).applyQuaternion(qSlerp);
-				cameraRef!.position.copy(slerpedDir.clone().multiplyScalar(GLOBE_DISTANCE));
-				controlsRef!.target.set(0, 0, 0);
-				cameraRef!.up.lerpVectors(startUp, localNorth, ease).normalize();
-				syncControlsUp(controlsRef!, cameraRef!.up);
-				cameraRef!.fov = startFov + (targetFov - startFov) * ease;
-				cameraRef!.updateProjectionMatrix();
-				controlsRef!.update();
-				if (t < 1) {
-					requestAnimationFrame(animate);
-				} else {
-					drawConstellationAnimated(result, true, currentColors[focusIndex]);
-				}
-			}
-			animate();
+				cameraRef.position.copy(slerpedDir.clone().multiplyScalar(GLOBE_DISTANCE));
+				controlsRef.target.set(0, 0, 0);
+				cameraRef.up.lerpVectors(startUp, localNorth, ease).normalize();
+				syncControlsUp(controlsRef, cameraRef.up);
+				cameraRef.fov = startFov + (targetFov - startFov) * ease;
+				cameraRef.updateProjectionMatrix();
+				controlsRef.update();
+				if (t < 1) return true;
+				drawConstellationAnimated(result, true, currentColors[focusIndex]);
+				return false;
+			});
 			return;
 		}
 
@@ -1877,27 +1987,25 @@
 		const slerpedDir = new THREE.Vector3();
 		const origin = new THREE.Vector3(0, 0, 0.0001);
 
-		function animate() {
+		runCameraAnimation(() => {
+			if (!cameraRef || !controlsRef) return false;
 			const elapsed = performance.now() - startTime;
 			const t = Math.min(1, elapsed / duration);
 			const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-			cameraRef!.position.lerpVectors(startPos, origin, ease);
+			cameraRef.position.lerpVectors(startPos, origin, ease);
 			qSlerp.slerpQuaternions(qStart, qEnd, ease);
 			slerpedDir.set(0, 0, -1).applyQuaternion(qSlerp);
-			controlsRef!.target.copy(cameraRef!.position).addScaledVector(slerpedDir, 0.001);
-			cameraRef!.up.lerpVectors(startUp, localNorth, ease).normalize();
-			syncControlsUp(controlsRef!, cameraRef!.up);
-			cameraRef!.fov = startFov + (targetFov - startFov) * ease;
-			cameraRef!.updateProjectionMatrix();
-			controlsRef!.update();
-			if (t < 1) {
-				requestAnimationFrame(animate);
-			} else {
-				// Camera arrived — draw the focused constellation with animation
-				drawConstellationAnimated(result, true, currentColors[focusIndex]);
-			}
-		}
-		animate();
+			controlsRef.target.copy(cameraRef.position).addScaledVector(slerpedDir, 0.001);
+			cameraRef.up.lerpVectors(startUp, localNorth, ease).normalize();
+			syncControlsUp(controlsRef, cameraRef.up);
+			cameraRef.fov = startFov + (targetFov - startFov) * ease;
+			cameraRef.updateProjectionMatrix();
+			controlsRef.update();
+			if (t < 1) return true;
+			// Camera arrived — draw the focused constellation with animation
+			drawConstellationAnimated(result, true, currentColors[focusIndex]);
+			return false;
+		});
 	}
 
 	// --- Ambient constellation cycling ---
@@ -2274,6 +2382,8 @@
 
 	export function animateToMatch(result: MatchResult, fast = false, color?: string) {
 		if (!controlsRef || !cameraRef) return;
+		cancelGlobeTransition();
+		cancelCameraAnimation();
 
 		// Track this result if not already tracked (single-add case)
 		if (!currentResults.includes(result)) {
@@ -2373,26 +2483,24 @@
 			const qSlerp = new THREE.Quaternion();
 			const slerpedDir = new THREE.Vector3();
 
-			function animate() {
+			runCameraAnimation(() => {
+				if (!cameraRef || !controlsRef) return false;
 				const elapsed = performance.now() - startTime;
 				const t = Math.min(1, elapsed / duration);
 				const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 				qSlerp.slerpQuaternions(qStart, qEnd, ease);
 				slerpedDir.set(0, 0, 1).applyQuaternion(qSlerp);
-				cameraRef!.position.copy(slerpedDir.clone().multiplyScalar(GLOBE_DISTANCE));
-				controlsRef!.target.set(0, 0, 0);
-				cameraRef!.up.lerpVectors(startUp, localNorth, ease).normalize();
-				syncControlsUp(controlsRef!, cameraRef!.up);
-				cameraRef!.fov = startFov + (targetFov - startFov) * ease;
-				cameraRef!.updateProjectionMatrix();
-				controlsRef!.update();
-				if (t < 1) {
-					requestAnimationFrame(animate);
-				} else {
-					drawConstellationAnimated(result, fast, color);
-				}
-			}
-			animate();
+				cameraRef.position.copy(slerpedDir.clone().multiplyScalar(GLOBE_DISTANCE));
+				controlsRef.target.set(0, 0, 0);
+				cameraRef.up.lerpVectors(startUp, localNorth, ease).normalize();
+				syncControlsUp(controlsRef, cameraRef.up);
+				cameraRef.fov = startFov + (targetFov - startFov) * ease;
+				cameraRef.updateProjectionMatrix();
+				controlsRef.update();
+				if (t < 1) return true;
+				drawConstellationAnimated(result, fast, color);
+				return false;
+			});
 			return;
 		}
 
@@ -2413,34 +2521,34 @@
 		const slerpedDir = new THREE.Vector3();
 		const origin = new THREE.Vector3(0, 0, 0.0001);
 
-		function animate() {
+		runCameraAnimation(() => {
+			if (!cameraRef || !controlsRef) return false;
 			const elapsed = performance.now() - startTime;
 			const t = Math.min(1, elapsed / duration);
 			const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 			// Move camera back to origin
-			cameraRef!.position.lerpVectors(startPos, origin, ease);
+			cameraRef.position.lerpVectors(startPos, origin, ease);
 			qSlerp.slerpQuaternions(qStart, qEnd, ease);
 			slerpedDir.set(0, 0, -1).applyQuaternion(qSlerp);
-			controlsRef!.target.copy(cameraRef!.position).addScaledVector(slerpedDir, 0.001);
-			cameraRef!.up.lerpVectors(startUp, localNorth, ease).normalize();
+			controlsRef.target.copy(cameraRef.position).addScaledVector(slerpedDir, 0.001);
+			cameraRef.up.lerpVectors(startUp, localNorth, ease).normalize();
 			// OrbitControls caches the up-to-Y quaternion at construction time.
 			// Update it each frame so the new up vector is respected.
-			syncControlsUp(controlsRef!, cameraRef!.up);
-			cameraRef!.fov = startFov + (targetFov - startFov) * ease;
-			cameraRef!.updateProjectionMatrix();
-			controlsRef!.update();
-			if (t < 1) {
-				requestAnimationFrame(animate);
-			} else {
-				// Camera arrived — start drawing the constellation
-				drawConstellationAnimated(result, fast, color);
-			}
-		}
-		animate();
+			syncControlsUp(controlsRef, cameraRef.up);
+			cameraRef.fov = startFov + (targetFov - startFov) * ease;
+			cameraRef.updateProjectionMatrix();
+			controlsRef.update();
+			if (t < 1) return true;
+			// Camera arrived — start drawing the constellation
+			drawConstellationAnimated(result, fast, color);
+			return false;
+		});
 	}
 
 	export function resetView() {
 		if (!controlsRef || !cameraRef) return;
+		cancelGlobeTransition();
+		cancelCameraAnimation();
 
 		clearAllConstellations();
 		if (uniformsRef) uniformsRef.uDim.value = 1.0;
@@ -2481,23 +2589,23 @@
 			const slerpedDir = new THREE.Vector3();
 			const startDist = startPos.length() || GLOBE_DISTANCE;
 
-			function animate() {
+			runCameraAnimation(() => {
+				if (!cameraRef || !controlsRef) return false;
 				const elapsed = performance.now() - startTime;
 				const t = Math.min(1, elapsed / duration);
 				const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 				qSlerp.slerpQuaternions(qStart, qEnd, ease);
 				slerpedDir.set(0, 0, 1).applyQuaternion(qSlerp);
 				const dist = startDist + (GLOBE_DISTANCE - startDist) * ease;
-				cameraRef!.position.copy(slerpedDir.multiplyScalar(dist));
-				controlsRef!.target.set(0, 0, 0);
-				cameraRef!.up.lerpVectors(startUp, defaultUp, ease).normalize();
-				syncControlsUp(controlsRef!, cameraRef!.up);
-				cameraRef!.fov = startFov + (getGlobeFov() - startFov) * ease;
-				cameraRef!.updateProjectionMatrix();
-				controlsRef!.update();
-				if (t < 1) requestAnimationFrame(animate);
-			}
-			animate();
+				cameraRef.position.copy(slerpedDir.multiplyScalar(dist));
+				controlsRef.target.set(0, 0, 0);
+				cameraRef.up.lerpVectors(startUp, defaultUp, ease).normalize();
+				syncControlsUp(controlsRef, cameraRef.up);
+				cameraRef.fov = startFov + (getGlobeFov() - startFov) * ease;
+				cameraRef.updateProjectionMatrix();
+				controlsRef.update();
+				return t < 1;
+			});
 			return;
 		}
 
@@ -2508,22 +2616,22 @@
 		const slerpedDir = new THREE.Vector3();
 		const origin = new THREE.Vector3(0, 0, 0.0001);
 
-		function animate() {
+		runCameraAnimation(() => {
+			if (!cameraRef || !controlsRef) return false;
 			const elapsed = performance.now() - startTime;
 			const t = Math.min(1, elapsed / duration);
 			const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-			cameraRef!.position.lerpVectors(startPos, origin, ease);
+			cameraRef.position.lerpVectors(startPos, origin, ease);
 			qSlerp.slerpQuaternions(qStart, qEnd, ease);
 			slerpedDir.set(0, 0, -1).applyQuaternion(qSlerp);
-			controlsRef!.target.copy(cameraRef!.position).addScaledVector(slerpedDir, 0.001);
-			cameraRef!.up.lerpVectors(startUp, defaultUp, ease).normalize();
-			syncControlsUp(controlsRef!, cameraRef!.up);
-			cameraRef!.fov = startFov + (DEFAULT_FOV - startFov) * ease;
-			cameraRef!.updateProjectionMatrix();
-			controlsRef!.update();
-			if (t < 1) requestAnimationFrame(animate);
-		}
-		animate();
+			controlsRef.target.copy(cameraRef.position).addScaledVector(slerpedDir, 0.001);
+			cameraRef.up.lerpVectors(startUp, defaultUp, ease).normalize();
+			syncControlsUp(controlsRef, cameraRef.up);
+			cameraRef.fov = startFov + (DEFAULT_FOV - startFov) * ease;
+			cameraRef.updateProjectionMatrix();
+			controlsRef.update();
+			return t < 1;
+		});
 	}
 
 	export function toggleAutoRotate(on: boolean) {
@@ -2787,6 +2895,51 @@
 		(controls as any)._scale = 1;
 	}
 
+	function cancelCameraAnimation() {
+		if (cameraAnimationId !== null) {
+			cancelAnimationFrame(cameraAnimationId);
+			cameraAnimationId = null;
+		}
+		cameraAnimationToken++;
+	}
+
+	function runCameraAnimation(step: () => boolean) {
+		cancelCameraAnimation();
+		const token = cameraAnimationToken;
+
+		const animate = () => {
+			if (token !== cameraAnimationToken) return;
+			const keepGoing = step();
+			if (token !== cameraAnimationToken) return;
+			if (keepGoing) {
+				cameraAnimationId = requestAnimationFrame(animate);
+			} else {
+				cameraAnimationId = null;
+			}
+		};
+
+		animate();
+	}
+
+	function cancelGlobeTransition() {
+		if (globeTransitionId !== null) {
+			cancelAnimationFrame(globeTransitionId);
+			globeTransitionId = null;
+		}
+		globeTransitionActive = false;
+		globeTransitionFovOverride = false;
+		overlayLabelGlobeViewActive = globeViewActive;
+		overlayLabelTransitionOpacity = 1;
+		if (!controlsRef) {
+			globeTransitionRestore = null;
+			return;
+		}
+		controlsRef.enabled = true;
+		controlsRef.enableRotate = globeTransitionRestore?.enableRotate ?? controlsRef.enableRotate;
+		controlsRef.autoRotate = autoRotateActive;
+		globeTransitionRestore = null;
+	}
+
 	function applyCameraFrame(
 		position: THREE.Vector3,
 		target: THREE.Vector3,
@@ -2859,11 +3012,8 @@
 	export function toggleGlobeView(on: boolean) {
 		if (!controlsRef || !cameraRef) return;
 		if (on === globeViewActive && !globeTransitionActive) return;
-
-		if (globeTransitionId !== null) {
-			cancelAnimationFrame(globeTransitionId);
-			globeTransitionId = null;
-		}
+		cancelCameraAnimation();
+		cancelGlobeTransition();
 
 		const enableRotate = globeTransitionRestore?.enableRotate ?? controlsRef.enableRotate;
 		const viewDir = getCurrentViewDirection();
@@ -3088,6 +3238,8 @@
 	// --- Pan camera to RA/Dec position ---
 	export function panToRaDec(ra: number, dec: number, fov?: number) {
 		if (!controlsRef || !cameraRef) return;
+		cancelGlobeTransition();
+		cancelCameraAnimation();
 
 		const targetDir = raDecToXYZ(ra, dec);
 		const localNorth = new THREE.Vector3(
@@ -3127,22 +3279,22 @@
 			const qSlerp = new THREE.Quaternion();
 			const slerpedDir = new THREE.Vector3();
 
-			function animate() {
+			runCameraAnimation(() => {
+				if (!cameraRef || !controlsRef) return false;
 				const elapsed = performance.now() - startTime;
 				const t = Math.min(1, elapsed / duration);
 				const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 				qSlerp.slerpQuaternions(qStart, qEnd, ease);
 				slerpedDir.set(0, 0, 1).applyQuaternion(qSlerp);
-				cameraRef!.position.copy(slerpedDir.multiplyScalar(camDist));
-				controlsRef!.target.set(0, 0, 0);
-				cameraRef!.up.lerpVectors(startUp, localNorth, ease).normalize();
-				syncControlsUp(controlsRef!, cameraRef!.up);
-				cameraRef!.fov = startFov + (targetFov - startFov) * ease;
-				cameraRef!.updateProjectionMatrix();
-				controlsRef!.update();
-				if (t < 1) requestAnimationFrame(animate);
-			}
-			animate();
+				cameraRef.position.copy(slerpedDir.multiplyScalar(camDist));
+				controlsRef.target.set(0, 0, 0);
+				cameraRef.up.lerpVectors(startUp, localNorth, ease).normalize();
+				syncControlsUp(controlsRef, cameraRef.up);
+				cameraRef.fov = startFov + (targetFov - startFov) * ease;
+				cameraRef.updateProjectionMatrix();
+				controlsRef.update();
+				return t < 1;
+			});
 			return;
 		}
 
@@ -3172,22 +3324,22 @@
 		const slerpedDir = new THREE.Vector3();
 		const origin = new THREE.Vector3(0, 0, 0.0001);
 
-		function animate() {
+		runCameraAnimation(() => {
+			if (!cameraRef || !controlsRef) return false;
 			const elapsed = performance.now() - startTime;
 			const t = Math.min(1, elapsed / duration);
 			const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-			cameraRef!.position.lerpVectors(startPos, origin, ease);
+			cameraRef.position.lerpVectors(startPos, origin, ease);
 			qSlerp.slerpQuaternions(qStart, qEnd, ease);
 			slerpedDir.set(0, 0, -1).applyQuaternion(qSlerp);
-			controlsRef!.target.copy(cameraRef!.position).addScaledVector(slerpedDir, 0.001);
-			cameraRef!.up.lerpVectors(startUp, localNorth, ease).normalize();
-			syncControlsUp(controlsRef!, cameraRef!.up);
-			cameraRef!.fov = startFov + (targetFov - startFov) * ease;
-			cameraRef!.updateProjectionMatrix();
-			controlsRef!.update();
-			if (t < 1) requestAnimationFrame(animate);
-		}
-		animate();
+			controlsRef.target.copy(cameraRef.position).addScaledVector(slerpedDir, 0.001);
+			cameraRef.up.lerpVectors(startUp, localNorth, ease).normalize();
+			syncControlsUp(controlsRef, cameraRef.up);
+			cameraRef.fov = startFov + (targetFov - startFov) * ease;
+			cameraRef.updateProjectionMatrix();
+			controlsRef.update();
+			return t < 1;
+		});
 	}
 
 	// --- Pan to IAU constellation centroid with FOV fitting ---
@@ -3237,9 +3389,31 @@
 
 	export function captureImage(): Promise<Blob> {
 		return new Promise((resolve, reject) => {
-			const canvas = container?.querySelector('canvas');
-			if (!canvas) return reject(new Error('No canvas'));
-			canvas.toBlob((blob) => {
+			if (!container || !sceneRef || !overlaySceneRef || !cameraRef || !overlayCameraRef) {
+				return reject(new Error('Scene not ready'));
+			}
+
+			const width = container.clientWidth;
+			const height = container.clientHeight;
+			const pixelRatio = rendererRef?.getPixelRatio() ?? Math.min(window.devicePixelRatio, 2);
+			const captureRenderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+			captureRenderer.getContext().drawingBufferColorSpace = 'srgb';
+			captureRenderer.autoClear = false;
+			captureRenderer.setPixelRatio(pixelRatio);
+			captureRenderer.setSize(width, height, false);
+			captureRenderer.setClearColor(0x000005);
+
+			cameraRef.updateMatrixWorld();
+			overlayCameraRef.updateMatrixWorld();
+			updateOverlayLabels(performance.now());
+			captureRenderer.clear();
+			captureRenderer.render(sceneRef, cameraRef);
+			captureRenderer.clearDepth();
+			captureRenderer.render(overlaySceneRef, overlayCameraRef);
+
+			captureRenderer.domElement.toBlob((blob) => {
+				captureRenderer.dispose();
+				captureRenderer.forceContextLoss();
 				if (blob) resolve(blob);
 				else reject(new Error('Failed to capture image'));
 			}, 'image/png');
@@ -3268,12 +3442,13 @@
 		overlayCamera.position.z = 1;
 		overlayCameraRef = overlayCamera;
 
-		const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+		const renderer = new THREE.WebGLRenderer({ antialias: true });
 		renderer.getContext().drawingBufferColorSpace = 'srgb';
 		renderer.autoClear = false;
 		renderer.setSize(container.clientWidth, container.clientHeight);
 		renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 		renderer.setClearColor(0x000005);
+		rendererRef = renderer;
 		rendererSize.set(container.clientWidth, container.clientHeight);
 		container.appendChild(renderer.domElement);
 
@@ -3460,19 +3635,10 @@
 		scene.add(cGroup);
 		scheduleComet();
 
-		// --- Hover-to-show star label ---
-		const starInfos: { label: string; pos: THREE.Vector3; idx: number }[] = [];
-		for (let i = 0; i < stars.length; i++) {
-			const s = stars[i];
-			starInfos.push({
-				label: s.name || `HIP ${s.id}`,
-				pos: raDecToXYZ(s.ra, s.dec),
-				idx: i,
-			});
-		}
+		starPositionData = positions;
+		updateStarProjectionCache(camera, container.clientWidth, container.clientHeight);
 
 		let hoveredIdx = -1;
-		const projected = new THREE.Vector3();
 
 		// --- Vertex drag handlers (mouse + touch) ---
 		let longPressTimer: ReturnType<typeof setTimeout> | null = null;
@@ -3731,29 +3897,7 @@
 
 			// Ensure camera matrices are current
 			camera.updateMatrixWorld();
-
-			let bestDist = Infinity;
-			let bestStar: typeof starInfos[0] | null = null;
-
-			const threshold = 40;
-
-			for (const si of starInfos) {
-				projected.copy(si.pos);
-				projected.project(camera);
-
-				if (projected.z > 1) continue;
-
-				const sx = (projected.x * 0.5 + 0.5) * w;
-				const sy = (-projected.y * 0.5 + 0.5) * h;
-				const dx = sx - mx;
-				const dy = sy - my;
-				const dist = Math.sqrt(dx * dx + dy * dy);
-
-				if (dist < threshold && dist < bestDist) {
-					bestDist = dist;
-					bestStar = si;
-				}
-			}
+			const bestStar = findNearestStarToScreen(mx, my, camera, w, h, undefined, STAR_HOVER_THRESHOLD);
 
 			// Check if hovering over a constellation vertex — show grab cursor
 			if (currentResults.length > 0) {
@@ -3768,7 +3912,7 @@
 			if (bestStar && bestStar.idx !== hoveredIdx) {
 				hoveredIdx = bestStar.idx;
 				uniforms.uHoveredIndex.value = bestStar.idx;
-				tooltip.textContent = bestStar.label;
+				tooltip.textContent = bestStar.name || `HIP ${bestStar.id}`;
 				tooltip.style.opacity = '1';
 			} else if (!bestStar && hoveredIdx >= 0) {
 				hoveredIdx = -1;
@@ -3843,6 +3987,7 @@
 			} else {
 				camera.updateMatrixWorld();
 			}
+			updateStarProjectionCache(camera, container.clientWidth, container.clientHeight);
 			updateOverlayLabels(performance.now());
 			renderer.clear();
 			renderer.render(scene, camera);
@@ -3879,6 +4024,7 @@
 			renderer.setSize(container.clientWidth, container.clientHeight);
 			rendererSize.set(container.clientWidth, container.clientHeight);
 			updateRotateSpeed();
+			updateStarProjectionCache(camera, container.clientWidth, container.clientHeight);
 		};
 		applyMobileViewOffset();
 		camera.updateProjectionMatrix();
@@ -3888,6 +4034,8 @@
 		const onContextLost = (e: Event) => {
 			e.preventDefault();
 			cancelAnimationFrame(animId);
+			cancelCameraAnimation();
+			cancelGlobeTransition();
 			stopAmbientCycle();
 			stopMeteors();
 			stopComets();
@@ -3908,6 +4056,8 @@
 
 		return () => {
 			cancelAnimationFrame(animId);
+			cancelCameraAnimation();
+			cancelGlobeTransition();
 			stopAmbientCycle();
 			clearAllConstellations();
 			clearStarHighlight();
@@ -3953,7 +4103,14 @@
 			cameraRef = null;
 			overlayCameraRef = null;
 			controlsRef = null;
+			rendererRef = null;
 			starPointsRef = null;
+			starPositionData = null;
+			starScreenX = new Float32Array(0);
+			starScreenY = new Float32Array(0);
+			starScreenVisible = new Uint8Array(0);
+			starGridNext = new Int32Array(0);
+			starGridHeads = new Int32Array(0);
 			meteorGroup = null;
 			cometGroup = null;
 			coordGridGroup = null;
