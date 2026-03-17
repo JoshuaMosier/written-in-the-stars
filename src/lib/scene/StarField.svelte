@@ -1476,11 +1476,13 @@
 			connectedNodes.add(nB);
 		}
 
-		// Collect highlighted star positions
+		// Collect highlighted star positions for edge-connected nodes only.
+		// Isolated nodes (like the dots on lowercase i/j) are rendered through
+		// the dedicated isolated-node cloud below, which matches the instant path.
 		const hlPositions: THREE.Vector3[] = [];
 		for (const pair of result.pairs) {
 			const pos = nodeToPos.get(pair.nodeIndex);
-			if (pos) hlPositions.push(pos.clone());
+			if (pos && connectedNodes.has(pair.nodeIndex)) hlPositions.push(pos.clone());
 		}
 
 		// Find isolated nodes (no edges) — e.g. periods/dots
@@ -1557,8 +1559,14 @@
 		const starCloud = hlPositions.length > 0 ? createDynamicPointCloud(hlMat, hlPositions.length, 2) : null;
 		if (starCloud) constellationGroup.add(starCloud.points);
 
-		const ringCloud = isolatedPositions.length > 0 ? createDynamicPointCloud(ringMat, isolatedPositions.length, 2) : null;
-		if (ringCloud) constellationGroup.add(ringCloud.points);
+		let ringPoints: THREE.Points | null = null;
+		if (isolatedPositions.length > 0) {
+			ringPoints = new THREE.Points(new THREE.BufferGeometry(), ringMat);
+			ringPoints.renderOrder = 2;
+			ringPoints.visible = false;
+			ringPoints.frustumCulled = false;
+			constellationGroup.add(ringPoints);
+		}
 
 		const drawDuration = fast ? 80 : 300; // ms per edge to draw
 		const stagger = fast ? 15 : 60; // ms between starting each edge
@@ -1634,20 +1642,32 @@
 				updateDynamicPointCloud(starCloud, starCount);
 			}
 
-			if (ringCloud) {
+			if (ringPoints) {
 				let ringCount = 0;
 				for (let j = 0; j < isolatedPositions.length; j++) {
 					const ringStart = (edgeData.length + j) * stagger;
 					const t = Math.min(1, Math.max(0, (elapsed - ringStart) / drawDuration));
 					if (t <= 0) continue;
-					const pos = isolatedPositions[j];
-					const base = ringCount * 3;
-					ringCloud.positions[base] = pos.x;
-					ringCloud.positions[base + 1] = pos.y;
-					ringCloud.positions[base + 2] = pos.z;
 					ringCount++;
 				}
-				updateDynamicPointCloud(ringCloud, ringCount);
+				if (ringCount > 0) {
+					const ringPositions = new Float32Array(ringCount * 3);
+					for (let j = 0; j < ringCount; j++) {
+						const pos = isolatedPositions[j];
+						const base = j * 3;
+						ringPositions[base] = pos.x;
+						ringPositions[base + 1] = pos.y;
+						ringPositions[base + 2] = pos.z;
+					}
+					const nextGeometry = new THREE.BufferGeometry();
+					nextGeometry.setAttribute('position', new THREE.Float32BufferAttribute(ringPositions, 3));
+					const prevGeometry = ringPoints.geometry as THREE.BufferGeometry;
+					ringPoints.geometry = nextGeometry;
+					prevGeometry.dispose();
+					ringPoints.visible = true;
+				} else {
+					ringPoints.visible = false;
+				}
 			}
 
 			if (elapsed < totalDuration && constellationGroup.parent) {
@@ -2191,8 +2211,14 @@
 			depthTest: false,
 			blending: THREE.AdditiveBlending,
 		});
-		const starCloud = rc.hlPositions.length > 0 ? createDynamicPointCloud(hlMat, rc.hlPositions.length, 2) : null;
-		if (starCloud) group.add(starCloud.points);
+		let starPoints: THREE.Points | null = null;
+		if (rc.hlPositions.length > 0) {
+			starPoints = new THREE.Points(new THREE.BufferGeometry(), hlMat);
+			starPoints.renderOrder = 2;
+			starPoints.visible = false;
+			starPoints.frustumCulled = false;
+			group.add(starPoints);
+		}
 
 		function animate() {
 			if (ambientPaused || !group.parent) return;
@@ -2258,19 +2284,33 @@
 				updateDynamicLinePair(linePair, activeLineCount);
 			}
 
-			if (starCloud) {
+			if (starPoints) {
 				let starCount = 0;
 				for (let i = 0; i < rc.hlPositions.length; i++) {
-					if (!revealedStars.has(hlKeys[i])) continue;
-					const pos = rc.hlPositions[i];
-					const base = starCount * 3;
-					starCloud.positions[base] = pos.x;
-					starCloud.positions[base + 1] = pos.y;
-					starCloud.positions[base + 2] = pos.z;
-					starCount++;
+					if (revealedStars.has(hlKeys[i])) starCount++;
 				}
 				(hlMat.uniforms.uOpacity as THREE.Uniform<number>).value = opacity;
-				updateDynamicPointCloud(starCloud, starCount);
+				if (starCount > 0) {
+					const starPositions = new Float32Array(starCount * 3);
+					let writeIndex = 0;
+					for (let i = 0; i < rc.hlPositions.length; i++) {
+						if (!revealedStars.has(hlKeys[i])) continue;
+						const pos = rc.hlPositions[i];
+						const base = writeIndex * 3;
+						starPositions[base] = pos.x;
+						starPositions[base + 1] = pos.y;
+						starPositions[base + 2] = pos.z;
+						writeIndex++;
+					}
+					const nextGeometry = new THREE.BufferGeometry();
+					nextGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
+					const prevGeometry = starPoints.geometry as THREE.BufferGeometry;
+					starPoints.geometry = nextGeometry;
+					prevGeometry.dispose();
+					starPoints.visible = true;
+				} else {
+					starPoints.visible = false;
+				}
 			}
 
 			ac.animId = requestAnimationFrame(animate);
