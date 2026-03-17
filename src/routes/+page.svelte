@@ -170,7 +170,7 @@
 	}
 
 	let errorMessage = $state('');
-	const MATCH_TIMEOUT_MS = 30_000;
+	const MATCH_TIMEOUT_MS = 60_000;
 	let matchTimeoutId: ReturnType<typeof setTimeout> | null = null;
 	let matchRequestId = 0;
 
@@ -557,6 +557,15 @@
 	];
 	let tourStep = $state(0);
 	let tourSeen = $state(typeof localStorage !== 'undefined' && localStorage.getItem('starspelled-tour-seen') === '1');
+
+	// Auto-focus search box when result overlay appears
+	$effect(() => {
+		if (!showInput && searchInputEl) {
+			// Tick delay so the DOM is rendered before focus
+			const t = setTimeout(() => searchInputEl?.focus(), 50);
+			return () => clearTimeout(t);
+		}
+	});
 
 	$effect(() => {
 		if (!tourSeen && !showInput && constellations.length === 1 && tourStep === 0) {

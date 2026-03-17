@@ -1456,7 +1456,78 @@
 		}
 	}
 
+	function focusConstellationInstant(allResults: MatchResult[], focusIndex: number) {
+		if (!controlsRef || !cameraRef) return;
+
+		const result = allResults[focusIndex];
+		if (!result) return;
+
+		let cx = 0, cy = 0, cz = 0;
+		const positions: THREE.Vector3[] = [];
+		for (const pair of result.pairs) {
+			const pos = raDecToXYZ(pair.star.ra, pair.star.dec);
+			positions.push(pos);
+			cx += pos.x;
+			cy += pos.y;
+			cz += pos.z;
+		}
+		if (positions.length === 0) return;
+
+		const len = Math.sqrt(cx * cx + cy * cy + cz * cz) || 1;
+		const centroidDir = new THREE.Vector3(cx / len, cy / len, cz / len);
+		const centroidRa = Math.atan2(-centroidDir.z, centroidDir.x);
+		const centroidDec = Math.asin(Math.max(-1, Math.min(1, centroidDir.y)));
+		const localNorth = new THREE.Vector3(
+			-Math.sin(centroidDec) * Math.cos(centroidRa),
+			Math.cos(centroidDec),
+			Math.sin(centroidDec) * Math.sin(centroidRa)
+		).normalize();
+
+		const testCam = new THREE.PerspectiveCamera(60, cameraRef.aspect, 0.1, 10);
+		testCam.position.set(0, 0, 0.0001);
+		testCam.up.copy(localNorth);
+		testCam.lookAt(centroidDir.clone().multiplyScalar(10));
+		const fitMargin = 0.7;
+		const maxFov = cameraRef.aspect < 0.8 ? 120 : 80;
+		let lo = 5, hi = maxFov + 10;
+		for (let i = 0; i < 16; i++) {
+			const mid = (lo + hi) / 2;
+			testCam.fov = mid;
+			testCam.updateProjectionMatrix();
+			let fits = true;
+			for (const pos of positions) {
+				const ndc = pos.clone().project(testCam);
+				if (Math.abs(ndc.x) > fitMargin || Math.abs(ndc.y) > fitMargin) {
+					fits = false;
+					break;
+				}
+			}
+			if (fits) hi = mid; else lo = mid;
+		}
+		const targetFov = Math.min(maxFov, Math.max(15, hi));
+
+		prepareForConstellation();
+		clearAllConstellations();
+		currentResults = [...allResults];
+		for (const entry of allResults) {
+			drawConstellationInstant(entry);
+		}
+
+		cameraRef.position.set(0, 0, 0.0001);
+		controlsRef.target.copy(cameraRef.position).addScaledVector(centroidDir, 0.001);
+		cameraRef.up.copy(localNorth);
+		syncControlsUp(controlsRef, cameraRef.up);
+		cameraRef.fov = targetFov;
+		cameraRef.updateProjectionMatrix();
+		controlsRef.update();
+	}
+
 	export function refocusConstellation(allResults: MatchResult[], focusIndex: number) {
+		if (reducedMotion) {
+			focusConstellationInstant(allResults, focusIndex);
+			return;
+		}
+
 		clearAllConstellations();
 		currentResults = [...allResults];
 		// Instantly draw all non-focused constellations
@@ -1482,7 +1553,7 @@
 
 		// Reduced motion: jump instantly
 		if (reducedMotion) {
-			refocusConstellation(allResults, focusIndex);
+			focusConstellationInstant(allResults, focusIndex);
 			return;
 		}
 
@@ -1949,13 +2020,13 @@
 			currentResults.push(result);
 		}
 
-		prepareForConstellation();
-
 		// Reduced motion: skip camera animation, draw instantly
 		if (reducedMotion) {
-			refocusConstellation(currentResults, currentResults.indexOf(result));
+			focusConstellationInstant(currentResults, currentResults.indexOf(result));
 			return;
 		}
+
+		prepareForConstellation();
 
 		let cx = 0, cy = 0, cz = 0;
 		const positions: THREE.Vector3[] = [];
