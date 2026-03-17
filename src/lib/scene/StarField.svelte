@@ -3591,6 +3591,12 @@
 		margin: 0 2px;
 	}
 
+	@media (max-width: 480px) {
+		.camera-heading {
+			display: none;
+		}
+	}
+
 	.star-tooltip {
 		position: fixed;
 		pointer-events: none;
