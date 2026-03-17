@@ -199,7 +199,7 @@
 			starCount: result.pairs.length,
 			catalogId: `WSC ${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`,
 			result,
-			color: '#ffffff',
+			color: constellations.length > 0 ? constellations[constellations.length - 1].color : '#ffffff',
 		};
 	}
 
