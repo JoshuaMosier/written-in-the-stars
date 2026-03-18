@@ -14,6 +14,7 @@ export interface Star {
   mag: number;
   ci?: number;  // B-V color index (blue=-0.3, white=0, yellow=0.6, red=2.0)
   name?: string;
+  wiki?: { url: string; description: string };
 }
 
 export interface MatchResult {

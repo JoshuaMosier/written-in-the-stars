@@ -1,0 +1,1254 @@
+{
+  "Sirius": {
+    "url": "https://en.wikipedia.org/wiki/Sirius",
+    "description": "Sirius is the brightest star in the night sky, located in the southern constellation of Canis Major. Its name is derived from the Greek word Σείριος. The star is designated α Canis Majoris,..."
+  },
+  "Canopus": {
+    "url": "https://en.wikipedia.org/wiki/Canopus",
+    "description": "Canopus is the brightest star in the southern constellation of Carina and the second-brightest star in the night sky. It is designated α Carinae, which is romanized (transliterated) to Alpha..."
+  },
+  "Arcturus": {
+    "url": "https://en.wikipedia.org/wiki/Arcturus",
+    "description": "Arcturus is a red giant star in the northern constellation of Boötes, and the brightest star in the constellation. It has the Bayer designation α Boötis, which is Latinized to Alpha Boötis and..."
+  },
+  "Rigil Kentaurus": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Centauri",
+    "description": "Alpha Centauri is a star system in the southern constellation of Centaurus. It consists of three stars: Rigil Kentaurus, Toliman, and Proxima Centauri. Proxima Centauri is the closest star to the..."
+  },
+  "Vega": {
+    "url": "https://en.wikipedia.org/wiki/Vega",
+    "description": "Vega is the brightest star in the northern constellation of Lyra. It has the Bayer designation α Lyrae, which is Latinised to Alpha Lyrae and abbreviated Alpha Lyr or α Lyr. This star is..."
+  },
+  "Capella": {
+    "url": "https://en.wikipedia.org/wiki/Capella",
+    "description": "Capella is the brightest star in the northern constellation of Auriga. It has the Bayer designation α Aurigae, which is Latinised to Alpha Aurigae and abbreviated Alpha Aur or α Aur. Capella is..."
+  },
+  "Rigel": {
+    "url": "https://en.wikipedia.org/wiki/Rigel",
+    "description": "Rigel is a blue supergiant star in the equatorial constellation of Orion. It has the Bayer designation β Orionis, which is Latinized to Beta Orionis and abbreviated Beta Ori or β Ori. Rigel is the..."
+  },
+  "Procyon": {
+    "url": "https://en.wikipedia.org/wiki/Procyon",
+    "description": "Procyon is the brightest star in the constellation of Canis Minor and usually the eighth-brightest star in the night sky, with an apparent visual magnitude of 0.34. It has the Bayer designation α..."
+  },
+  "Achernar": {
+    "url": "https://en.wikipedia.org/wiki/Achernar",
+    "description": "Achernar is the brightest star in the constellation of Eridanus and the ninth-brightest in the night sky. It has the Bayer designation Alpha Eridani, which is Latinized from α Eridani and..."
+  },
+  "Betelgeuse": {
+    "url": "https://en.wikipedia.org/wiki/Betelgeuse",
+    "description": "Betelgeuse is a red supergiant star in the equatorial constellation of Orion. It is usually the tenth-brightest star in the night sky and, after Rigel, the second brightest in its constellation...."
+  },
+  "Hadar": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Centauri",
+    "description": "Beta Centauri is a triple star system in the southern constellation of Centaurus. It is officially called Hadar. The Bayer designation of Beta Centauri is Latinised from β Centauri, and..."
+  },
+  "Altair": {
+    "url": "https://en.wikipedia.org/wiki/Altair",
+    "description": "Altair is the brightest star in the equatorial constellation of Aquila and the twelfth-brightest star in the night sky. It has the Bayer designation Alpha Aquilae, which is Latinised from α..."
+  },
+  "Acrux": {
+    "url": "https://en.wikipedia.org/wiki/Acrux",
+    "description": "Acrux is the brightest star system in the southern constellation of Crux. It has the Bayer designation α Crucis, which is Latinised to Alpha Crucis and abbreviated Alpha Cru or α Cru. With a..."
+  },
+  "Aldebaran": {
+    "url": "https://en.wikipedia.org/wiki/Aldebaran",
+    "description": "Aldebaran is a star in the zodiac constellation of Taurus. It has the Bayer designation α Tauri, which is Latinized to Alpha Tauri and abbreviated Alpha Tau or α Tau. Aldebaran varies in..."
+  },
+  "Spica": {
+    "url": "https://en.wikipedia.org/wiki/Spica",
+    "description": "Spica is the brightest object in the constellation of Virgo and one of the 20 brightest stars in the night sky. It has the Bayer designation α Virginis, which is Latinised to Alpha Virginis and..."
+  },
+  "Antares": {
+    "url": "https://en.wikipedia.org/wiki/Antares",
+    "description": "Antares is the brightest star in the constellation of Scorpius. It has the Bayer designation α Scorpii, which is Latinised to Alpha Scorpii. Often referred to as \"the heart of the scorpion\",..."
+  },
+  "Pollux": {
+    "url": "https://en.wikipedia.org/wiki/Pollux_(star)",
+    "description": "Pollux is the brightest star in the constellation of Gemini. It has the Bayer designation β Geminorum, which is Latinised to Beta Geminorum and abbreviated Beta Gem or β Gem. This is an..."
+  },
+  "Fomalhaut": {
+    "url": "https://en.wikipedia.org/wiki/Fomalhaut",
+    "description": "Fomalhaut is the brightest star in the southern constellation of Piscis Austrinus, the Southern Fish, and one of the brightest stars in the night sky. It has the Bayer designation Alpha Piscis..."
+  },
+  "Mimosa": {
+    "url": "https://en.wikipedia.org/wiki/Mimosa_(star)",
+    "description": "Mimosa is the second-brightest object in the southern constellation of Crux, and the 20th-brightest star in the night sky. It has the Bayer designation β Crucis, which is Latinised to Beta Crucis..."
+  },
+  "Deneb": {
+    "url": "https://en.wikipedia.org/wiki/Deneb",
+    "description": "Deneb is a blue supergiant star in the constellation of Cygnus. It is the brightest star in the constellation and the 19th brightest in the night sky, with an apparent magnitude slightly varying..."
+  },
+  "Toliman": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Centauri",
+    "description": "Alpha Centauri is a star system in the southern constellation of Centaurus. It consists of three stars: Rigil Kentaurus, Toliman, and Proxima Centauri. Proxima Centauri is the closest star to the..."
+  },
+  "Regulus": {
+    "url": "https://en.wikipedia.org/wiki/Regulus",
+    "description": "Regulus is the brightest object in the constellation Leo and one of the brightest stars in the night sky. It has the Bayer designation designated α Leonis, which is Latinized to Alpha Leonis, and..."
+  },
+  "Adhara": {
+    "url": "https://en.wikipedia.org/wiki/Epsilon_Canis_Majoris",
+    "description": "Epsilon Canis Majoris is a binary star system and the second-brightest star in the constellation of Canis Major. Its name is a Bayer designation that is Latinised from ε Canis Majoris, and..."
+  },
+  "Castor": {
+    "url": "https://en.wikipedia.org/wiki/Castor_(star)",
+    "description": "Castor is the second-brightest object in the zodiac constellation of Gemini. It has the Bayer designation α Geminorum, which is Latinised to Alpha Geminorum and abbreviated Alpha Gem or α Gem...."
+  },
+  "Gacrux": {
+    "url": "https://en.wikipedia.org/wiki/Gacrux",
+    "description": "Gacrux is the third-brightest star in the southern constellation of Crux, the Southern Cross. It has the Bayer designation Gamma Crucis, which is Latinised from γ Crucis and abbreviated Gamma Cru..."
+  },
+  "Shaula": {
+    "url": "https://en.wikipedia.org/wiki/Lambda_Scorpii",
+    "description": "Lambda Scorpii is a triple star system and the second-brightest object in the constellation of Scorpius. It is formally named Shaula; Lambda Scorpii is its Bayer designation, which is Latinised..."
+  },
+  "Bellatrix": {
+    "url": "https://en.wikipedia.org/wiki/Bellatrix",
+    "description": "Bellatrix is the third-brightest star and a candidate binary star in the constellation of Orion, positioned 5° west of the red supergiant Betelgeuse. It has the Bayer designation γ Orionis, which..."
+  },
+  "Elnath": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Tauri",
+    "description": "Beta Tauri is the second-brightest star in the constellation of Taurus. It has the official name Elnath; Beta Tauri is the current Bayer designation, which is Latinised from β Tauri and..."
+  },
+  "Miaplacidus": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Carinae",
+    "description": "Beta Carinae is the second-brightest star in the southern constellation of Carina. It has the official name Miaplacidus; Beta Carinae is the star's Bayer designation, which is Latinised from β..."
+  },
+  "Alnilam": {
+    "url": "https://en.wikipedia.org/wiki/Alnilam",
+    "description": "Alnilam is the central star of Orion's Belt in the equatorial constellation of Orion. It has the Bayer designation ε Orionis, which is Latinised to Epsilon Orionis and abbreviated Epsilon Ori or ε..."
+  },
+  "Alnitak": {
+    "url": "https://en.wikipedia.org/wiki/Alnitak",
+    "description": "Alnitak is a triple star system in the constellation of Orion. It has the designations ζ Orionis, which is Latinised to Zeta Orionis and abbreviated Zeta Ori or ζ Ori, and 50 Orionis, abbreviated..."
+  },
+  "Alioth": {
+    "url": "https://en.wikipedia.org/wiki/Alioth",
+    "description": "Alioth, also called Epsilon Ursae Majoris, is a star in the northern constellation of Ursa Major. The designation is Latinised from ε Ursae Majoris and abbreviated Epsilon UMa or ε UMa. Despite..."
+  },
+  "Mirfak": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Persei",
+    "description": "Alpha Persei, formally named Mirfak, is the brightest star in the northern constellation of Perseus, outshining the constellation's best-known star, Algol. Alpha Persei has an apparent visual..."
+  },
+  "Kaus Australis": {
+    "url": "https://en.wikipedia.org/wiki/Epsilon_Sagittarii",
+    "description": "Epsilon Sagittarii, formally named Kaus Australis, is a binary star system in the southern zodiac constellation of Sagittarius. The apparent visual magnitude of +1.85 makes it the brightest object..."
+  },
+  "Dubhe": {
+    "url": "https://en.wikipedia.org/wiki/Dubhe",
+    "description": "Dubhe is a multiple star system in the northern constellation of Ursa Major. It is formally designated Alpha Ursae Majoris, Latinised from α Ursae Majoris, Despite being designated \"α\" (alpha), it..."
+  },
+  "Wezen": {
+    "url": "https://en.wikipedia.org/wiki/Delta_Canis_Majoris",
+    "description": "Delta Canis Majoris is a supergiant star in the constellation of Canis Major. It is formally named Wezen ; Delta Canis Majoris is its Bayer designation. At an apparent magnitude of +1.83, it is..."
+  },
+  "Alkaid": {
+    "url": "https://en.wikipedia.org/wiki/Alkaid",
+    "description": "Alkaid, also called Eta Ursae Majoris, is a star in the constellation of Ursa Major. It is the easternmost star in the Big Dipper asterism. However, unlike most stars of the Big Dipper, it is not..."
+  },
+  "Avior": {
+    "url": "https://en.wikipedia.org/wiki/Epsilon_Carinae",
+    "description": "Epsilon Carinae is a binary star in the southern constellation of Carina. It has the official proper name Avior, pronounced ; Epsilon Carinae is its Bayer designation. At apparent magnitude +1.86..."
+  },
+  "Sargas": {
+    "url": "https://en.wikipedia.org/wiki/Theta_Scorpii",
+    "description": "Theta Scorpii is a binary star in the southern zodiac constellation of Scorpius. The apparent visual magnitude of this star is +1.87, making it readily visible to the naked eye and one of the..."
+  },
+  "Menkalinan": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Aurigae",
+    "description": "Beta Aurigae is a binary star system in the northern constellation of Auriga. Its identifier is a Bayer designation that is Latinized from β Aurigae, and abbreviated Beta Aur or β Aur. This star..."
+  },
+  "Atria": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Trianguli_Australis",
+    "description": "Alpha Trianguli Australis, officially named Atria, is the brightest star in the southern constellation of Triangulum Australe, forming an apex of a triangle with Beta Trianguli Australis and Gamma..."
+  },
+  "Alhena": {
+    "url": "https://en.wikipedia.org/wiki/Gamma_Geminorum",
+    "description": "Gamma Geminorum, formally named Alhena, is the third-brightest object in the constellation of Gemini. It has an apparent visual magnitude of 1.9, making it easily visible to the naked eye even in..."
+  },
+  "Alsephina": {
+    "url": "https://en.wikipedia.org/wiki/Delta_Velorum",
+    "description": "Delta Velorum is a triple star system in the southern constellation of Vela, near the border with Carina, and is part of the False Cross. Based on parallax measurements, it is approximately 80.6..."
+  },
+  "Peacock": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Pavonis",
+    "description": "Alpha Pavonis, formally named Peacock, is a binary star in the southern constellation of Pavo, near the border with the constellation Telescopium."
+  },
+  "Polaris": {
+    "url": "https://en.wikipedia.org/wiki/Polaris",
+    "description": "Polaris is a yellow supergiant star in the northern circumpolar constellation of Ursa Minor. It is designated α Ursae Minoris and is commonly called the North Star. With an apparent magnitude that..."
+  },
+  "Mirzam": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Canis_Majoris",
+    "description": "Beta Canis Majoris is a star in the southern constellation of Canis Major, the \"Great Dog\". Its name is a Bayer designation; it has the proper name Mirzam, pronounced. Visible to the naked eye,..."
+  },
+  "Alphard": {
+    "url": "https://en.wikipedia.org/wiki/Alphard",
+    "description": "Alphard is the brightest star in the constellation of Hydra. It has the Bayer designation Alpha Hydrae, which is that is Latinized from α Hydrae, and abbreviated Alpha Hya or α Hya. It is a giant..."
+  },
+  "Hamal": {
+    "url": "https://en.wikipedia.org/wiki/Hamal",
+    "description": "Hamal,, is a star in the northern zodiacal constellation of Aries. It has the Bayer designation Alpha Arietis, which is Latinized from α Arietis and abbreviated Alpha Ari or α Ari. This star is..."
+  },
+  "Algieba": {
+    "url": "https://en.wikipedia.org/wiki/Gamma_Leonis",
+    "description": "Gamma Leonis, also named Algieba, is a binary star system in the constellation of Leo, made up of two red giants. The primary star is orbited by one known exoplanet."
+  },
+  "Diphda": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Ceti",
+    "description": "Beta Ceti is the brightest star in the constellation of Cetus. It is officially named Diphda, pronounced ; Beta Ceti is its Bayer designation, which is Latinized from β Ceti and abbreviated Beta..."
+  },
+  "Nunki": {
+    "url": "https://en.wikipedia.org/wiki/Sigma_Sagittarii",
+    "description": "Sigma Sagittarii, Latinized from σ Sagittarii; formally named Nunki, is the second-brightest star in the constellation of Sagittarius. It is a binary star system, viewed as a single star of..."
+  },
+  "Menkent": {
+    "url": "https://en.wikipedia.org/wiki/Theta_Centauri",
+    "description": "Theta Centauri is a single star in the southern constellation of Centaurus, the centaur. It has the official name Menkent, pronounced ; Theta Centauri is its Bayer designation, which is Latinized..."
+  },
+  "Alpheratz": {
+    "url": "https://en.wikipedia.org/wiki/Alpheratz",
+    "description": "Alpheratz is a prominent star system in the constellation of Andromeda. Pronounced, it has the Bayer designation Alpha Andromedae, Latinised from α Andromedae, and abbreviated Alpha And or α And,..."
+  },
+  "Mirach": {
+    "url": "https://en.wikipedia.org/wiki/Mirach",
+    "description": "Mirach is a prominent star in the northern constellation of Andromeda. It is pronounced and has the Bayer designation Beta Andromedae, which is Latinized from β Andromedae. This star is positioned..."
+  },
+  "Saiph": {
+    "url": "https://en.wikipedia.org/wiki/Saiph",
+    "description": "Saiph, designation Kappa Orionis and 53 Orionis, is a blue supergiant star and the sixth-brightest star in the constellation of Orion. Of the four bright stars that compose Orion's main..."
+  },
+  "Kochab": {
+    "url": "https://en.wikipedia.org/wiki/Kochab",
+    "description": "Kochab, Bayer designation Beta Ursae Minoris, is the brightest star in the bowl of the Little Dipper asterism, and only slightly fainter than Polaris, the northern pole star and brightest star in..."
+  },
+  "Tiaki": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Gruis",
+    "description": "Beta Gruis, formally named Tiaki, is the second brightest star in the southern constellation of Grus. It was once considered the rear star in the tail of the constellation of the (Southern) Fish,..."
+  },
+  "Rasalhague": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Ophiuchi",
+    "description": "Alpha Ophiuchi, also named Rasalhague, is a binary star and the brightest star in the constellation of Ophiuchus. Five degrees west-north-west of Rasalhague lies Rasalgethi, the 5th brightest star..."
+  },
+  "Algol": {
+    "url": "https://en.wikipedia.org/wiki/Algol",
+    "description": "Algol, designated Beta Persei, known colloquially as the Demon Star, is a bright multiple star in the constellation of Perseus and one of the first non-nova variable stars to be discovered."
+  },
+  "Almach": {
+    "url": "https://en.wikipedia.org/wiki/Gamma_Andromedae",
+    "description": "Gamma Andromedae is a multiple star system in the northern constellation of Andromeda. It is the third-brightest star in the constellation, after Alpheratz and Mirach. Its identifier is a Bayer..."
+  },
+  "Denebola": {
+    "url": "https://en.wikipedia.org/wiki/Denebola",
+    "description": "Denebola is the second-brightest star in the zodiac constellation of Leo. It is the easternmost of the bright stars of Leo. It has the Bayer designation Beta Leonis or β Leonis, which are..."
+  },
+  "Naos": {
+    "url": "https://en.wikipedia.org/wiki/Zeta_Puppis",
+    "description": "Zeta Puppis, formally named Naos, is the brightest star in the constellation of Puppis."
+  },
+  "Aspidiske": {
+    "url": "https://en.wikipedia.org/wiki/Iota_Carinae",
+    "description": "Iota Carinae is a star in the southern constellation of Carina. It has the official name Aspidiske, pronounced ; Iota Carinae is its Bayer designation, which is Latinized from ι Carinae and..."
+  },
+  "Alphecca": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Coronae_Borealis",
+    "description": "Alpha Coronae Borealis, officially named Alphecca, is an eclipsing binary star in the constellation of Corona Borealis. It is located about 75 light years from the Sun and contains two main..."
+  },
+  "Suhail": {
+    "url": "https://en.wikipedia.org/wiki/Suhail_(star)",
+    "description": "Suhail, from Arabic: سهيل, is the common name of a number of stars typically seen near the southern horizon."
+  },
+  "Mizar": {
+    "url": "https://en.wikipedia.org/wiki/Mizar",
+    "description": "Mizar is a second-magnitude star in the handle of the Big Dipper asterism in the constellation of Ursa Major. It has the Bayer designation ζ Ursae Majoris. It forms a well-known naked eye double..."
+  },
+  "Sadr": {
+    "url": "https://en.wikipedia.org/wiki/Gamma_Cygni",
+    "description": "Gamma Cygni is a star in the northern constellation of Cygnus, forming the intersection of an asterism of five stars called the Northern Cross. It is officially named Sadr, gamma Cygni is its..."
+  },
+  "Schedar": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Cassiopeiae",
+    "description": "Alpha Cassiopeiae is a star in the northern constellation of Cassiopeia. It has the proper name Schedar, pronounced ); Alpha Cassiopeiae is its Bayer designation, which is Latinized from α..."
+  },
+  "Eltanin": {
+    "url": "https://en.wikipedia.org/wiki/Gamma_Draconis",
+    "description": "Gamma Draconis, formally named Eltanin, is a star in the northern constellation of Draco. Contrary to its gamma-designation, it is the brightest object in Draco at magnitude 2.2, outshining Beta..."
+  },
+  "Mintaka": {
+    "url": "https://en.wikipedia.org/wiki/Mintaka",
+    "description": "Mintaka, designation Delta Orionis and 34 Orionis, is a quintuple star system some 1,200 light-years from the Sun in the constellation of Orion. Together with Alnitak and Alnilam, the three stars..."
+  },
+  "Caph": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Cassiopeiae",
+    "description": "Beta Cassiopeiae is a Delta Scuti variable star in the constellation of Cassiopeia. It has the proper name Caph, pronounced ; Beta Cassiopeiae is its Bayer designation, which is Latinized from β..."
+  },
+  "Dschubba": {
+    "url": "https://en.wikipedia.org/wiki/Delta_Scorpii",
+    "description": "Delta Scorpii is a binary star in the constellation of Scorpius. The primary star is named Dschubba."
+  },
+  "Larawag": {
+    "url": "https://en.wikipedia.org/wiki/Epsilon_Scorpii",
+    "description": "Epsilon Scorpii is a binary star in the southern zodiac constellation of Scorpius. The primary component has the proper name Larawag. It has an apparent visual magnitude of around +2.3, making it..."
+  },
+  "Uridim": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Lupi",
+    "description": "Alpha Lupi, also named Uridim, is a blue giant star, and the brightest star in the southern constellation of Lupus. According to the Bortle Dark-Sky Scale, its apparent visual magnitude of 2.3..."
+  },
+  "Merak": {
+    "url": "https://en.wikipedia.org/wiki/Merak_(star)",
+    "description": "Merak, also called Beta Ursae Majoris, is a star in the northern constellation of Ursa Major."
+  },
+  "Izar": {
+    "url": "https://en.wikipedia.org/wiki/Epsilon_Bo%C3%B6tis",
+    "description": "Epsilon Boötis is a binary star system in the northern constellation of Boötes. Its name is a Bayer designation that is Latinized from ε Boötis, and abbreviated Epsilon Boo or ε Boo. The primary..."
+  },
+  "Enif": {
+    "url": "https://en.wikipedia.org/wiki/Epsilon_Pegasi",
+    "description": "Epsilon Pegasi, formally named Enif, is the brightest star in the northern constellation of Pegasus."
+  },
+  "Ankaa": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Phoenicis",
+    "description": "Alpha Phoenicis, formally named Ankaa, is the brightest star in the constellation of Phoenix."
+  },
+  "Phecda": {
+    "url": "https://en.wikipedia.org/wiki/Phecda",
+    "description": "Phecda, also called Gamma Ursae Majoris, is a star in the constellation of Ursa Major. Since 1943, the spectrum of this star has served as one of the stable anchor points by which other stars are..."
+  },
+  "Sabik": {
+    "url": "https://en.wikipedia.org/wiki/Eta_Ophiuchi",
+    "description": "Eta Ophiuchi is a binary star in the constellation of Ophiuchus. Its name is a Bayer designation that is Latinized from η Ophiuchi, and abbreviated Eta Oph or η Oph. With a combined apparent..."
+  },
+  "Scheat": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Pegasi",
+    "description": "Beta Pegasi, formally named Scheat, is a red giant star and the second-brightest star in the constellation of Pegasus. It forms the upper right corner of the Great Square of Pegasus, a prominent..."
+  },
+  "Aludra": {
+    "url": "https://en.wikipedia.org/wiki/Eta_Canis_Majoris",
+    "description": "Eta Canis Majoris is a blue supergiant star in the constellation of Canis Major. It has the proper name Aludra, pronounced ; Eta Canis Majoris is its Bayer designation. This star has an apparent..."
+  },
+  "Alderamin": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Cephei",
+    "description": "Alpha Cephei is a second magnitude star in the northern constellation of Cepheus. It has the official name Alderamin, pronounced ; Alpha Cephei is its Bayer designation, which is Latinized from α..."
+  },
+  "Markeb": {
+    "url": "https://en.wikipedia.org/wiki/Kappa_Velorum",
+    "description": "Kappa Velorum is a binary star system in the southern constellation of Vela. The two components are designated Kappa Velorum A and B."
+  },
+  "Aljanah": {
+    "url": "https://en.wikipedia.org/wiki/Epsilon_Cygni",
+    "description": "Epsilon Cygni is a binary star in the constellation of Cygnus. With an apparent visual magnitude of 2.48, it is readily visible to the naked eye at night, and is the third-brightest star in the..."
+  },
+  "Markab": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Pegasi",
+    "description": "Alpha Pegasi, formally named Markab, is the third-brightest star in the constellation of Pegasus and one of the four stars in the asterism known as the Great Square of Pegasus."
+  },
+  "Menkar": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Ceti",
+    "description": "Alpha Ceti is the second-brightest star in the constellation of Cetus. Its official name is Menkar, pronounced ; Alpha Ceti is its Bayer designation, which is Latinized from α Ceti and abbreviated..."
+  },
+  "Leepwal": {
+    "url": "https://en.wikipedia.org/wiki/Zeta_Centauri",
+    "description": "Zeta Centauri is a binary star system in the southern constellation of Centaurus. It has the proper name Leepwal; Zeta Centauri is its Bayer designation. With a combined apparent visual magnitude..."
+  },
+  "Zosma": {
+    "url": "https://en.wikipedia.org/wiki/Delta_Leonis",
+    "description": "Delta Leonis, also named Zosma, is a star in the zodiac constellation of Leo. Based upon parallax measurements, it lies at a distance of about 58.4 light-years from the Sun."
+  },
+  "Acrab": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Scorpii",
+    "description": "Beta Scorpii is a multiple star system in the southern zodiac constellation of Scorpius. It bore the traditional proper name of Acrab, though the International Astronomical Union now regards that..."
+  },
+  "Arneb": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Leporis",
+    "description": "Alpha Leporis, formally named Arneb, is the brightest star in the constellation of Lepus."
+  },
+  "Gienah": {
+    "url": "https://en.wikipedia.org/wiki/Gienah",
+    "description": "Gienah was the traditional name of two stars, each marking a wing of its constellation:Gamma Corvi aka Gienah Corvi, in Corvus\nEpsilon Cygni aka Gienah Cygni, in Cygnus"
+  },
+  "Ascella": {
+    "url": "https://en.wikipedia.org/wiki/Zeta_Sagittarii",
+    "description": "Zeta Sagittarii is a triple star system and the third-brightest star in the constellation of Sagittarius after Kaus Australis and Nunki. Based upon parallax measurements, it is about 88..."
+  },
+  "Zubeneschamali": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Librae",
+    "description": "Beta Librae is the brightest star in the zodiac constellation of Libra. It has the proper name Zubeneschamali, Beta Librae is its Bayer designation. From parallax measurements taken by the..."
+  },
+  "Unukalhai": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Serpentis",
+    "description": "Alpha Serpentis or α Serpentis, formally named Unukalhai, is a star in the head of the equatorial constellation of Serpens. With an apparent visual magnitude of 2.6, this star is the brightest in..."
+  },
+  "Sheratan": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Arietis",
+    "description": "Beta Arietis is a binary star system in the constellation of Aries, marking the ram's second horn. Its identifier is a Bayer designation that is Latinized from β Arietis, and abbreviated Beta Ari..."
+  },
+  "Phact": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Columbae",
+    "description": "Alpha Columbae or α Columbae, officially named Phact, is a third magnitude star in the southern constellation of Columba. It has an apparent visual magnitude of 2.6, making it the brightest member..."
+  },
+  "Mahasim": {
+    "url": "https://en.wikipedia.org/wiki/Theta_Aurigae",
+    "description": "Theta Aurigae is a binary star system in the constellation of Auriga. Its name is a Bayer designation that is Latinized from θ Aurigae, and abbreviated Theta Aur or θ Aur. This is a variable star..."
+  },
+  "Kraz": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Corvi",
+    "description": "Beta Corvi or β Corvi, officially named Kraz, is the second-brightest star in the southern constellation of Corvus with an apparent visual magnitude of 2.647. Based on parallax measurements..."
+  },
+  "Ruchbah": {
+    "url": "https://en.wikipedia.org/wiki/Delta_Cassiopeiae",
+    "description": "Delta Cassiopeiae is an eclipsing binary star system in the northern circumpolar constellation of Cassiopeia. Its name is a Bayer designation that is Latinized from δ Cassiopeiae, and abbreviated..."
+  },
+  "Muphrid": {
+    "url": "https://en.wikipedia.org/wiki/Eta_Bo%C3%B6tis",
+    "description": "Eta Boötis is a candidate binary star system in the constellation of Boötes. Its name is a Bayer designation that is Latinized from η Boötis, and abbreviated Eta Boo or η Boo. This system is..."
+  },
+  "Hassaleh": {
+    "url": "https://en.wikipedia.org/wiki/Iota_Aurigae",
+    "description": "Iota Aurigae is a star in the northern constellation of Auriga. Its name is a Bayer designation that is Latinized from ι Aurigae, abbreviated Iota Aur or ι Aur. The star has the official name..."
+  },
+  "Lesath": {
+    "url": "https://en.wikipedia.org/wiki/Upsilon_Scorpii",
+    "description": "Upsilon Scorpii, formally named Lesath, is a star located in the \"stinger\" of the southern zodiac constellation of Scorpius, the scorpion. Based on parallax measurements obtained during the..."
+  },
+  "Kaus Media": {
+    "url": "https://en.wikipedia.org/wiki/Delta_Sagittarii",
+    "description": "Delta Sagittarii, formally named Kaus Media, is a star in the southern zodiac constellation of Sagittarius. The apparent visual magnitude of this star is +2.70, making it easily visible to the..."
+  },
+  "Tarazed": {
+    "url": "https://en.wikipedia.org/wiki/Gamma_Aquilae",
+    "description": "Gamma Aquilae is a star in the constellation of Aquila. Its name is a Bayer designation that is Latinized from γ Aquilae, and abbreviated gamma Aql or γ Aql. The star is formally known as Tarazed,..."
+  },
+  "Yed Prior": {
+    "url": "https://en.wikipedia.org/wiki/Delta_Ophiuchi",
+    "description": "Delta Ophiuchi, formally named Yed Prior, is a star in the constellation of Ophiuchus. It forms a naked-eye optical double with Epsilon Ophiuchi. The apparent visual magnitude is 2.75, making this..."
+  },
+  "Athebyne": {
+    "url": "https://en.wikipedia.org/wiki/Eta_Draconis",
+    "description": "Eta Draconis is a binary star in the northern circumpolar constellation of Draco. Despite having an apparent visual magnitude of only +2.73, it is the second-brightest star in this generally faint..."
+  },
+  "Porrima": {
+    "url": "https://en.wikipedia.org/wiki/Gamma_Virginis",
+    "description": "Gamma Virginis, officially named Porrima, is a binary star system in the constellation of Virgo. It consists of two almost identical main sequence stars at a distance of about 38 light-years."
+  },
+  "Hatysa": {
+    "url": "https://en.wikipedia.org/wiki/Iota_Orionis",
+    "description": "Iota Orionis is a multiple star system in the equatorial constellation of Orion the hunter. It is the eighth-brightest member of Orion with an apparent visual magnitude of 2.77 and also the..."
+  },
+  "Kulou": {
+    "url": "https://en.wikipedia.org/wiki/Iota_Centauri",
+    "description": "Iota Centauri is a star in the southern constellation of Centaurus. It has the proper name Kulou; Iota Centauri is its Bayer designation, which is Latinized from ι Centauri and is abbreviated Iota..."
+  },
+  "Zubenelgenubi": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Librae",
+    "description": "Alpha Librae is a quadruple star system and, despite its 'alpha' designation, it is the second-brightest star in the constellation of Libra. The two components are designated α1 Librae and α2..."
+  },
+  "Cebalrai": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Ophiuchi",
+    "description": "Beta Ophiuchi or β Ophiuchi, also named Cebalrai, is a star in the equatorial constellation of Ophiuchus. The apparent visual magnitude of this star is 2.7, which is readily visible to the naked..."
+  },
+  "Cursa": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Eridani",
+    "description": "Beta Eridani, formally named Cursa, is the second-brightest star in the barely equatorial-southern constellation of Eridanus, located in the northeast end of this constellation near the shared..."
+  },
+  "Kornephoros": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Herculis",
+    "description": "Beta Herculis, formally named Kornephoros, is a binary star and the brightest star in the northern constellation of Hercules at a base apparent visual magnitude of 2.81. This is a suspected..."
+  },
+  "Rasalgethi": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Herculis",
+    "description": "Alpha Herculis, also designated Rasalgethi and 64 Herculis, is a multiple star system in the constellation of Hercules. Appearing as a single point of light to the naked eye, it is resolvable into..."
+  },
+  "Imai": {
+    "url": "https://en.wikipedia.org/wiki/Delta_Crucis",
+    "description": "Delta Crucis or δ Crucis, also identified as Imai, is a star in the southern constellation of Crux, and is the faintest of the four bright stars that form the prominent asterism known as the..."
+  },
+  "Rastaban": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Draconis",
+    "description": "Beta Draconis is a binary star system and the third-brightest star in the northern circumpolar constellation of Draco. The two components are designated Beta Draconis A and B respectively. With a..."
+  },
+  "Nihal": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Leporis",
+    "description": "Beta Leporis, formally named Nihal, is the second brightest star in the constellation of Lepus."
+  },
+  "Paikauhale": {
+    "url": "https://en.wikipedia.org/wiki/Tau_Scorpii",
+    "description": "Tau Scorpii, Latinized from τ Scorpii, also named Paikauhale, is a star in the southern zodiac constellation of Scorpius. The apparent visual magnitude of Tau Scorpii is +2.8, which makes it among..."
+  },
+  "Kaus Borealis": {
+    "url": "https://en.wikipedia.org/wiki/Lambda_Sagittarii",
+    "description": "Lambda Sagittarii, formally named Kaus Borealis, is a star in the southern constellation of Sagittarius. The star marks the top of the Archer's bow."
+  },
+  "Algenib": {
+    "url": "https://en.wikipedia.org/wiki/Gamma_Pegasi",
+    "description": "Gamma Pegasi is a binary star in the constellation of Pegasus, located at the southeast corner of the asterism known as the Great Square. It has the formal name Algenib ; the Bayer designation..."
+  },
+  "Tureis": {
+    "url": "https://en.wikipedia.org/wiki/Rho_Puppis",
+    "description": "Rho Puppis, formally named Tureis, is a star in the southern constellation of Puppis. With an average apparent visual magnitude of 2.78, it is the third-brightest member of this generally faint..."
+  },
+  "Alcyone": {
+    "url": "https://en.wikipedia.org/wiki/Alcyone_(star)",
+    "description": "Alcyone, is a blue-white giant star and the brightest star in the Pleiades open cluster. At apparent magnitude 2.87, it is also the third-brightest star in the Taurus constellation. The star has..."
+  },
+  "Vindemiatrix": {
+    "url": "https://en.wikipedia.org/wiki/Epsilon_Virginis",
+    "description": "Epsilon Virginis, formally named Vindemiatrix, is a star in the zodiac constellation of Virgo. The apparent visual magnitude of this star is +2.8, making it the third-brightest member of Virgo...."
+  },
+  "Deneb Algedi": {
+    "url": "https://en.wikipedia.org/wiki/Delta_Capricorni",
+    "description": "Delta Capricorni is the brightest star in the constellation of Capricornus, the Sea Goat. It is a binary star system whose components are seen to eclipse each other, known as an eclipsing binary...."
+  },
+  "Fawaris": {
+    "url": "https://en.wikipedia.org/wiki/Delta_Cygni",
+    "description": "Delta Cygni is a binary star of a combined third-magnitude in the constellation of Cygnus. It is also part of the Northern Cross asterism whose brightest star is Deneb. Its name is a Bayer..."
+  },
+  "Tejat": {
+    "url": "https://en.wikipedia.org/wiki/Mu_Geminorum",
+    "description": "Mu Geminorum or μ Geminorum, formally named Tejat, is a single star in the northern constellation of Gemini. From parallax measurements obtained during the Hipparcos mission, it is roughly 230..."
+  },
+  "Lang-Exster": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Tucanae",
+    "description": "Alpha Tucanae, also named Lang-Exster, is a binary star system in the southern circumpolar constellation of Tucana. With an apparent visual magnitude of 2.86, it can be seen with the naked eye..."
+  },
+  "Acamar": {
+    "url": "https://en.wikipedia.org/wiki/Theta_Eridani",
+    "description": "Theta Eridani, Latinized from θ Eridani, is a triple star system in the constellation of Eridanus, with a combined apparent magnitude of 2.88. The primary component has the proper name Acamar, the..."
+  },
+  "Albaldah": {
+    "url": "https://en.wikipedia.org/wiki/Pi_Sagittarii",
+    "description": "Pi Sagittarii is a triple star system in the zodiac constellation of Sagittarius. It has an apparent visual magnitude of +2.89, bright enough to be readily seen with the naked eye. Based upon..."
+  },
+  "Gomeisa": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Canis_Minoris",
+    "description": "Beta Canis Minoris is a variable star in the constellation of Canis Minor. It has the proper name Gomeisa, pronounced ; Beta Canis Minoris is its Bayer designation. In the night sky it is notable..."
+  },
+  "Cor Caroli": {
+    "url": "https://en.wikipedia.org/wiki/Cor_Caroli",
+    "description": "Cor Caroli is a binary star in the northern constellation of Canes Venatici. It is the brightest star in the constellation, lying at the third magnitude. The International Astronomical Union uses..."
+  },
+  "Fang": {
+    "url": "https://en.wikipedia.org/wiki/Pi_Scorpii",
+    "description": "Pi Scorpii or π Scorpii, is a triple star system in the southern constellation of Scorpius. With a combined apparent magnitude of 2.9, it can be easily seen with the naked eye. Parallax..."
+  },
+  "Alniyat": {
+    "url": "https://en.wikipedia.org/wiki/Sigma_Scorpii",
+    "description": "Sigma Scorpii, is a multiple star system in the constellation of Scorpius, located near the red supergiant Antares, which outshines it. This system has a combined apparent visual magnitude of..."
+  },
+  "Sadalsuud": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Aquarii",
+    "description": "Beta Aquarii is a single yellow supergiant star in the constellation of Aquarius. It has the official name Sadalsuud and the Bayer designation β Aquarii, abbreviated Beta Aqr or β Aqr. Based upon..."
+  },
+  "Matar": {
+    "url": "https://en.wikipedia.org/wiki/Eta_Pegasi",
+    "description": "Eta Pegasi or η Pegasi, formally named Matar, is a binary star in the constellation of Pegasus. The apparent visual magnitude of this star is +2.95, making it the fifth-brightest member of..."
+  },
+  "Algorab": {
+    "url": "https://en.wikipedia.org/wiki/Delta_Corvi",
+    "description": "Delta Corvi, also named Algorab, is a third magnitude star at a distance of 86.9 light-years from the Sun in the southern constellation of Corvus."
+  },
+  "Sadalmelik": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Aquarii",
+    "description": "Alpha Aquarii is a yellow supergiant star in the constellation of Aquarius. Its identifier is a Bayer designation that is Latinized from α Aquarii, and is abbreviated Alf Aqr or α Aqr,..."
+  },
+  "Zaurak": {
+    "url": "https://en.wikipedia.org/wiki/Gamma_Eridani",
+    "description": "Gamma Eridani, formally named Zaurak, is a variable star in the constellation of Eridanus. It is visible to the naked eye with an apparent visual magnitude that varies around 2.9, and lies at a..."
+  },
+  "Tianguan": {
+    "url": "https://en.wikipedia.org/wiki/Zeta_Tauri",
+    "description": "Zeta Tauri is a binary star in the zodiac constellation of Taurus, the Bull. It has an apparent visual magnitude of about 3.0, which is bright enough to be seen with the naked eye. Parallax..."
+  },
+  "Ras Elased Australis": {
+    "url": "https://en.wikipedia.org/wiki/Epsilon_Leonis",
+    "description": "Epsilon Leonis is the fifth-brightest star in the constellation Leo, consistent with its Bayer designation Epsilon. It is known as Algenubi or Ras Elased Australis. Both names mean \"the southern..."
+  },
+  "Alnasl": {
+    "url": "https://en.wikipedia.org/wiki/Gamma2_Sagittarii",
+    "description": "Gamma2 Sagittarii, formally named Alnasl, is a 3rd-magnitude star in the zodiac constellation of Sagittarius. The location of this star is in the handle of the Bow of Sagittarius the Centaur. It..."
+  },
+  "Okab": {
+    "url": "https://en.wikipedia.org/wiki/Zeta_Aquilae",
+    "description": "Zeta Aquilae is a binary star system in the equatorial constellation of Aquila. Its name is a Bayer designation that is Latinized from ζ Aquilae, and abbreviated Zeta Aql or ζ Aql. This system is..."
+  },
+  "Pherkad": {
+    "url": "https://en.wikipedia.org/wiki/Pherkad",
+    "description": "Gamma Ursae Minoris, also named Pherkad, is a star in the northern constellation of Ursa Minor. Together with Beta Ursae Minoris (Kochab), it forms the end of the dipper pan of the \"Little..."
+  },
+  "Xamidimura": {
+    "url": "https://en.wikipedia.org/wiki/Mu1_Scorpii",
+    "description": "Mu1 Scorpii (μ1 Scorpii, abbreviated Mu1 Sco, μ1 Sco) is a binary star system in the southern zodiac constellation of Scorpius. The combined apparent visual magnitude of the pair is about..."
+  },
+  "Aldhanab": {
+    "url": "https://en.wikipedia.org/wiki/Gamma_Gruis",
+    "description": "Gamma Gruis or γ Gruis, formally named Aldhanab, is a star in the southern constellation of Grus. With an apparent visual magnitude of 3.0, it is the third-brightest star in Grus. Based upon..."
+  },
+  "Furud": {
+    "url": "https://en.wikipedia.org/wiki/Zeta_Canis_Majoris",
+    "description": "Zeta Canis Majoris is a binary star system in the southern constellation of Canis Major. Its name is a Bayer designation that is Latinized from ζ Canis Majoris; it has the proper name Furud,..."
+  },
+  "Almaaz": {
+    "url": "https://en.wikipedia.org/wiki/Epsilon_Aurigae",
+    "description": "Epsilon Aurigae is a multiple star system in the northern constellation of Auriga, the charioteer. Its name is a Bayer designation that is Latinized from ε Aurigae, and abbreviated Epsilon Aur or..."
+  },
+  "Seginus": {
+    "url": "https://en.wikipedia.org/wiki/Gamma_Bo%C3%B6tis",
+    "description": "Gamma Boötis is a binary star system in the northern constellation of Boötes the herdsman, forming the left shoulder of this asterism. Its name is a Bayer designation that is Latinised from γ..."
+  },
+  "Albireo": {
+    "url": "https://en.wikipedia.org/wiki/Albireo",
+    "description": "Albireo is a double star designated Beta Cygni. The International Astronomical Union uses the name \"Albireo\" specifically for the brightest star in the system. Although designated 'beta', it is..."
+  },
+  "Dabih": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Capricorni",
+    "description": "Beta Capricorni is a multiple star system in the constellation of Capricornus. Its name is a Bayer designation that is Latinized from β Capricorni, and abbreviated Beta Cap or β Cap. Based on..."
+  },
+  "Mebsuta": {
+    "url": "https://en.wikipedia.org/wiki/Epsilon_Geminorum",
+    "description": "Epsilon Geminorum or ε Geminorum, formally named Mebsuta, is a star in the constellation of Gemini, on the outstretched right 'leg' of the twin Castor. The apparent visual magnitude of +3.06 makes..."
+  },
+  "Tania Australis": {
+    "url": "https://en.wikipedia.org/wiki/Mu_Ursae_Majoris",
+    "description": "Mu Ursae Majoris is a binary star in the constellation of Ursa Major, and possibly part of a triple star system. It has the proper name Tania Australis, Mu Ursae Majoris is its Bayer designation...."
+  },
+  "Altais": {
+    "url": "https://en.wikipedia.org/wiki/Delta_Draconis",
+    "description": "Delta Draconis, formally named Altais, is a yellow star in the constellation of Draco. It has an apparent visual magnitude of 3.0, making it easily visible to the naked eye. Based on parallax..."
+  },
+  "Wazn": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Columbae",
+    "description": "Beta Columbae, officially named Wazn, is the second-brightest star in the southern constellation of Columba. It has an apparent visual magnitude of 3.1, which is bright enough to be viewed with..."
+  },
+  "Talitha": {
+    "url": "https://en.wikipedia.org/wiki/Iota_Ursae_Majoris",
+    "description": "Iota Ursae Majoris, also named Talitha, is a star system in the northern circumpolar constellation of Ursa Major. It has an apparent visual magnitude of 3.14, making it visible to the naked eye..."
+  },
+  "Sarin": {
+    "url": "https://en.wikipedia.org/wiki/Delta_Herculis",
+    "description": "Delta Herculis is a multiple star system in the constellation of Hercules. Its light produces to us apparent magnitude 3.12, as such the third-brightest star in the large, fairly dim..."
+  },
+  "Aldhibah": {
+    "url": "https://en.wikipedia.org/wiki/Zeta_Draconis",
+    "description": "Zeta Draconis is a binary star in the northern circumpolar constellation of Draco. With an apparent visual magnitude of +3.17, it is the fifth-brightest member of this generally faint..."
+  },
+  "Haedus": {
+    "url": "https://en.wikipedia.org/wiki/Eta_Aurigae",
+    "description": "Eta Aurigae is a star in the northern constellation of Auriga. Its identifier is a Bayer designation that is Latinized from η Aurigae, and abbreviated Eta Aur or η Aur. The star is officially..."
+  },
+  "Xami": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Circini",
+    "description": "Alpha Circini, also named Xami, is a variable star in the faint, southern, circumpolar constellation of Circinus. At an apparent visual magnitude of 3.19, it is the brightest star in the..."
+  },
+  "Tabit": {
+    "url": "https://en.wikipedia.org/wiki/Pi3_Orionis",
+    "description": "Pi3 Orionis (π3 Orionis, abbreviated Pi3 Ori, π3 Ori), also named Tabit, is a star in the equatorial constellation of Orion. At an apparent visual magnitude of 3.16, it is readily visible to the..."
+  },
+  "Fuyue": {
+    "url": "https://en.wikipedia.org/wiki/G_Scorpii",
+    "description": "G Scorpii, also named Fuyue, is a giant star in the constellation of Scorpius. It has an apparent magnitude of +3.19. It is approximately 126 light-years from the Sun."
+  },
+  "Errai": {
+    "url": "https://en.wikipedia.org/wiki/Gamma_Cephei",
+    "description": "Gamma Cephei is a binary star system in the northern constellation of Cepheus. Its name is a Bayer designation that is Latinized from γ Cephei, and abbreviated Gamma Cep or γ Cep. This system is..."
+  },
+  "Yed Posterior": {
+    "url": "https://en.wikipedia.org/wiki/Epsilon_Ophiuchi",
+    "description": "Epsilon Ophiuchi or ε Ophiuchi, formally named Yed Posterior, is a red giant star in the constellation of Ophiuchus. Located less than five degrees south of the celestial equator in the eastern..."
+  },
+  "Alfirk": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Cephei",
+    "description": "Beta Cephei is a triple star system in the northern constellation of Cepheus. Its name is a Bayer designation that is Latinized from β Cephei, and abbreviated Beta Cep or β Cep. This system is a..."
+  },
+  "Brachium": {
+    "url": "https://en.wikipedia.org/wiki/Sigma_Librae",
+    "description": "Sigma Librae is a star in the constellation of Libra. It has the proper name Brachium, Sigma Librae is its Bayer designation. The apparent visual magnitude is +3.29, making it visible to the naked..."
+  },
+  "Sulafat": {
+    "url": "https://en.wikipedia.org/wiki/Gamma_Lyrae",
+    "description": "Gamma Lyrae, Latinised from γ Lyrae, and formally named Sulafat, is the second-brightest star in the northern constellation of Lyra. With an apparent visual magnitude of 3.3, it is readily visible..."
+  },
+  "Skat": {
+    "url": "https://en.wikipedia.org/wiki/Delta_Aquarii",
+    "description": "Delta Aquarii is a binary star system in the constellation of Aquarius. Its identifier is a Bayer designation that is Latinized from δ Aquarii, and abbreviated Delta Aqr or δ Aqr, respectively...."
+  },
+  "Edasich": {
+    "url": "https://en.wikipedia.org/wiki/Iota_Draconis",
+    "description": "Iota Draconis, also named Edasich, is a star in the northern circumpolar constellation of Draco. A visually unremarkable star of apparent magnitude 3.3, in 2002 it was discovered to have a planet..."
+  },
+  "Propus": {
+    "url": "https://en.wikipedia.org/wiki/Eta_Geminorum",
+    "description": "Eta Geminorum, formally named Propus, is a triple star system in the constellation of Gemini. It is a variable star visible to the naked eye, around 380 light years from the Sun. The position of..."
+  },
+  "Megrez": {
+    "url": "https://en.wikipedia.org/wiki/Megrez",
+    "description": "Megrez, also called Delta Ursae Majoris, is a star in the northern constellation of Ursa Major. With an apparent magnitude of +3.3, it is the dimmest of the seven stars in the Big Dipper asterism...."
+  },
+  "Rhombus": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Reticuli",
+    "description": "Alpha Reticuli, Latinized from α Reticuli, also named Rhombus, is the brightest star in the southern circumpolar constellation of Reticulum, with an apparent visual magnitude of 3.3. This appears..."
+  },
+  "Chertan": {
+    "url": "https://en.wikipedia.org/wiki/Theta_Leonis",
+    "description": "Theta Leonis, Latinized from θ Leonis, formally named Chertan, is a star in the equatorial-northern constellation of Leo. With an apparent visual magnitude of +3.324 it is visible to the naked eye..."
+  },
+  "Azmidi": {
+    "url": "https://en.wikipedia.org/wiki/Xi_Puppis",
+    "description": "Xi Puppis is a multiple star system in the southern constellation of Puppis. With an apparent visual magnitude of 3.35, it is one of the brighter members of this constellation. Based on parallax..."
+  },
+  "Segin": {
+    "url": "https://en.wikipedia.org/wiki/Epsilon_Cassiopeiae",
+    "description": "Epsilon Cassiopeiae is a single star in the northern constellation of Cassiopeia. It has the proper name Segin, pronounced ; Epsilon Cassiopeiae is the Bayer designation, which is Latinized from ε..."
+  },
+  "Alzirr": {
+    "url": "https://en.wikipedia.org/wiki/Xi_Geminorum",
+    "description": "Xi Geminorum, formally named Alzirr, is a star in the zodiac constellation of Gemini. It forms one of the four feet of the outline demarcating the Gemini twins. The star has an apparent visual..."
+  },
+  "Muscida": {
+    "url": "https://en.wikipedia.org/wiki/Omicron_Ursae_Majoris",
+    "description": "Omicron Ursae Majoris, formally named Muscida, is a star system in the northern circumpolar constellation of Ursa Major. It has an apparent visual magnitude of +3.35 and is located at a distance..."
+  },
+  "Ashlesha": {
+    "url": "https://en.wikipedia.org/wiki/Epsilon_Hydrae",
+    "description": "Epsilon Hydrae is a multiple star system of a combined third magnitude in the constellation of Hydra. Based upon parallax measurements obtained during the Hipparcos mission, it is located roughly..."
+  },
+  "Heze": {
+    "url": "https://en.wikipedia.org/wiki/Zeta_Virginis",
+    "description": "Zeta Virginis is a binary star in the zodiac constellation of Virgo. It is visible to the naked eye with an apparent visual magnitude of +3.376 and is located about a half degree south of the..."
+  },
+  "Meissa": {
+    "url": "https://en.wikipedia.org/wiki/Meissa",
+    "description": "Meissa, designated Lambda Orionis is a star in the constellation of Orion. It is a multiple star approximately 1,300 ly away with a combined apparent magnitude of 3.33. The main components are an..."
+  },
+  "Minelauva": {
+    "url": "https://en.wikipedia.org/wiki/Delta_Virginis",
+    "description": "Delta Virginis, formally named Minelauva, is a star in the zodiac constellation of Virgo. With an apparent visual magnitude of 3.4, this star is bright enough to be seen with the naked eye. It is..."
+  },
+  "Chamukuy": {
+    "url": "https://en.wikipedia.org/wiki/Theta_Tauri",
+    "description": "Theta Tauri is a wide double star in the constellation of Taurus and a member of the Hyades open cluster."
+  },
+  "Homam": {
+    "url": "https://en.wikipedia.org/wiki/Zeta_Pegasi",
+    "description": "Zeta Pegasi or ζ Pegasi, formally named Homam, is a single star in the northern constellation of Pegasus. With an apparent visual magnitude of +3.4, this star is bright enough to be seen with the..."
+  },
+  "Mothallah": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Trianguli",
+    "description": "Alpha Trianguli is a triple star system in the constellation of Triangulum. Based on parallax measurements obtained during the Hipparcos mission, it is approximately 63.3 light-years distant from..."
+  },
+  "Adhafera": {
+    "url": "https://en.wikipedia.org/wiki/Zeta_Leonis",
+    "description": "Zeta Leonis, also named Adhafera, is a third-magnitude star in the constellation of Leo, the lion. It forms the second star in the blade of the sickle, which is an asterism formed from the head of..."
+  },
+  "Tania Borealis": {
+    "url": "https://en.wikipedia.org/wiki/Lambda_Ursae_Majoris",
+    "description": "Lambda Ursae Majoris, formally named Tania Borealis, is a star in the northern circumpolar constellation of Ursa Major."
+  },
+  "Achird": {
+    "url": "https://en.wikipedia.org/wiki/Eta_Cassiopeiae",
+    "description": "Eta Cassiopeiae is a binary star system in the northern constellation of Cassiopeia. Its name is a Bayer designation that is Latinized from η Cassiopeiae and abbreviated Eta Cas or η Cas. The..."
+  },
+  "Kaffaljidhma": {
+    "url": "https://en.wikipedia.org/wiki/Gamma_Ceti",
+    "description": "Gamma Ceti is a triple star system in the equatorial constellation of Cetus. Its name is a Bayer designation that is Latinized from γ Ceti, and abbreviated Gamma Cet or γ Cet. This system combined..."
+  },
+  "Nganurganity": {
+    "url": "https://en.wikipedia.org/wiki/Sigma_Canis_Majoris",
+    "description": "Sigma Canis Majoris is a variable star in the southern constellation of Canis Major. It has the proper name Nganurganity ; Sigma Canis Majoris is its Bayer designation. This star is located at a..."
+  },
+  "Alula Borealis": {
+    "url": "https://en.wikipedia.org/wiki/Nu_Ursae_Majoris",
+    "description": "Nu Ursae Majoris, formally named Alula Borealis, is a double star in the northern circumpolar constellation of Ursa Major. At an apparent visual magnitude of +3.490, it is bright enough to be seen..."
+  },
+  "Nekkar": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Bo%C3%B6tis",
+    "description": "Beta Boötis is a star in the northern constellation of Boötes. Its name is a Bayer designation that is Latinized from β Boötis, and abbreviated Beta Boo or β Boo. The star has the official name..."
+  },
+  "Wasat": {
+    "url": "https://en.wikipedia.org/wiki/Delta_Geminorum",
+    "description": "Delta Geminorum, formally named Wasat, is a triple star system in the constellation of Gemini."
+  },
+  "Sadalbari": {
+    "url": "https://en.wikipedia.org/wiki/Mu_Pegasi",
+    "description": "Mu Pegasi or μ Pegasi, formally named Sadalbari, is a star in the northern constellation of Pegasus. The apparent visual magnitude of this star is 3.5, which is bright enough to be seen with the..."
+  },
+  "Rana": {
+    "url": "https://en.wikipedia.org/wiki/Delta_Eridani",
+    "description": "Delta Eridani, Latinized from δ Eridani, also named Rana, is the fifth-brightest star in the constellation of Eridanus."
+  },
+  "Subra": {
+    "url": "https://en.wikipedia.org/wiki/Omicron_Leonis",
+    "description": "Omicron Leonis is a binary star in the constellation of Leo, west of Regulus, some 130 light-years from the Sun, where it marks one of the lion's forepaws. The position of this system near the..."
+  },
+  "Sheliak": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Lyrae",
+    "description": "Beta Lyrae officially named Sheliak, the traditional name of the system, is a multiple star system in the constellation of Lyra. Based on parallax measurements obtained during the Hipparcos..."
+  },
+  "Biham": {
+    "url": "https://en.wikipedia.org/wiki/Theta_Pegasi",
+    "description": "θ Pegasi, Latinized as Theta Pegasi, is a binary star in the equatorial constellation of Pegasus, lying about 7.5 degrees southwest of Enif. It has the traditional name Biham, and the Flamsteed..."
+  },
+  "Ain": {
+    "url": "https://en.wikipedia.org/wiki/Epsilon_Tauri",
+    "description": "Epsilon Tauri or ε Tauri, formally named Ain, is an orange giant star located approximately 146 light-years from the Sun in the constellation of Taurus. An exoplanet is believed to be orbiting the..."
+  },
+  "Tarf": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Cancri",
+    "description": "Beta Cancri is the brightest star in the zodiacal constellation of Cancer. The star has the proper name Tarf, pronounced ; Beta Cancri is its Bayer designation. It is visible to the naked eye with..."
+  },
+  "Pipirima": {
+    "url": "https://en.wikipedia.org/wiki/Mu2_Scorpii",
+    "description": "Mu2 Scorpii, also named Pipirima, is a star in the zodiac constellation of Scorpius. It has an apparent visual magnitude of +3.56, which is bright enough to be seen with the naked eye. Its..."
+  },
+  "Alkaphrah": {
+    "url": "https://en.wikipedia.org/wiki/Kappa_Ursae_Majoris",
+    "description": "Kappa Ursae Majoris is a binary star in the constellation of Ursa Major. With a combined apparent magnitude of +3.60, the system is approximately 358 light-years from Earth."
+  },
+  "Algedi": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Capricorni",
+    "description": "Alpha Capricorni is an optical double star in the constellation of Capricornus. The two physically unrelated components are designated:α1 Capricorni\nα2 Capricorni."
+  },
+  "Nembus": {
+    "url": "https://en.wikipedia.org/wiki/51_Andromedae",
+    "description": "51 Andromedae, abbreviated 51 And and formally named Nembus, is the 5th brightest star in the northern constellation of Andromeda, very slightly dimmer than the Andromeda Galaxy also being of 4th..."
+  },
+  "Zavijava": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Virginis",
+    "description": "Beta Virginis, a name Latinised from β Virginis, is a star in the equatorial constellation of Virgo. It has the proper name Zavijava, and, despite its designation 'beta', is the fifth-brightest..."
+  },
+  "Ginan": {
+    "url": "https://en.wikipedia.org/wiki/Epsilon_Crucis",
+    "description": "Epsilon Crucis, Latinised from ε Crucis and also known as Ginan, is a single, orange-hued star in the southern constellation of Crux. Measurements made by the Gaia spacecraft showed an annual..."
+  },
+  "Bharani": {
+    "url": "https://en.wikipedia.org/wiki/41_Arietis",
+    "description": "41 Arietis is a triple star system in the northern constellation of Aries. With an apparent visual magnitude of 3.63, this system is readily visible to the naked eye. It has an annual parallax..."
+  },
+  "Alpherg": {
+    "url": "https://en.wikipedia.org/wiki/Eta_Piscium",
+    "description": "Eta Piscium is a binary star and the brightest star in the equatorial-northern constellation of Pisces, with an apparent visual magnitude of +3.6. Based upon a measured annual parallax shift of..."
+  },
+  "Atlas": {
+    "url": "https://en.wikipedia.org/wiki/Atlas_(star)",
+    "description": "Atlas, designation 27 Tauri, is a binary star system in the constellation of Taurus. It is a member of the Pleiades, an open star cluster (M45). It is 444 light-years away, and is 3.92 degrees..."
+  },
+  "Alfarasalkamil": {
+    "url": "https://en.wikipedia.org/wiki/Omicron_Andromedae",
+    "description": "Omicron Andromedae, also named Alfarasalkamil, is a star system in the northern constellation Andromeda. Its Bayer designation is Latinized from ο Andromedae, and is abbreviated Omi And or ο And,..."
+  },
+  "Rotanev": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Delphini",
+    "description": "Beta Delphini is a binary star in the constellation of Delphinus. It is the brightest star in Delphinus."
+  },
+  "Prima Hyadum": {
+    "url": "https://en.wikipedia.org/wiki/Gamma_Tauri",
+    "description": "Gamma Tauri is either a solitary, binary or double star that marks the tip of the \"V\" in the constellation of Taurus. It is a member of, and located within about 2.5 parsecs of the center of, the..."
+  },
+  "Nusakan": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Coronae_Borealis",
+    "description": "Beta Coronae Borealis is a binary star in the constellation of Corona Borealis. It appears to the naked eye to be a single star and is the second-brightest star in its constellation with an..."
+  },
+  "Thuban": {
+    "url": "https://en.wikipedia.org/wiki/Thuban",
+    "description": "Thuban, with Bayer designation Alpha Draconis or α Draconis, is a binary star system in the northern constellation of Draco. A relatively inconspicuous star in the night sky of the Northern..."
+  },
+  "Fulu": {
+    "url": "https://en.wikipedia.org/wiki/Zeta_Cassiopeiae",
+    "description": "Zeta Cassiopeiae is a variable star in the constellation of Cassiopeia. It has the proper name Fulu, pronounced ; Zeta Cassiopeiae is its Bayer designation, which is Latinized from ζ Cassiopeiae..."
+  },
+  "Alshain": {
+    "url": "https://en.wikipedia.org/wiki/Beta_Aquilae",
+    "description": "Beta Aquilae is a triple star system in the equatorial constellation of Aquila. Its name is a Bayer designation that is Latinized from β Aquilae, and abbreviated Beta Aql or β Aql. This system is..."
+  },
+  "Secunda Hyadum": {
+    "url": "https://en.wikipedia.org/wiki/Delta1_Tauri",
+    "description": "Delta1 Tauri is a double star in the zodiac constellation of Taurus. Based upon an annual parallax shift of 20.96 mas as seen from Earth, it is located roughly 156 light-years distant from the..."
+  },
+  "Albali": {
+    "url": "https://en.wikipedia.org/wiki/Epsilon_Aquarii",
+    "description": "Epsilon Aquarii is a binary star system in the equatorial zodiac constellation of Aquarius, located near the western constellation border with Capricornus. Its identifier is a Bayer designation..."
+  },
+  "Dalim": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Fornacis",
+    "description": "Alpha Fornacis is a triple star system in the southern constellation of Fornax. It is the brightest star in the constellation and the only one brighter than magnitude 4.0. Based on parallax..."
+  },
+  "Alrescha": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Piscium",
+    "description": "Alpha Piscium (α Piscium) is a triple star system in the equatorial constellation of Pisces. Based upon dynamical parallax measurements, it is about 157 light-years from the Solar System."
+  },
+  "Giausar": {
+    "url": "https://en.wikipedia.org/wiki/Lambda_Draconis",
+    "description": "Lambda Draconis, also named Giausar, is a solitary, orange-red star in the northern circumpolar constellation of Draco. It is visible to the naked eye with an apparent visual magnitude of +3.85...."
+  },
+  "Marfik": {
+    "url": "https://en.wikipedia.org/wiki/Lambda_Ophiuchi",
+    "description": "λ Ophiuchi, Latinized as Lambda Ophiuchi, is a quadruple star system in the equatorial constellation of Ophiuchus. It has the traditional name Marfik, which now applies exclusively to the primary..."
+  },
+  "Sadachbia": {
+    "url": "https://en.wikipedia.org/wiki/Gamma_Aquarii",
+    "description": "Gamma Aquarii, or γ Aquarii, is a binary star system in the constellation of Aquarius. It has an apparent visual magnitude of 3.849, making it one of the brighter members of the constellation...."
+  },
+  "Mesarthim": {
+    "url": "https://en.wikipedia.org/wiki/Gamma_Arietis",
+    "description": "Gamma Arietis is a binary or possibly trinary star system in the northern constellation of Aries. Its name is a Bayer designation that is Latinized from γ Arietis, and abbreviated Gamma Ari or γ..."
+  },
+  "Rasalas": {
+    "url": "https://en.wikipedia.org/wiki/Mu_Leonis",
+    "description": "Mu Leonis, also named Rasalas, is a star in the equatorial-northern constellation of Leo. The apparent visual magnitude of this star is 3.88, which is bright enough to be seen with the naked eye...."
+  },
+  "Azha": {
+    "url": "https://en.wikipedia.org/wiki/Eta_Eridani",
+    "description": "Eta Eridani, officially named Azha, is a giant star in the constellation of Eridanus. Based on parallax measurements taken during the Hipparcos mission, it is approximately 137 light-years from..."
+  },
+  "Zaniah": {
+    "url": "https://en.wikipedia.org/wiki/Eta_Virginis",
+    "description": "Eta Virginis is a triple star system in the zodiac constellation of Virgo. From parallax measurements, it is about 246 light-years from the Sun. It has a combined apparent visual magnitude of..."
+  },
+  "Ukdah": {
+    "url": "https://en.wikipedia.org/wiki/Iota_Hydrae",
+    "description": "Iota Hydrae, formally named Ukdah, is a star in the constellation of Hydra, about 8° to the north-northwest of Alphard and just to the south of the celestial equator. Visible to the naked eye, it..."
+  },
+  "Zubenelhakrabi": {
+    "url": "https://en.wikipedia.org/wiki/Gamma_Librae",
+    "description": "Gamma Librae is a suspected binary star system in the constellation of Libra. It is visible to the naked eye, having an apparent visual magnitude of +3.91. Based upon an annual parallax shift of..."
+  },
+  "Kitalpha": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Equulei",
+    "description": "Alpha Equulei, officially named Kitalpha, is the brightest star in the constellation of Equuleus. It is a binary system with an orbital period of 98.8 days and a sky separation of a few..."
+  },
+  "Wurren": {
+    "url": "https://en.wikipedia.org/wiki/Zeta_Phoenicis",
+    "description": "Zeta Phoenicis is a multiple star system in the constellation of Phoenix. It is visible to the naked eye. Based upon parallax measurements made by the Hipparcos spacecraft, it is located some 300..."
+  },
+  "Beemim": {
+    "url": "https://en.wikipedia.org/wiki/Upsilon3_Eridani",
+    "description": "Upsilon3 Eridani, officially named Beemim, is a star in the constellation of Eridanus. It is visible to the naked eye with an apparent visual magnitude of 3.96 The distance to this star, based..."
+  },
+  "Alchiba": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Corvi",
+    "description": "Alpha Corvi, also named Alchiba, is an F-type main-sequence star and, despite its \"alpha\" designation, is the fifth-brightest star in the constellation of Corvus. Based on parallax measurements..."
+  },
+  "Beid": {
+    "url": "https://en.wikipedia.org/wiki/Omicron1_Eridani",
+    "description": "Omicron1 Eridani, also named Beid, is a variable star in the constellation of Eridanus. With an average apparent visual magnitude of around 4.0, it is visible to the naked eye on a clear, dark..."
+  },
+  "Syrma": {
+    "url": "https://en.wikipedia.org/wiki/Iota_Virginis",
+    "description": "Iota Virginis is a binary star in the constellation of Virgo. Its apparent magnitude is 4.08. Based on its parallax, it is assumed to be relatively nearby, at 71.8 light-years."
+  },
+  "Gudja": {
+    "url": "https://en.wikipedia.org/wiki/Kappa_Serpentis",
+    "description": "Kappa Serpentis, Latinised from κ Serpentis, is a single, red-hued star in the constellation Serpens, in its head. It has the proper name Gudja and the Flamsteed designation 35 Serpentis. This..."
+  },
+  "Zhang": {
+    "url": "https://en.wikipedia.org/wiki/Upsilon1_Hydrae",
+    "description": "Upsilon1 Hydrae, Latinised from υ1 Hydrae formally named Zhang, is a yellow-hued star in the constellation of Hydra. It is visible to the naked eye, having an apparent visual magnitude of 4.12...."
+  },
+  "Ancha": {
+    "url": "https://en.wikipedia.org/wiki/Theta_Aquarii",
+    "description": "Theta Aquarii is a star in the equatorial constellation of Aquarius. Its identifier is a Bayer designation that is Latinized from θ Aquarii, and abbreviated Tet Aqr or θ Aqr, respectively. It has..."
+  },
+  "Kang": {
+    "url": "https://en.wikipedia.org/wiki/Kappa_Virginis",
+    "description": "Kappa Virginis, officially named Kang, is a solitary star in the zodiac constellation of Virgo. It has an apparent visual magnitude of 4.18, which is sufficiently bright to be seen with the naked..."
+  },
+  "Xuange": {
+    "url": "https://en.wikipedia.org/wiki/Lambda_Bo%C3%B6tis",
+    "description": "Lambda Boötis is a star in the northern constellation of Boötes. Its name is a Bayer designation that is Latinized from λ Boötis, and abbreviated Lam Boo or λ Boo. It has the official name Xuange,..."
+  },
+  "Acubens": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Cancri",
+    "description": "Alpha Cancri is a star system in the northern constellation of Cancer. Its name is a Bayer designation that is Latinized from α Cancri, and abbreviated Alpha Cnc or α Cnc. The primary component..."
+  },
+  "Arkab Posterior": {
+    "url": "https://en.wikipedia.org/wiki/Beta2_Sagittarii",
+    "description": "Beta2 Sagittarii is a star in the southern zodiac constellation of Sagittarius. It is visible to the naked eye, having an apparent visual magnitude of +4.29. Based upon an annual parallax shift of..."
+  },
+  "Rasalnaqa": {
+    "url": "https://en.wikipedia.org/wiki/Iota_Andromedae",
+    "description": "Iota Andromedae, also named Rasalnaqa, is a single star in the northern constellation of Andromeda. It has the Flamsteed designation 17 Andromedae, while Iota Andromedae is the Bayer designation..."
+  },
+  "Taygeta": {
+    "url": "https://en.wikipedia.org/wiki/Taygeta",
+    "description": "Taygeta is a double star in the constellation of Taurus and a member of the Pleiades open star cluster (M45)."
+  },
+  "Alkalurops": {
+    "url": "https://en.wikipedia.org/wiki/Mu1_Bo%C3%B6tis",
+    "description": "Mu1 Boötis is a binary star in the northern constellation of Boötes. Its name is a Bayer designation that is Latinized from μ1 Boötis, and abbreviated Mu1 Boo or μ1 Boo. This system had the..."
+  },
+  "Alterf": {
+    "url": "https://en.wikipedia.org/wiki/Lambda_Leonis",
+    "description": "Lambda Leonis, formally named Alterf, is a star in the constellation of Leo. The star is bright enough to be seen with the naked eye, having an apparent visual magnitude of 4.32 Based upon an..."
+  },
+  "Diadem": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Comae_Berenices",
+    "description": "Alpha Comae Berenices is a binary star in the northern constellation of Coma Berenices, 17.8 parsecs (58 ly) away. It consists of two main sequence stars, each a little hotter and more luminous..."
+  },
+  "Guniibuu": {
+    "url": "https://en.wikipedia.org/wiki/36_Ophiuchi",
+    "description": "36 Ophiuchi is a triple star system 19.5 light-years from Earth in the constellation Ophiuchus."
+  },
+  "Botein": {
+    "url": "https://en.wikipedia.org/wiki/Delta_Arietis",
+    "description": "Delta Arietis is a star in the northern constellation of Aries, positioned 1.8 degrees north of the ecliptic. Its identifier is a Bayer designation that is Latinized from δ Arietis, and..."
+  },
+  "Yildun": {
+    "url": "https://en.wikipedia.org/wiki/Yildun",
+    "description": "Delta Ursae Minoris, Latinized from δ Ursae Minoris, formally named Yildun, is a white-hued star in the northern circumpolar constellation of Ursa Minor, forming the second star in the bear's..."
+  },
+  "Ramus": {
+    "url": "https://en.wikipedia.org/wiki/102_Herculis",
+    "description": "102 Herculis, also named Ramus, is a single star in the northern constellation of Hercules. It is visible to the naked eye as a faint, blue-white hued star with an apparent visual magnitude of..."
+  },
+  "Sham": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Sagittae",
+    "description": "Alpha Sagittae, formally named Sham, is a single star in the northern constellation of Sagitta. Alpha Sagittae is the Bayer designation, which is latinized from α Sagittae and abbreviated Alpha..."
+  },
+  "Maasym": {
+    "url": "https://en.wikipedia.org/wiki/Lambda_Herculis",
+    "description": "Lambda Herculis, formally named Maasym, is a star in the constellation of Hercules. From parallax measurements taken during the Gaia mission, it is approximately 393 light-years from the Sun."
+  },
+  "Lilii Borea": {
+    "url": "https://en.wikipedia.org/wiki/39_Arietis",
+    "description": "39 Arietis, officially named Lilii Borea, is a star in the northern constellation of Aries. It is visible to the naked eye with an apparent visual magnitude of +4.5. The distance to this star, as..."
+  },
+  "Dziban": {
+    "url": "https://en.wikipedia.org/wiki/Psi1_Draconis",
+    "description": "Psi1 Draconis, also designated 31 Draconis, is a triple star system in the northern constellation of Draco. The system is fairly close, and is located about 75 light-years from the Sun, based on..."
+  },
+  "Alya": {
+    "url": "https://en.wikipedia.org/wiki/Theta_Serpentis",
+    "description": "Theta Serpentis is a binary star in the constellation of Serpens. It is visible to the naked eye with a combined apparent magnitude of 4.0. Based on parallax measurements, it lies about 130..."
+  },
+  "Alsafi": {
+    "url": "https://en.wikipedia.org/wiki/Sigma_Draconis",
+    "description": "Sigma Draconis is a single star in the northern constellation of Draco. It has the proper name Alsafi, while Sigma Draconis, which is latinised from σ Draconis and abbreviated Sig Dra or σ Dra, is..."
+  },
+  "Bunda": {
+    "url": "https://en.wikipedia.org/wiki/Xi_Aquarii",
+    "description": "Xi Aquarii is a binary star system in the equatorial constellation of Aquarius. Its name is a Bayer designation that is Latinized from ξ Aquarii, and abbreviated Xi Aqr or ξ Aqr. The system is..."
+  },
+  "Azelfafage": {
+    "url": "https://en.wikipedia.org/wiki/Pi1_Cygni",
+    "description": "Pi1 Cygni, also named Azelfafage, is a star in the northern constellation of Cygnus. It is visible to the naked eye, having a combined apparent visual magnitude of 4.66. The distance to this..."
+  },
+  "Terebellum": {
+    "url": "https://en.wikipedia.org/wiki/Omega_Sagittarii",
+    "description": "Omega Sagittarii, which is Latinized from ω Sagittarii, is a binary star system in the constellation of Sagittarius, near the eastern constellation border with Capricornus. It is formally named..."
+  },
+  "Libertas": {
+    "url": "https://en.wikipedia.org/wiki/Xi_Aquilae",
+    "description": "Xi Aquilae is a star in the equatorial constellation of Aquila. Its name is a Bayer designation that is Latinized from ξ Aquilae, and abbreviated Xi Aql or ξ Aql. The star has the official name..."
+  },
+  "Angetenar": {
+    "url": "https://en.wikipedia.org/wiki/Tau2_Eridani",
+    "description": "Tau2 Eridani, formally named Angetenar, is a star in the constellation of Eridanus. It is visible to the naked eye with an apparent visual magnitude of 4.78. The distance to this star, as..."
+  },
+  "Alshat": {
+    "url": "https://en.wikipedia.org/wiki/Nu_Capricorni",
+    "description": "Nu Capricorni is a star in the southern constellation of Capricornus. It has the proper name Alshat, pronounced ; Nu Capricorni is the Bayer designation. This star is visible to the naked eye with..."
+  },
+  "Deltoton": {
+    "url": "https://en.wikipedia.org/wiki/Delta_Trianguli",
+    "description": "Delta Trianguli,, is a spectroscopic binary star system approximately 35 light-years (11 pc) away in the constellation of Triangulum. The primary star is a yellow dwarf, while the secondary star..."
+  },
+  "Ainalrami": {
+    "url": "https://en.wikipedia.org/wiki/Nu1_Sagittarii",
+    "description": "Nu1 Sagittarii (ν1 Sagittarii, abbreviated Nu1 Sgr, ν1 Sgr) is a triple star system about 1,100 light-years from Earth. Its three components are designated Nu1 Sagittarii A (officially named..."
+  },
+  "Adhil": {
+    "url": "https://en.wikipedia.org/wiki/Xi_Andromedae",
+    "description": "Xi Andromedae is a solitary star in the northern constellation of Andromeda. It has the proper name Adhil, pronounced ; the Bayer designation is Latinized from ξ Andromedae, abbreviated Xi And or..."
+  },
+  "Jishui": {
+    "url": "https://en.wikipedia.org/wiki/Omicron_Geminorum",
+    "description": "Omicron Geminorum, also named Jishui, is a solitary star in the constellation of Gemini. It is faintly visible to the naked eye with an apparent visual magnitude of 4.90. Based upon an annual..."
+  },
+  "Elkurud": {
+    "url": "https://en.wikipedia.org/wiki/Theta_Columbae",
+    "description": "Theta Columbae, also named Elkurud, is a solitary star in the southern constellation of Columba. It is faintly visible to the naked eye, having an apparent visual magnitude of 5.02. Based upon..."
+  },
+  "Situla": {
+    "url": "https://en.wikipedia.org/wiki/Kappa_Aquarii",
+    "description": "Kappa Aquarii is a candidate binary star in the equatorial constellation of Aquarius. Its identifier is a Bayer designation that is Latinized from κ Aquarii, and abbreviated Kappa Aqr or κ Aqr,..."
+  },
+  "Cervantes": {
+    "url": "https://en.wikipedia.org/wiki/Mu_Arae",
+    "description": "Mu Arae is a single star with a planetary system in the constellation of Ara. Its name is a Bayer designation that is Latinized from μ Arae, and abbreviated Mu Ara or μ Ara. This star is..."
+  },
+  "Revati": {
+    "url": "https://en.wikipedia.org/wiki/Zeta_Piscium",
+    "description": "Zeta Piscium is a quintuple star system in the zodiac constellation of Pisces. Based upon parallax measurements obtained during the Hipparcos mission, it is located roughly 170 light-years distant..."
+  },
+  "Intercrus": {
+    "url": "https://en.wikipedia.org/wiki/41_Lyncis",
+    "description": "41 Lyncis, also designated HD 81688 and named Intercrus, is a fifth-magnitude star located in the northern constellation of Ursa Major. An extrasolar planet is thought to be orbiting the star."
+  },
+  "La Superba": {
+    "url": "https://en.wikipedia.org/wiki/La_Superba",
+    "description": "La Superba is a strikingly red giant star in the constellation Canes Venatici. It is faintly visible to the naked eye, and the red colour is very obvious in binoculars. It is a carbon star and..."
+  },
+  "Tianyi": {
+    "url": "https://en.wikipedia.org/wiki/7_Draconis",
+    "description": "7 Draconis, also named Tianyi, is a single star in the northern circumpolar constellation of Draco. It is visible to the naked eye as a faint orange-hued star with a stellar classification of..."
+  },
+  "Celaeno": {
+    "url": "https://en.wikipedia.org/wiki/Celaeno_(star)",
+    "description": "Celaeno, designated 16 Tauri, is a star in the constellation of Taurus and a member of the Pleiades open star cluster (M45) of stars."
+  },
+  "Tonatiuh": {
+    "url": "https://en.wikipedia.org/wiki/HD_104985",
+    "description": "HD 104985, formally named Tonatiuh, is a solitary star with an exoplanetary companion in the northern constellation of Camelopardalis. The companion is designated HD 104985 b and named Meztli...."
+  },
+  "Copernicus": {
+    "url": "https://en.wikipedia.org/wiki/55_Cancri",
+    "description": "55 Cancri is a binary star system located 41 light-years away from the Sun in the zodiac constellation of Cancer. It has the Bayer designation Rho1 Cancri (ρ1 Cancri); 55 Cancri is the Flamsteed..."
+  },
+  "Gumala": {
+    "url": "https://en.wikipedia.org/wiki/HD_179949",
+    "description": "HD 179949 is a 6th magnitude star in the constellation of Sagittarius. It is a yellow-white dwarf, a type of star hotter and more luminous than the Sun. The star is located about 90 light-years..."
+  },
+  "Citalá": {
+    "url": "https://en.wikipedia.org/wiki/HD_52265",
+    "description": "HD 52265, also named Citalá, is a star with an orbiting exoplanet companion in the equatorial constellation of Monoceros. It is dimly visible to the naked eye with an apparent visual magnitude of..."
+  },
+  "Meleph": {
+    "url": "https://en.wikipedia.org/wiki/Epsilon_Cancri",
+    "description": "Epsilon Cancri is a white-hued multiple star system in the zodiac constellation of Cancer. Its name is a Bayer designation that is Latinized from ε Cancri, and abbreviated Epsilon Cnc or ε Cnc...."
+  },
+  "Groombridge 1830": {
+    "url": "https://en.wikipedia.org/wiki/Groombridge_1830",
+    "description": "Groombridge 1830 is a star 29.9 light-years away in the constellation Ursa Major. With an apparent magnitude of 6.4, it is near the limit of naked eye visibility under ideal conditions. It has a..."
+  },
+  "Mago": {
+    "url": "https://en.wikipedia.org/wiki/HD_32518",
+    "description": "HD 32518, also named Mago, is a star with an orbiting exoplanet in the northern circumpolar constellation Camelopardalis. It has an apparent magnitude of 6.42, placing it near the limit of naked..."
+  },
+  "Chechia": {
+    "url": "https://en.wikipedia.org/wiki/HD_192699",
+    "description": "HD 192699 is a star located approximately 238 light-years away in the constellation of Aquila. It has the apparent magnitude of 6.45. Based on its mass of 1.68 solar, it was an A-type star when it..."
+  },
+  "Formosa": {
+    "url": "https://en.wikipedia.org/wiki/HD_100655",
+    "description": "HD 100655, also named Formosa, is a star in the zodiac constellation of Leo, located 451 light-years away from the Sun. It has an apparent visual magnitude of +6.45, which makes it a challenge to..."
+  },
+  "Mira": {
+    "url": "https://en.wikipedia.org/wiki/Mira",
+    "description": "Mira, pronounced, is a binary star in the constellation Cetus. It has the Bayer designation Omicron Ceti, which is Latinized from ο Ceti, and abbreviated Omicron Cet or ο Cet. The system consists..."
+  },
+  "Saclateni": {
+    "url": "https://en.wikipedia.org/wiki/Zeta_Aurigae",
+    "description": "Zeta Aurigae is an eclipsing binary star system in the northern constellation of Auriga. Its name is a Bayer designation that is Latinized from ζ Aurigae, and abbreviated Zeta Aur or ζ Aur. Based..."
+  },
+  "Taiyangshou": {
+    "url": "https://en.wikipedia.org/wiki/Chi_Ursae_Majoris",
+    "description": "Chi Ursae Majoris or χ Ursae Majoris, formally named Taiyangshou, is a single star in the northern circumpolar constellation of Ursa Major. The star has an orange hue and is visible to the naked..."
+  },
+  "Nashira": {
+    "url": "https://en.wikipedia.org/wiki/Gamma_Capricorni",
+    "description": "Gamma Capricorni is a star in the constellation of Capricornus. It has the proper name Nashira, pronounced ; Gamma Capricorni is its Bayer designation. Based on parallax measurements, it is..."
+  },
+  "Ran": {
+    "url": "https://en.wikipedia.org/wiki/Epsilon_Eridani",
+    "description": "Epsilon Eridani, proper name Ran, is a star in the southern constellation of Eridanus. At a declination of −9.46°, it is visible from most of Earth's surface. Located at a distance of 10.5..."
+  },
+  "Electra": {
+    "url": "https://en.wikipedia.org/wiki/Electra_(star)",
+    "description": "Electra, designated 17 Tauri, is a blue-white giant star in the constellation of Taurus located approximately 440 light years away. It is the third-brightest star in the Pleiades open star cluster..."
+  },
+  "Grumium": {
+    "url": "https://en.wikipedia.org/wiki/Xi_Draconis",
+    "description": "Xi Draconis is a double or binary star in the northern circumpolar constellation of Draco. It has an apparent visual magnitude of 3.75. Based upon parallax measurements, it is located at a..."
+  },
+  "Baten Kaitos": {
+    "url": "https://en.wikipedia.org/wiki/Zeta_Ceti",
+    "description": "Zeta Ceti is a binary star system in the equatorial constellation of Cetus. Its name is a Bayer designation that is Latinized from ζ Ceti, and abbreviated Zeta Cet or ζ Cet. The system has a..."
+  },
+  "Bake-eo": {
+    "url": "https://en.wikipedia.org/wiki/Gamma_Ophiuchi",
+    "description": "Gamma Ophiuchi, Latinized from γ Ophiuchi, formally named Bake-eo, is a fourth-magnitude star in the constellation Ophiuchus. Together with Beta Ophiuchi, it forms the serpent-holder's right..."
+  },
+  "Miram": {
+    "url": "https://en.wikipedia.org/wiki/Eta_Persei",
+    "description": "Eta Persei, is a red supergiant in the constellation of Perseus. Parallax measurements by the Gaia spacecraft imply that it is 1,000 is light-years away from Earth. At such distance, interstellar..."
+  },
+  "Sualocin": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Delphini",
+    "description": "Alpha Delphini is a multiple star system in the constellation of Delphinus."
+  },
+  "Misam": {
+    "url": "https://en.wikipedia.org/wiki/Kappa_Persei",
+    "description": "Kappa Persei or κ Persei, is a triple star system in the northern constellation of Perseus. Based upon an annual parallax shift of 28.93 mas, it is located at a distance of 113 light-years from..."
+  },
+  "Praecipua": {
+    "url": "https://en.wikipedia.org/wiki/46_Leonis_Minoris",
+    "description": "46 Leonis Minoris, also named Praecipua, is the brightest star in the constellation of Leo Minor. It is of spectral class K0+III-IV and of magnitude 3.83. It is a red clump giant. Based upon..."
+  },
+  "Theemin": {
+    "url": "https://en.wikipedia.org/wiki/Upsilon2_Eridani",
+    "description": "Upsilon2 Eridani, officially named Theemin, is a star in the constellation of Eridanus. It is visible to the naked eye with an apparent visual magnitude of 3.8. Based upon parallax measurements..."
+  },
+  "Udkadua": {
+    "url": "https://en.wikipedia.org/wiki/Lambda_Andromedae",
+    "description": "Lambda Andromedae, Latinized from λ Andromedae, also named Udkadua, is a binary star system in the northern constellation of Andromeda. At an estimated distance of approximately 84.6 light-years..."
+  },
+  "Paradys": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Apodis",
+    "description": "Alpha Apodis, also named Paradys, is the brightest star in the southern circumpolar constellation of Apus. It had the Greek alpha designation as part of the constellation which Johann Bayer called..."
+  },
+  "Atik": {
+    "url": "https://en.wikipedia.org/wiki/Omicron_Persei",
+    "description": "Omicron Persei is a triple star system in the constellation of Perseus. From parallax measurements taken during the Hipparcos mission it is approximately 1,100 light-years from the Sun."
+  },
+  "Shaomin": {
+    "url": "https://en.wikipedia.org/wiki/Rho_Leonis",
+    "description": "Rho Leonis, also named Shaomin, is a star in the zodiac constellation of Leo, and, like the prominent nearby star Regulus, is near the ecliptic. With an apparent visual magnitude of 3.9, this star..."
+  },
+  "Polis": {
+    "url": "https://en.wikipedia.org/wiki/Mu_Sagittarii",
+    "description": "Mu Sagittarii is a multiple star system in the constellation of Sagittarius. The brightest component, a blue supergiant designated Mu Sagittarii Aa, is formally named Polis. The system is 5,000..."
+  },
+  "Tusizuo": {
+    "url": "https://en.wikipedia.org/wiki/109_Herculis",
+    "description": "109 Herculis, also named Tusizuo, is a single star in the northern constellation of Hercules. It is visible to the naked eye as a faint, orange-hued point of light with an apparent visual..."
+  },
+  "Sceptrum": {
+    "url": "https://en.wikipedia.org/wiki/53_Eridani",
+    "description": "53 Eridani, also designated l Eridani, is a binary star in the constellation of Eridanus. The system has a combined apparent magnitude of 3.87. Parallax estimates made by the Hipparcos spacecraft..."
+  },
+  "Maia": {
+    "url": "https://en.wikipedia.org/wiki/Maia_(star)",
+    "description": "Maia, designated 20 Tauri, is a star in the constellation of Taurus. It is a blue giant of spectral type B8 III, a chemically peculiar star."
+  },
+  "Iklil": {
+    "url": "https://en.wikipedia.org/wiki/Rho_Scorpii",
+    "description": "Rho Scorpii is a double star in the constellation of Scorpius. It has an apparent visual magnitude of +3.87, which is bright enough to be seen with the naked eye. Based upon parallax measurements,..."
+  },
+  "Asellus Australis": {
+    "url": "https://en.wikipedia.org/wiki/Delta_Cancri",
+    "description": "Delta Cancri is a star in the constellation of Cancer. It has the proper name Asellus Australis, Delta Cancri is its Bayer designation. This star is visible to the naked eye with an apparent..."
+  },
+  "Arkab Prior": {
+    "url": "https://en.wikipedia.org/wiki/Beta1_Sagittarii",
+    "description": "Beta1 Sagittarii, Latinized from β1 Sagittarii, is a binary star system in the southern zodiac constellation of Sagittarius, next to the southern constellation border with Telescopium. The..."
+  },
+  "Rukbat": {
+    "url": "https://en.wikipedia.org/wiki/Alpha_Sagittarii",
+    "description": "Alpha Sagittarii, also named Rukbat, is a star in the constellation of Sagittarius."
+  },
+  "Menkib": {
+    "url": "https://en.wikipedia.org/wiki/Xi_Persei",
+    "description": "Xi Persei, known also as Menkib, is a star in the constellation of Perseus. Based upon parallax measurements taken during the Hipparcos mission, it is approximately 1,200 light-years from the Sun."
+  },
+  "Alcor": {
+    "url": "https://en.wikipedia.org/wiki/Alcor_(star)",
+    "description": "Alcor is a binary star system in the constellation of Ursa Major. It is the fainter companion of Mizar, the two stars forming a naked eye double in the handle of the Big Dipper asterism in Ursa..."
+  },
+  "Jabbah": {
+    "url": "https://en.wikipedia.org/wiki/Nu_Scorpii",
+    "description": "Nu Scorpii is a multiple star system in the constellation of Scorpius. It is most likely a septuple star system, consisting of two close groups that are separated by 41 arcseconds. Based on..."
+  },
+  "Mekbuda": {
+    "url": "https://en.wikipedia.org/wiki/Zeta_Geminorum",
+    "description": "Zeta Geminorum is a bright star with cluster components, distant optical components and a likely spectroscopic partner in the zodiac constellation of Gemini — in its south, on the left 'leg' of..."
+  }
+}

@@ -22,19 +22,28 @@
 	let stars: Star[] = $state([]);
 	let starByIdx = new Map<number, Star>();
 	let starsReady = $state(false);
+	let constellationWikiUrls: Record<string, string> = {};
 
 	let starsError = $state('');
 
-	const starsPromise = fetch('/stars.json')
-		.then(r => {
+	const starsPromise = Promise.all([
+		fetch('/stars.json').then(r => {
 			if (!r.ok) throw new Error(`Failed to load star catalog (${r.status})`);
-			return r.json();
-		})
-		.then((data: Star[]) => {
+			return r.json() as Promise<Star[]>;
+		}),
+		fetch('/star-wiki.json').then(r => r.ok ? r.json() as Promise<Record<string, { url: string; description: string }>> : {}),
+		fetch('/constellation-wiki.json').then(r => r.ok ? r.json() as Promise<Record<string, string>> : {}),
+	])
+		.then(([data, wiki, constellationWiki]) => {
+			constellationWikiUrls = constellationWiki as Record<string, string>;
 			// Add the Sun if not already present (filtered out of older star catalog builds)
 			if (!data.some(s => s.mag < -10)) {
 				const sunIdx = data.length;
 				data.push({ idx: sunIdx, id: 0, ra: 0, dec: 0, mag: -26.7, ci: 0.66, name: 'Sol' });
+			}
+			// Merge wiki data into star objects
+			for (const s of data) {
+				if (s.name && wiki[s.name]) s.wiki = wiki[s.name];
 			}
 			starsRaw = data;
 			matchableStars = starsRaw.filter(s => s.mag > -10);
@@ -983,9 +992,7 @@
 	}
 
 	function starWikiUrl(star: Star): string | null {
-		if (star.name) {
-			return `https://en.wikipedia.org/wiki/${encodeURIComponent(star.name.replace(/ /g, '_'))}_(star)`;
-		}
+		if (star.wiki) return star.wiki.url;
 		if (star.hip) {
 			return `https://simbad.u-strasbg.fr/simbad/sim-id?Ident=HIP+${star.hip}`;
 		}
@@ -1383,9 +1390,12 @@
 						</div>
 					{/if}
 				</div>
+				{#if selectedStar.wiki}
+					<div class="star-panel-desc">{selectedStar.wiki.description}</div>
+				{/if}
 				{#if starWikiUrl(selectedStar)}
 					<a class="star-panel-link" href={starWikiUrl(selectedStar)} target="_blank" rel="noopener noreferrer">
-						{selectedStar.name ? 'Wikipedia' : 'SIMBAD'} &rarr;
+						{selectedStar.wiki ? 'Wikipedia' : 'SIMBAD'} &rarr;
 					</a>
 				{/if}
 				{@const starConsts = getStarConstellations(selectedStar)}
@@ -1417,6 +1427,11 @@
 						</div>
 					{/if}
 				</div>
+				{#if constellationWikiUrls[selectedConstellation.name]}
+					<a class="star-panel-link" href={constellationWikiUrls[selectedConstellation.name]} target="_blank" rel="noopener noreferrer">
+						Wikipedia &rarr;
+					</a>
+				{/if}
 				<div class="star-panel-star-list">
 					<div class="star-panel-list-title">Notable stars</div>
 					{#each cStars.filter((s: Star) => s.name).slice(0, 8) as s}
@@ -2711,6 +2726,13 @@
 		color: rgba(255, 255, 255, 0.75);
 		font-variant-numeric: tabular-nums;
 		text-align: right;
+	}
+
+	.star-panel-desc {
+		margin-top: 10px;
+		font-size: 11px;
+		line-height: 1.5;
+		color: rgba(170, 200, 255, 0.55);
 	}
 
 	.star-panel-link {
