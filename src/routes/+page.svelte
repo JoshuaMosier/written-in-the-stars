@@ -19,10 +19,12 @@
 	// Keep a plain (non-proxy) reference for worker postMessage
 	let starsRaw: Star[] = [];
 	let matchableStars: Star[] = [];
+	type StarWikiEntry = NonNullable<Star['wiki']>;
+	type StarWikiLookup = Record<string, StarWikiEntry>;
 	let stars: Star[] = $state([]);
 	let starByIdx = new Map<number, Star>();
 	let starsReady = $state(false);
-	let constellationWikiUrls: Record<string, string> = {};
+	let constellationWikiUrls = $state<Record<string, string>>({});
 
 	let starsError = $state('');
 
@@ -31,11 +33,15 @@
 			if (!r.ok) throw new Error(`Failed to load star catalog (${r.status})`);
 			return r.json() as Promise<Star[]>;
 		}),
-		fetch('/star-wiki.json').then(r => r.ok ? r.json() as Promise<Record<string, { url: string; description: string }>> : {}),
-		fetch('/constellation-wiki.json').then(r => r.ok ? r.json() as Promise<Record<string, string>> : {}),
+		fetch('/star-wiki.json').then((r): Promise<StarWikiLookup> =>
+			r.ok ? (r.json() as Promise<StarWikiLookup>) : Promise.resolve({})
+		),
+		fetch('/constellation-wiki.json').then((r): Promise<Record<string, string>> =>
+			r.ok ? (r.json() as Promise<Record<string, string>>) : Promise.resolve({})
+		),
 	])
 		.then(([data, wiki, constellationWiki]) => {
-			constellationWikiUrls = constellationWiki as Record<string, string>;
+			constellationWikiUrls = constellationWiki;
 			// Add the Sun if not already present (filtered out of older star catalog builds)
 			if (!data.some(s => s.mag < -10)) {
 				const sunIdx = data.length;
@@ -43,7 +49,9 @@
 			}
 			// Merge wiki data into star objects
 			for (const s of data) {
-				if (s.name && wiki[s.name]) s.wiki = wiki[s.name];
+				if (!s.name) continue;
+				const wikiEntry = wiki[s.name];
+				if (wikiEntry) s.wiki = wikiEntry;
 			}
 			starsRaw = data;
 			matchableStars = starsRaw.filter(s => s.mag > -10);
@@ -2493,7 +2501,7 @@
 	.star-search-container {
 		position: relative;
 		z-index: 15;
-		width: 260px;
+		width: 300px;
 	}
 
 	.star-search-input-wrap {
