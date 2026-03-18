@@ -93,6 +93,7 @@ interface SearchBudget {
 	coarseTopN: number;
 	ransacSampleSize: number;
 	secondaryStartCount: number;
+	coarseJitterCount: number;
 }
 
 class StarGrid {
@@ -238,6 +239,7 @@ function getSearchBudget(nodeCount: number): SearchBudget {
 			coarseTopN: 180,
 			ransacSampleSize: 900,
 			secondaryStartCount: 12,
+			coarseJitterCount: 2,
 		};
 	}
 
@@ -247,6 +249,7 @@ function getSearchBudget(nodeCount: number): SearchBudget {
 			coarseTopN: 220,
 			ransacSampleSize: 1100,
 			secondaryStartCount: 20,
+			coarseJitterCount: 2,
 		};
 	}
 
@@ -255,6 +258,7 @@ function getSearchBudget(nodeCount: number): SearchBudget {
 		coarseTopN: 300,
 		ransacSampleSize: 1500,
 		secondaryStartCount: 80,
+		coarseJitterCount: 3,
 	};
 }
 
@@ -874,6 +878,9 @@ export function matchStarsToAnchors(
 		[0.33, 0.33],
 		[0.67, 0.67],
 	];
+	// Larger phrases already generate many stable candidates; two offset passes
+	// are enough to keep coverage while cutting fixed coarse-search work.
+	const activeJitterOffsets = budget.coarseJitterCount === 2 ? [jitterOffsets[0], jitterOffsets[2]] : jitterOffsets;
 
 	const coarseCellW = rangeX / coarseStepsX;
 	const coarseCellH = rangeY / coarseStepsY;
@@ -882,7 +889,7 @@ export function matchStarsToAnchors(
 	// Pass 1: coarse grid with scale-adaptive stepping
 	// At large scales the glyph covers many cells, so adjacent positions are
 	// highly correlated. Skip redundant positions proportionally.
-	for (const [jx, jy] of jitterOffsets) {
+	for (const [jx, jy] of activeJitterOffsets) {
 		for (const scale of scaleValues) {
 			const strideX = Math.max(1, Math.floor(scale / coarseCellW));
 			const strideY = Math.max(1, Math.floor(scale / coarseCellH));
