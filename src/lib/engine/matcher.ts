@@ -88,6 +88,13 @@ interface MatchOptions {
 	captureProfile?: boolean;
 }
 
+interface SearchBudget {
+	topN: number;
+	coarseTopN: number;
+	ransacSampleSize: number;
+	secondaryStartCount: number;
+}
+
 class StarGrid {
 	private readonly cells: (KDPoint[] | null)[];
 	private readonly cellSize: number;
@@ -222,6 +229,33 @@ export function prepareMatcherCatalog(stars: Star[]): PreparedCatalog {
 	};
 	preparedCatalogCache.set(stars, prepared);
 	return prepared;
+}
+
+function getSearchBudget(nodeCount: number): SearchBudget {
+	if (nodeCount >= 70) {
+		return {
+			topN: 48,
+			coarseTopN: 180,
+			ransacSampleSize: 900,
+			secondaryStartCount: 12,
+		};
+	}
+
+	if (nodeCount >= 40) {
+		return {
+			topN: 64,
+			coarseTopN: 220,
+			ransacSampleSize: 1100,
+			secondaryStartCount: 20,
+		};
+	}
+
+	return {
+		topN: 80,
+		coarseTopN: 300,
+		ransacSampleSize: 1500,
+		secondaryStartCount: 80,
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -702,6 +736,7 @@ export function matchStarsToAnchors(
 
 	// --- Compute node centroid and pre-center anchor offsets ---
 	const n = nodes.length;
+	const budget = getSearchBudget(n);
 	let cx = 0;
 	let cy = 0;
 	for (const a of nodes) {
@@ -759,7 +794,7 @@ export function matchStarsToAnchors(
 		cost: number;
 	}
 
-	const topN = 80; // number of best candidates to keep for gnomonic refinement
+	const topN = budget.topN; // number of best candidates to keep for gnomonic refinement
 	const best: Candidate[] = [];
 	let worstBestCost = Infinity;
 
@@ -805,7 +840,7 @@ export function matchStarsToAnchors(
 
 	const coarseStepsX = 40;
 	const coarseStepsY = 40;
-	const coarseTopN = 300; // keep top 300 coarse candidates for fine-grid refinement
+	const coarseTopN = budget.coarseTopN; // keep top coarse candidates for fine-grid refinement
 	const coarseBest: Candidate[] = [];
 	let coarseWorstCost = Infinity;
 
@@ -950,7 +985,7 @@ export function matchStarsToAnchors(
 	const ransacEdges = edgeInfos.slice(0, Math.min(2, edgeInfos.length));
 
 	// Sample stars with a stride; use two different offsets to catch different stars
-	const ransacSampleSize = 1500;
+	const ransacSampleSize = budget.ransacSampleSize;
 	const ransacStride = Math.max(1, Math.floor(eqStars.length / ransacSampleSize));
 	const ransacStart = captureProfile ? performance.now() : 0;
 
@@ -1124,8 +1159,12 @@ export function matchStarsToAnchors(
 
 		const searchRadius = Math.max(0.003, gnoScaleInit * 0.15);
 		const startPoint = [offX0, offY0, gnoScaleInit];
-		// Two CMA-ES runs with different seeds for broader exploration.
-		const cmaStarts = [startPoint, [offX0 + searchRadius * 0.01, offY0 + searchRadius * 0.01, gnoScaleInit]];
+		// Give the strongest coarse candidates a second CMA seed; the long tail
+		// rarely justifies doubling the refinement work.
+		const cmaStarts =
+			ci < budget.secondaryStartCount
+				? [startPoint, [offX0 + searchRadius * 0.01, offY0 + searchRadius * 0.01, gnoScaleInit]]
+				: [startPoint];
 		for (const cmaStart of cmaStarts) {
 			const optimized = cmaes(costFn, cmaStart, { sigma: searchRadius, maxEvals: 350 });
 			const cost = costFn(optimized);
