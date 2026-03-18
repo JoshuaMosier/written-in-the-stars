@@ -9,9 +9,6 @@ const outPath = resolve(__dirname, '../static/og-image.png');
 
 const svg = readFileSync(svgPath);
 
-await sharp(svg)
-  .resize(1200, 630)
-  .png()
-  .toFile(outPath);
+await sharp(svg).resize(1200, 630).png().toFile(outPath);
 
 console.log('Generated og-image.png');

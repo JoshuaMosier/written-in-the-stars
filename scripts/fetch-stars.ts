@@ -1,152 +1,151 @@
-import { writeFileSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
+import { writeFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 interface Star {
-  idx: number;  // compact sequential index (0..N-1), used for URL encoding
-  id: number;
-  hip?: number; // Hipparcos catalog number
-  ra: number;
-  dec: number;
-  mag: number;
-  ci?: number;  // B-V color index
-  name?: string;
+	idx: number; // compact sequential index (0..N-1), used for URL encoding
+	id: number;
+	hip?: number; // Hipparcos catalog number
+	ra: number;
+	dec: number;
+	mag: number;
+	ci?: number; // B-V color index
+	name?: string;
 }
 
-const OUTPUT_PATH = join(__dirname, "..", "static", "stars.json");
+const OUTPUT_PATH = join(__dirname, '..', 'static', 'stars.json');
 
 function parseCSVLine(line: string): string[] {
-  const result: string[] = [];
-  let current = "";
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      inQuotes = !inQuotes;
-    } else if (ch === "," && !inQuotes) {
-      result.push(current);
-      current = "";
-    } else {
-      current += ch;
-    }
-  }
-  result.push(current);
-  return result;
+	const result: string[] = [];
+	let current = '';
+	let inQuotes = false;
+	for (let i = 0; i < line.length; i++) {
+		const ch = line[i];
+		if (ch === '"') {
+			inQuotes = !inQuotes;
+		} else if (ch === ',' && !inQuotes) {
+			result.push(current);
+			current = '';
+		} else {
+			current += ch;
+		}
+	}
+	result.push(current);
+	return result;
 }
 
 async function main() {
-  // HYG Database v41 — pinned to a specific commit for reproducibility.
-  // To update: pick a new commit SHA from https://github.com/astronexus/HYG-Database/commits/main
-  const HYG_COMMIT = "c7f7f883fe678cc7680169a50ccd7dcc49b060ce";
-  const url =
-    `https://raw.githubusercontent.com/astronexus/HYG-Database/${HYG_COMMIT}/hyg/CURRENT/hygdata_v41.csv`;
+	// HYG Database v41 — pinned to a specific commit for reproducibility.
+	// To update: pick a new commit SHA from https://github.com/astronexus/HYG-Database/commits/main
+	const HYG_COMMIT = 'c7f7f883fe678cc7680169a50ccd7dcc49b060ce';
+	const url = `https://raw.githubusercontent.com/astronexus/HYG-Database/${HYG_COMMIT}/hyg/CURRENT/hygdata_v41.csv`;
 
-  console.log("Fetching HYG v41 database...");
-  const res = await fetch(url, { signal: AbortSignal.timeout(120000) });
-  if (!res.ok) {
-    console.error(`Failed to fetch: ${res.status} ${res.statusText}`);
-    process.exit(1);
-  }
+	console.log('Fetching HYG v41 database...');
+	const res = await fetch(url, { signal: AbortSignal.timeout(120000) });
+	if (!res.ok) {
+		console.error(`Failed to fetch: ${res.status} ${res.statusText}`);
+		process.exit(1);
+	}
 
-  const text = await res.text();
-  const lines = text.split("\n");
-  console.log(`Downloaded ${lines.length} lines`);
+	const text = await res.text();
+	const lines = text.split('\n');
+	console.log(`Downloaded ${lines.length} lines`);
 
-  const headers = parseCSVLine(lines[0]);
-  console.log("Columns:", headers.join(", "));
+	const headers = parseCSVLine(lines[0]);
+	console.log('Columns:', headers.join(', '));
 
-  // Validate expected columns exist (fail loudly on schema drift)
-  const EXPECTED_COLUMNS = ["id", "hr", "rarad", "decrad", "mag", "proper", "ci"];
-  const col = (name: string) => {
-    const idx = headers.indexOf(name);
-    if (idx < 0) throw new Error(`Column "${name}" not found — HYG schema may have changed`);
-    return idx;
-  };
-  for (const c of EXPECTED_COLUMNS) col(c); // validate all up-front
+	// Validate expected columns exist (fail loudly on schema drift)
+	const EXPECTED_COLUMNS = ['id', 'hr', 'rarad', 'decrad', 'mag', 'proper', 'ci'];
+	const col = (name: string) => {
+		const idx = headers.indexOf(name);
+		if (idx < 0) throw new Error(`Column "${name}" not found — HYG schema may have changed`);
+		return idx;
+	};
+	for (const c of EXPECTED_COLUMNS) col(c); // validate all up-front
 
-  const hrIdx = col("hr");
-  const raradIdx = col("rarad");
-  const decradIdx = col("decrad");
-  const magIdx = col("mag");
-  const properIdx = col("proper");
-  const idIdx = col("id");
-  const ciIdx = col("ci");
+	const hrIdx = col('hr');
+	const raradIdx = col('rarad');
+	const decradIdx = col('decrad');
+	const magIdx = col('mag');
+	const properIdx = col('proper');
+	const idIdx = col('id');
+	const ciIdx = col('ci');
 
-  const stars: Star[] = [];
+	const stars: Star[] = [];
 
-  for (let i = 1; i < lines.length; i++) {
-    if (!lines[i].trim()) continue;
-    const cols = parseCSVLine(lines[i]);
+	for (let i = 1; i < lines.length; i++) {
+		if (!lines[i].trim()) continue;
+		const cols = parseCSVLine(lines[i]);
 
-    const magStr = cols[magIdx]?.trim();
-    const raradStr = cols[raradIdx]?.trim();
-    const decradStr = cols[decradIdx]?.trim();
+		const magStr = cols[magIdx]?.trim();
+		const raradStr = cols[raradIdx]?.trim();
+		const decradStr = cols[decradIdx]?.trim();
 
-    if (!magStr || !raradStr || !decradStr) continue;
+		if (!magStr || !raradStr || !decradStr) continue;
 
-    const mag = parseFloat(magStr);
-    const rarad = parseFloat(raradStr);
-    const decrad = parseFloat(decradStr);
+		const mag = parseFloat(magStr);
+		const rarad = parseFloat(raradStr);
+		const decrad = parseFloat(decradStr);
 
-    if (isNaN(mag) || isNaN(rarad) || isNaN(decrad)) continue;
-    if (mag > 6.5) continue;
+		if (isNaN(mag) || isNaN(rarad) || isNaN(decrad)) continue;
+		if (mag > 6.5) continue;
 
-    // Use HR number if available, otherwise use HYG id
-    const hrStr = cols[hrIdx]?.trim();
-    const hr = hrStr ? parseInt(hrStr, 10) : NaN;
-    const hygId = parseInt(cols[idIdx]?.trim() || "", 10);
-    const id = !isNaN(hr) && hr > 0 ? hr : hygId;
+		// Use HR number if available, otherwise use HYG id
+		const hrStr = cols[hrIdx]?.trim();
+		const hr = hrStr ? parseInt(hrStr, 10) : NaN;
+		const hygId = parseInt(cols[idIdx]?.trim() || '', 10);
+		const id = !isNaN(hr) && hr > 0 ? hr : hygId;
 
-    // Resolve Hipparcos ID from the HYG 'id' column (Hipparcos catalog number)
-    const hipStr = cols[idIdx]?.trim();
-    const hip = hipStr ? parseInt(hipStr, 10) : NaN;
+		// Resolve Hipparcos ID from the HYG 'id' column (Hipparcos catalog number)
+		const hipStr = cols[idIdx]?.trim();
+		const hip = hipStr ? parseInt(hipStr, 10) : NaN;
 
-    const star: Star = {
-      idx: 0, // assigned after sorting
-      id,
-      ra: Math.round(rarad * 1e6) / 1e6,
-      dec: Math.round(decrad * 1e6) / 1e6,
-      mag: Math.round(mag * 100) / 100,
-    };
+		const star: Star = {
+			idx: 0, // assigned after sorting
+			id,
+			ra: Math.round(rarad * 1e6) / 1e6,
+			dec: Math.round(decrad * 1e6) / 1e6,
+			mag: Math.round(mag * 100) / 100,
+		};
 
-    if (!isNaN(hip) && hip > 0) {
-      star.hip = hip;
-    }
+		if (!isNaN(hip) && hip > 0) {
+			star.hip = hip;
+		}
 
-    const ciStr = cols[ciIdx]?.trim();
-    if (ciStr) {
-      const ci = parseFloat(ciStr);
-      if (!isNaN(ci)) {
-        star.ci = Math.round(ci * 100) / 100;
-      }
-    }
+		const ciStr = cols[ciIdx]?.trim();
+		if (ciStr) {
+			const ci = parseFloat(ciStr);
+			if (!isNaN(ci)) {
+				star.ci = Math.round(ci * 100) / 100;
+			}
+		}
 
-    const proper = cols[properIdx]?.trim();
-    if (proper && proper.length > 0) {
-      star.name = proper;
-    }
+		const proper = cols[properIdx]?.trim();
+		if (proper && proper.length > 0) {
+			star.name = proper;
+		}
 
-    stars.push(star);
-  }
+		stars.push(star);
+	}
 
-  // Sort by magnitude (brightest first), then assign sequential indices
-  stars.sort((a, b) => a.mag - b.mag);
-  for (let i = 0; i < stars.length; i++) stars[i].idx = i;
+	// Sort by magnitude (brightest first), then assign sequential indices
+	stars.sort((a, b) => a.mag - b.mag);
+	for (let i = 0; i < stars.length; i++) stars[i].idx = i;
 
-  console.log(`\nTotal stars with mag <= 6.5: ${stars.length}`);
-  console.log(`Brightest: ${JSON.stringify(stars[0])}`);
-  console.log(`Faintest: ${JSON.stringify(stars[stars.length - 1])}`);
-  console.log(`Named stars: ${stars.filter((s) => s.name).length}`);
+	console.log(`\nTotal stars with mag <= 6.5: ${stars.length}`);
+	console.log(`Brightest: ${JSON.stringify(stars[0])}`);
+	console.log(`Faintest: ${JSON.stringify(stars[stars.length - 1])}`);
+	console.log(`Named stars: ${stars.filter((s) => s.name).length}`);
 
-  writeFileSync(OUTPUT_PATH, JSON.stringify(stars));
-  const sizeMB = (Buffer.byteLength(JSON.stringify(stars)) / 1e6).toFixed(2);
-  console.log(`\nWrote ${stars.length} stars to ${OUTPUT_PATH} (${sizeMB} MB)`);
+	writeFileSync(OUTPUT_PATH, JSON.stringify(stars));
+	const sizeMB = (Buffer.byteLength(JSON.stringify(stars)) / 1e6).toFixed(2);
+	console.log(`\nWrote ${stars.length} stars to ${OUTPUT_PATH} (${sizeMB} MB)`);
 }
 
 main().catch((e) => {
-  console.error(e);
-  process.exit(1);
+	console.error(e);
+	process.exit(1);
 });

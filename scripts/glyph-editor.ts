@@ -24,10 +24,7 @@ const __dirname = path.dirname(__filename);
 // ---------------------------------------------------------------------------
 // Extract GLYPHS data from the actual glyphs.ts source file
 // ---------------------------------------------------------------------------
-const glyphsSrc = fs.readFileSync(
-  path.resolve(__dirname, '../src/lib/engine/glyphs.ts'),
-  'utf-8',
-);
+const glyphsSrc = fs.readFileSync(path.resolve(__dirname, '../src/lib/engine/glyphs.ts'), 'utf-8');
 
 // Pull out just the GLYPHS object literal (from the opening `{` to its closing `};`)
 const objStart = glyphsSrc.indexOf('= {', glyphsSrc.indexOf('const GLYPHS'));
@@ -35,11 +32,14 @@ if (objStart === -1) throw new Error('Could not find GLYPHS object in glyphs.ts'
 let braceDepth = 0;
 let objEnd = -1;
 for (let i = objStart + 2; i < glyphsSrc.length; i++) {
-  if (glyphsSrc[i] === '{') braceDepth++;
-  else if (glyphsSrc[i] === '}') {
-    braceDepth--;
-    if (braceDepth === 0) { objEnd = i + 1; break; }
-  }
+	if (glyphsSrc[i] === '{') braceDepth++;
+	else if (glyphsSrc[i] === '}') {
+		braceDepth--;
+		if (braceDepth === 0) {
+			objEnd = i + 1;
+			break;
+		}
+	}
 }
 if (objEnd === -1) throw new Error('Could not find end of GLYPHS object');
 
@@ -645,7 +645,7 @@ loadGlyph('a');
 
 const outDir = path.resolve(__dirname, 'output');
 if (!fs.existsSync(outDir)) {
-  fs.mkdirSync(outDir, { recursive: true });
+	fs.mkdirSync(outDir, { recursive: true });
 }
 
 const outPath = path.join(outDir, 'glyph-editor.html');

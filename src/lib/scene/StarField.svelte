@@ -9,7 +9,12 @@
 	import type { Star, MatchResult } from '$lib/engine/types';
 	import { CONSTELLATIONS } from '$lib/data/constellations';
 
-	let { stars, onReady = () => {}, onVertexDrag = (_e: { constellationIndex: number; nodeIndex: number; newStar: Star }) => {}, onStarClick = (_star: Star, _screenPos: { x: number; y: number }) => {} }: {
+	let {
+		stars,
+		onReady = () => {},
+		onVertexDrag = (_e: { constellationIndex: number; nodeIndex: number; newStar: Star }) => {},
+		onStarClick = (_star: Star, _screenPos: { x: number; y: number }) => {},
+	}: {
 		stars: Star[];
 		onReady?: () => void;
 		onVertexDrag?: (e: { constellationIndex: number; nodeIndex: number; newStar: Star }) => void;
@@ -17,9 +22,8 @@
 	} = $props();
 
 	// Respect prefers-reduced-motion
-	const reducedMotion = typeof window !== 'undefined'
-		? window.matchMedia('(prefers-reduced-motion: reduce)').matches
-		: false;
+	const reducedMotion =
+		typeof window !== 'undefined' ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false;
 
 	let container: HTMLDivElement;
 	let tooltip: HTMLDivElement;
@@ -113,11 +117,13 @@
 	}
 
 	function getActiveViewport() {
-		return captureViewportOverride ?? {
-			width: container?.clientWidth ?? 1,
-			height: container?.clientHeight ?? 1,
-			scale: 1,
-		};
+		return (
+			captureViewportOverride ?? {
+				width: container?.clientWidth ?? 1,
+				height: container?.clientHeight ?? 1,
+				scale: 1,
+			}
+		);
 	}
 
 	function setOverlayCameraBounds(camera: THREE.OrthographicCamera, width: number, height: number) {
@@ -290,11 +296,9 @@
 
 		for (let i = 0; i < count; i++) {
 			const base = i * 3;
-			starProjectionVector.set(
-				starPositionData[base],
-				starPositionData[base + 1],
-				starPositionData[base + 2]
-			).project(camera);
+			starProjectionVector
+				.set(starPositionData[base], starPositionData[base + 1], starPositionData[base + 2])
+				.project(camera);
 
 			if (starProjectionVector.z > 1) {
 				starScreenVisible[i] = 0;
@@ -314,10 +318,11 @@
 			starScreenX[i] = sx;
 			starScreenY[i] = sy;
 
-			const inRange = sx >= -STAR_PICK_MARGIN_PX
-				&& sx <= width + STAR_PICK_MARGIN_PX
-				&& sy >= -STAR_PICK_MARGIN_PX
-				&& sy <= height + STAR_PICK_MARGIN_PX;
+			const inRange =
+				sx >= -STAR_PICK_MARGIN_PX &&
+				sx <= width + STAR_PICK_MARGIN_PX &&
+				sy >= -STAR_PICK_MARGIN_PX &&
+				sy <= height + STAR_PICK_MARGIN_PX;
 			if (!inRange) {
 				starScreenVisible[i] = 0;
 				starGridNext[i] = -1;
@@ -337,8 +342,13 @@
 
 	// Build a spatial index for fast star lookup by screen position
 	function findNearestStarToScreen(
-		mx: number, my: number, camera: THREE.PerspectiveCamera,
-		w: number, h: number, excludeIdx?: number, threshold = STAR_PICK_THRESHOLD
+		mx: number,
+		my: number,
+		camera: THREE.PerspectiveCamera,
+		w: number,
+		h: number,
+		excludeIdx?: number,
+		threshold = STAR_PICK_THRESHOLD,
 	): Star | null {
 		if (!starPositionData || stars.length === 0) return null;
 		if (starGridHeads.length === 0) updateStarProjectionCache(camera, w, h);
@@ -376,8 +386,11 @@
 	}
 
 	function findPickedVertex(
-		mx: number, my: number, camera: THREE.PerspectiveCamera,
-		w: number, h: number
+		mx: number,
+		my: number,
+		camera: THREE.PerspectiveCamera,
+		w: number,
+		h: number,
 	): { constellationIndex: number; nodeIndex: number; star: Star } | null {
 		const projected = new THREE.Vector3();
 		const thresholdSq = VERTEX_PICK_THRESHOLD * VERTEX_PICK_THRESHOLD;
@@ -426,7 +439,7 @@
 			if (nA === dragState.nodeIndex) neighborIdx = nB;
 			else if (nB === dragState.nodeIndex) neighborIdx = nA;
 			if (neighborIdx < 0) continue;
-			const neighborPair = result.pairs.find(p => p.nodeIndex === neighborIdx);
+			const neighborPair = result.pairs.find((p) => p.nodeIndex === neighborIdx);
 			if (neighborPair) {
 				neighbors.push(raDecToXYZ(neighborPair.star.ra, neighborPair.star.dec).multiplyScalar(0.999));
 			}
@@ -460,7 +473,10 @@
 
 		// Highlight candidate star with a bright dot
 		const hlGeom = new THREE.BufferGeometry();
-		hlGeom.setAttribute('position', new THREE.Float32BufferAttribute([candidatePos.x, candidatePos.y, candidatePos.z], 3));
+		hlGeom.setAttribute(
+			'position',
+			new THREE.Float32BufferAttribute([candidatePos.x, candidatePos.y, candidatePos.z], 3),
+		);
 		const hlMat = new THREE.ShaderMaterial({
 			uniforms: { uRenderScale: { value: 1.0 } },
 			vertexShader: `
@@ -505,13 +521,13 @@
 
 	// --- Shooting stars (meteors) ---
 	interface Meteor {
-		head: THREE.Vector3;       // current head position on unit sphere
-		axis: THREE.Vector3;       // rotation axis (cross product of start pos and direction)
-		speed: number;             // radians per second
-		lifetime: number;          // total lifetime in seconds
-		elapsed: number;           // time elapsed
-		brightness: number;        // 0-1 peak brightness
-		trailLength: number;       // angular trail length in radians
+		head: THREE.Vector3; // current head position on unit sphere
+		axis: THREE.Vector3; // rotation axis (cross product of start pos and direction)
+		speed: number; // radians per second
+		lifetime: number; // total lifetime in seconds
+		elapsed: number; // time elapsed
+		brightness: number; // 0-1 peak brightness
+		trailLength: number; // angular trail length in radians
 		mesh: THREE.Line;
 	}
 
@@ -535,11 +551,7 @@
 		let startPos: THREE.Vector3;
 		let attempts = 0;
 		do {
-			startPos = new THREE.Vector3(
-				Math.random() * 2 - 1,
-				Math.random() * 2 - 1,
-				Math.random() * 2 - 1
-			).normalize();
+			startPos = new THREE.Vector3(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize();
 			attempts++;
 		} while (startPos.dot(camForward) < 0.1 && attempts < 20);
 
@@ -552,7 +564,7 @@
 		const randomDir = new THREE.Vector3(
 			Math.random() * 2 - 1,
 			Math.random() * 2 - 1,
-			Math.random() * 2 - 1
+			Math.random() * 2 - 1,
 		).normalize();
 		// Project onto tangent plane and normalize
 		const tangent = randomDir.sub(startPos.clone().multiplyScalar(randomDir.dot(startPos))).normalize();
@@ -563,7 +575,7 @@
 		// Meteor properties — most are faint, occasional bright ones
 		const isBright = Math.random() < 0.2;
 		const brightness = isBright ? 0.6 + Math.random() * 0.4 : 0.15 + Math.random() * 0.25;
-		const speed = (0.27 + Math.random() * 0.5); // radians per second (3x slower)
+		const speed = 0.27 + Math.random() * 0.5; // radians per second (3x slower)
 		const lifetime = 0.9 + Math.random() * 1.5; // 0.9-2.4 seconds (3x longer)
 		const trailLength = 0.03 + Math.random() * 0.04; // angular trail length
 
@@ -628,9 +640,7 @@
 			const headAngle = m.elapsed * m.speed;
 
 			// Fade: ramp up quickly, then fade out
-			const fadeMult = progress < 0.15
-				? progress / 0.15
-				: 1.0 - Math.pow((progress - 0.15) / 0.85, 0.6);
+			const fadeMult = progress < 0.15 ? progress / 0.15 : 1.0 - Math.pow((progress - 0.15) / 0.85, 0.6);
 
 			const posAttr = m.mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
 			const colAttr = m.mesh.geometry.getAttribute('color') as THREE.BufferAttribute;
@@ -681,15 +691,15 @@
 	// Single triangle-strip mesh per comet — no separate head spheres.
 	// The head is just the brightest, narrowest point of the strip.
 	interface CometDustParticle {
-		pos: THREE.Vector3;       // current position on sphere
-		drift: THREE.Vector3;     // velocity (tangent to sphere)
-		life: number;             // remaining life (seconds)
-		maxLife: number;          // initial life
+		pos: THREE.Vector3; // current position on sphere
+		drift: THREE.Vector3; // velocity (tangent to sphere)
+		life: number; // remaining life (seconds)
+		maxLife: number; // initial life
 	}
 
 	interface Comet {
-		startPos: THREE.Vector3;   // initial position on unit sphere
-		axis: THREE.Vector3;       // great-circle rotation axis
+		startPos: THREE.Vector3; // initial position on unit sphere
+		axis: THREE.Vector3; // great-circle rotation axis
 		speed: number;
 		lifetime: number;
 		elapsed: number;
@@ -714,13 +724,13 @@
 	let cometGroup: THREE.Group | null = null;
 
 	const COMET_COLORS = [
-		new THREE.Color(0.5, 0.7, 1.0),    // bright blue
-		new THREE.Color(0.3, 0.9, 1.0),    // vivid cyan
-		new THREE.Color(0.9, 0.3, 1.0),    // magenta-violet
-		new THREE.Color(0.6, 0.4, 1.0),    // blue-purple
-		new THREE.Color(0.2, 1.0, 0.5),    // vivid emerald
-		new THREE.Color(0.3, 1.0, 0.9),    // bright teal
-		new THREE.Color(1.0, 0.3, 0.8),    // hot pink
+		new THREE.Color(0.5, 0.7, 1.0), // bright blue
+		new THREE.Color(0.3, 0.9, 1.0), // vivid cyan
+		new THREE.Color(0.9, 0.3, 1.0), // magenta-violet
+		new THREE.Color(0.6, 0.4, 1.0), // blue-purple
+		new THREE.Color(0.2, 1.0, 0.5), // vivid emerald
+		new THREE.Color(0.3, 1.0, 0.9), // bright teal
+		new THREE.Color(1.0, 0.3, 0.8), // hot pink
 	];
 
 	function spawnComet() {
@@ -734,11 +744,7 @@
 		let startPos: THREE.Vector3;
 		let attempts = 0;
 		do {
-			startPos = new THREE.Vector3(
-				Math.random() * 2 - 1,
-				Math.random() * 2 - 1,
-				Math.random() * 2 - 1
-			).normalize();
+			startPos = new THREE.Vector3(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize();
 			attempts++;
 		} while (startPos.dot(camForward) < 0.1 && attempts < 20);
 
@@ -750,7 +756,7 @@
 		const randomDir = new THREE.Vector3(
 			Math.random() * 2 - 1,
 			Math.random() * 2 - 1,
-			Math.random() * 2 - 1
+			Math.random() * 2 - 1,
 		).normalize();
 		const tangent = randomDir.sub(startPos.clone().multiplyScalar(randomDir.dot(startPos))).normalize();
 		const axis = new THREE.Vector3().crossVectors(startPos, tangent).normalize();
@@ -776,7 +782,7 @@
 		for (let i = 0; i < COMET_SPINE - 1; i++) {
 			const base = i * 6;
 			const v = i * 2;
-			indices[base]     = v;
+			indices[base] = v;
 			indices[base + 1] = v + 1;
 			indices[base + 2] = v + 2;
 			indices[base + 3] = v + 1;
@@ -822,10 +828,19 @@
 
 		activeComets.push({
 			startPos: startPos.clone(),
-			axis, speed, lifetime, elapsed: 0,
-			brightness, trailLength, color,
-			mesh, size, perpAxis,
-			dustPoints, dustParticles: [], dustSpawnTimer: 0,
+			axis,
+			speed,
+			lifetime,
+			elapsed: 0,
+			brightness,
+			trailLength,
+			color,
+			mesh,
+			size,
+			perpAxis,
+			dustPoints,
+			dustParticles: [],
+			dustSpawnTimer: 0,
 		});
 		scheduleComet();
 	}
@@ -862,11 +877,7 @@
 			const headAngle = c.elapsed * c.speed;
 
 			// Fade in over first 8%, fade out over last 15%
-			const fadeMult = progress < 0.08
-				? progress / 0.08
-				: progress > 0.85
-					? 1.0 - (progress - 0.85) / 0.15
-					: 1.0;
+			const fadeMult = progress < 0.08 ? progress / 0.08 : progress > 0.85 ? 1.0 - (progress - 0.85) / 0.15 : 1.0;
 
 			const posAttr = c.mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
 			const colAttr = c.mesh.geometry.getAttribute('color') as THREE.BufferAttribute;
@@ -892,19 +903,21 @@
 				_cometPp.copy(c.perpAxis).applyAxisAngle(c.axis, angle);
 
 				const li = p * 2;
-				posAttr.setXYZ(li,
+				posAttr.setXYZ(
+					li,
 					_cometPt.x + _cometPp.x * halfWidth,
 					_cometPt.y + _cometPp.y * halfWidth,
-					_cometPt.z + _cometPp.z * halfWidth
+					_cometPt.z + _cometPp.z * halfWidth,
 				);
-				posAttr.setXYZ(li + 1,
+				posAttr.setXYZ(
+					li + 1,
 					_cometPt.x - _cometPp.x * halfWidth,
 					_cometPt.y - _cometPp.y * halfWidth,
-					_cometPt.z - _cometPp.z * halfWidth
+					_cometPt.z - _cometPp.z * halfWidth,
 				);
 
 				// Nucleus: very bright tight white point at head
-				const nucleusGlow = Math.pow(t, 8.0);    // very concentrated at head tip
+				const nucleusGlow = Math.pow(t, 8.0); // very concentrated at head tip
 				// Coma: softer glow just behind nucleus
 				const comaGlow = Math.pow(t, 3.0) * 0.4;
 				// Ion tail: colored, transparent, fading toward tip
@@ -914,9 +927,9 @@
 				const fm = fadeMult * c.brightness;
 
 				// Nucleus is white, coma is tinted, tail is saturated color
-				const nr = nucleusGlow * fm * 0.8;  // white nucleus
-				const tr = c.color.r * tailAlpha * fm;  // colored tail
-				const comr = (c.color.r * 0.5 + 0.5) * comaGlow * fm;  // tinted coma
+				const nr = nucleusGlow * fm * 0.8; // white nucleus
+				const tr = c.color.r * tailAlpha * fm; // colored tail
+				const comr = (c.color.r * 0.5 + 0.5) * comaGlow * fm; // tinted coma
 
 				const ng = nucleusGlow * fm * 0.8;
 				const tg = c.color.g * tailAlpha * fm;
@@ -985,11 +998,12 @@
 					const dp = c.dustParticles[d];
 					const alpha = (dp.life / dp.maxLife) * 0.3 * fadeMult * c.brightness;
 					dustPosAttr.setXYZ(d, dp.pos.x, dp.pos.y, dp.pos.z);
-					dustColAttr.setXYZW(d,
-						c.color.r * 0.6 + 0.4,  // slightly pale tint
+					dustColAttr.setXYZW(
+						d,
+						c.color.r * 0.6 + 0.4, // slightly pale tint
 						c.color.g * 0.6 + 0.4,
 						c.color.b * 0.6 + 0.4,
-						alpha
+						alpha,
 					);
 				} else {
 					// Hide unused particles
@@ -1062,8 +1076,7 @@
 	const GLOBE_FOV_DESKTOP = 40;
 	const GLOBE_FOV_MOBILE = 55;
 	function getGlobeFov() {
-		return (typeof window !== 'undefined' && window.innerWidth <= 480)
-			? GLOBE_FOV_MOBILE : GLOBE_FOV_DESKTOP;
+		return typeof window !== 'undefined' && window.innerWidth <= 480 ? GLOBE_FOV_MOBILE : GLOBE_FOV_DESKTOP;
 	}
 
 	let rendererSize = new THREE.Vector2(1, 1);
@@ -1156,10 +1169,12 @@
 
 		for (const ac of ambientConstellations) {
 			const phaseElapsed = now - ac.phaseStart;
-			const labelOpacity = ac.phase === 'draw'
-				? Math.max(0, (phaseElapsed - ac.totalDrawTime * 0.5) / (ac.totalDrawTime * 0.5))
-				: ac.phase === 'hold' ? 1
-				: 1 - phaseElapsed / AMBIENT_FADE;
+			const labelOpacity =
+				ac.phase === 'draw'
+					? Math.max(0, (phaseElapsed - ac.totalDrawTime * 0.5) / (ac.totalDrawTime * 0.5))
+					: ac.phase === 'hold'
+						? 1
+						: 1 - phaseElapsed / AMBIENT_FADE;
 
 			if (updateOverlayLabelPosition(ac.label, ac.centroid, AMBIENT_LABEL_OFFSET)) {
 				setOverlayLabelOpacity(ac.label, labelOpacity * 0.85 * transitionOpacity);
@@ -1278,19 +1293,11 @@
 			b = 0.0;
 		}
 
-		return [
-			Math.max(0, Math.min(1, r)),
-			Math.max(0, Math.min(1, g)),
-			Math.max(0, Math.min(1, b))
-		];
+		return [Math.max(0, Math.min(1, r)), Math.max(0, Math.min(1, g)), Math.max(0, Math.min(1, b))];
 	}
 
 	function raDecToXYZ(ra: number, dec: number): THREE.Vector3 {
-		return new THREE.Vector3(
-			Math.cos(dec) * Math.cos(ra),
-			Math.sin(dec),
-			-Math.cos(dec) * Math.sin(ra)
-		);
+		return new THREE.Vector3(Math.cos(dec) * Math.cos(ra), Math.sin(dec), -Math.cos(dec) * Math.sin(ra));
 	}
 
 	// Vertex shader: pass star data to fragment shader
@@ -1489,7 +1496,9 @@
 		const colorHex = tColor.getHex();
 		// ShaderMaterial doesn't include colorspace_fragment, so use sRGB values directly
 		const srgb = tColor.clone().convertLinearToSRGB();
-		const cr = srgb.r, cg = srgb.g, cb = srgb.b;
+		const cr = srgb.r,
+			cg = srgb.g,
+			cb = srgb.b;
 
 		const nodeToPos = new Map<number, THREE.Vector3>();
 		for (const pair of result.pairs) {
@@ -1596,9 +1605,7 @@
 			blending: THREE.AdditiveBlending,
 		});
 
-		const linePair = edgeData.length > 0
-			? createDynamicLinePair(edgeData.length, colorHex, 8, 0.1, 2.5, 0.4)
-			: null;
+		const linePair = edgeData.length > 0 ? createDynamicLinePair(edgeData.length, colorHex, 8, 0.1, 2.5, 0.4) : null;
 		if (linePair) {
 			constellationGroup.add(linePair.halo);
 			constellationGroup.add(linePair.core);
@@ -1760,7 +1767,9 @@
 		const colorHex = tColor.getHex();
 		// ShaderMaterial doesn't include colorspace_fragment, so use sRGB values directly
 		const srgb = tColor.clone().convertLinearToSRGB();
-		const cr = srgb.r, cg = srgb.g, cb = srgb.b;
+		const cr = srgb.r,
+			cg = srgb.g,
+			cb = srgb.b;
 
 		const nodeToPos = new Map<number, THREE.Vector3>();
 		for (const pair of result.pairs) {
@@ -1868,7 +1877,9 @@
 		cancelGlobeTransition();
 		cancelCameraAnimation();
 
-		let cx = 0, cy = 0, cz = 0;
+		let cx = 0,
+			cy = 0,
+			cz = 0;
 		const positions: THREE.Vector3[] = [];
 		for (const pair of result.pairs) {
 			const pos = raDecToXYZ(pair.star.ra, pair.star.dec);
@@ -1886,7 +1897,7 @@
 		const localNorth = new THREE.Vector3(
 			-Math.sin(centroidDec) * Math.cos(centroidRa),
 			Math.cos(centroidDec),
-			Math.sin(centroidDec) * Math.sin(centroidRa)
+			Math.sin(centroidDec) * Math.sin(centroidRa),
 		).normalize();
 
 		let targetFov: number;
@@ -1899,7 +1910,8 @@
 			testCam.lookAt(centroidDir.clone().multiplyScalar(10));
 			const fitMargin = 0.7;
 			const maxFov = cameraRef.aspect < 0.8 ? 120 : 80;
-			let lo = 5, hi = maxFov + 10;
+			let lo = 5,
+				hi = maxFov + 10;
 			for (let i = 0; i < 16; i++) {
 				const mid = (lo + hi) / 2;
 				testCam.fov = mid;
@@ -1912,7 +1924,8 @@
 						break;
 					}
 				}
-				if (fits) hi = mid; else lo = mid;
+				if (fits) hi = mid;
+				else lo = mid;
 			}
 			targetFov = Math.min(maxFov, Math.max(15, hi));
 		}
@@ -1987,12 +2000,16 @@
 		}
 
 		const result = allResults[focusIndex];
-		let cx = 0, cy = 0, cz = 0;
+		let cx = 0,
+			cy = 0,
+			cz = 0;
 		const positions: THREE.Vector3[] = [];
 		for (const pair of result.pairs) {
 			const pos = raDecToXYZ(pair.star.ra, pair.star.dec);
 			positions.push(pos);
-			cx += pos.x; cy += pos.y; cz += pos.z;
+			cx += pos.x;
+			cy += pos.y;
+			cz += pos.z;
 		}
 		const len = Math.sqrt(cx * cx + cy * cy + cz * cz) || 1;
 		const centroidDir = new THREE.Vector3(cx / len, cy / len, cz / len);
@@ -2002,7 +2019,7 @@
 		const localNorth = new THREE.Vector3(
 			-Math.sin(centroidDec) * Math.cos(centroidRa),
 			Math.cos(centroidDec),
-			Math.sin(centroidDec) * Math.sin(centroidRa)
+			Math.sin(centroidDec) * Math.sin(centroidRa),
 		).normalize();
 
 		let targetFov: number;
@@ -2016,7 +2033,8 @@
 			testCam.lookAt(centroidDir.clone().multiplyScalar(10));
 			const fitMargin = 0.7;
 			const maxFov = cameraRef.aspect < 0.8 ? 120 : 80;
-			let lo = 5, hi = maxFov + 10;
+			let lo = 5,
+				hi = maxFov + 10;
 			for (let i = 0; i < 16; i++) {
 				const mid = (lo + hi) / 2;
 				testCam.fov = mid;
@@ -2029,7 +2047,8 @@
 						break;
 					}
 				}
-				if (fits) hi = mid; else lo = mid;
+				if (fits) hi = mid;
+				else lo = mid;
 			}
 			targetFov = Math.min(maxFov, Math.max(15, hi));
 		}
@@ -2343,9 +2362,7 @@
 		}));
 		const hlKeys = rc.hlPositions.map(starKey);
 
-		const linePair = edgeData.length > 0
-			? createDynamicLinePair(edgeData.length, 0xffffff, 6, 0.1, 2, 0.32)
-			: null;
+		const linePair = edgeData.length > 0 ? createDynamicLinePair(edgeData.length, 0xffffff, 6, 0.1, 2, 0.32) : null;
 		if (linePair) {
 			group.add(linePair.halo);
 			group.add(linePair.core);
@@ -2404,7 +2421,7 @@
 				// Remove
 				disposeObject3D(group);
 				disposeOverlayLabel(ac.label);
-				ambientConstellations = ambientConstellations.filter(a => a !== ac);
+				ambientConstellations = ambientConstellations.filter((a) => a !== ac);
 				return;
 			}
 
@@ -2520,12 +2537,16 @@
 
 		prepareForConstellation();
 
-		let cx = 0, cy = 0, cz = 0;
+		let cx = 0,
+			cy = 0,
+			cz = 0;
 		const positions: THREE.Vector3[] = [];
 		for (const pair of result.pairs) {
 			const pos = raDecToXYZ(pair.star.ra, pair.star.dec);
 			positions.push(pos);
-			cx += pos.x; cy += pos.y; cz += pos.z;
+			cx += pos.x;
+			cy += pos.y;
+			cz += pos.z;
 		}
 		const len = Math.sqrt(cx * cx + cy * cy + cz * cz) || 1;
 		const centroidDir = new THREE.Vector3(cx / len, cy / len, cz / len);
@@ -2550,7 +2571,7 @@
 		const localNorth = new THREE.Vector3(
 			-Math.sin(centroidDec) * Math.cos(centroidRa),
 			Math.cos(centroidDec),
-			Math.sin(centroidDec) * Math.sin(centroidRa)
+			Math.sin(centroidDec) * Math.sin(centroidRa),
 		).normalize();
 
 		let targetFov: number;
@@ -2566,7 +2587,8 @@
 
 			// Allow higher max FOV on portrait viewports to fit wide constellations
 			const maxFov = cameraRef.aspect < 0.8 ? 120 : 80;
-			let lo = 5, hi = maxFov + 10;
+			let lo = 5,
+				hi = maxFov + 10;
 			for (let i = 0; i < 16; i++) {
 				const mid = (lo + hi) / 2;
 				testCam.fov = mid;
@@ -2579,7 +2601,8 @@
 						break;
 					}
 				}
-				if (fits) hi = mid; else lo = mid;
+				if (fits) hi = mid;
+				else lo = mid;
 			}
 			targetFov = Math.min(maxFov, Math.max(15, hi));
 		}
@@ -2692,7 +2715,7 @@
 		if (!cometsEnabled) resumeComets();
 
 		const startPos = cameraRef.position.clone();
-		const defaultTilt = 15 * Math.PI / 180;
+		const defaultTilt = (15 * Math.PI) / 180;
 		const endDir = new THREE.Vector3(0, -Math.sin(defaultTilt), -Math.cos(defaultTilt));
 		const startUp = cameraRef.up.clone();
 		const defaultUp = new THREE.Vector3(0, 1, 0);
@@ -2984,7 +3007,7 @@
 	function getViewFovScale(position: THREE.Vector3, fov: number, globeView: boolean) {
 		if (globeView) {
 			const distance = position.length();
-			return distance > 0.0001 ? GLOBE_DISTANCE / distance * 0.4 : 0.4;
+			return distance > 0.0001 ? (GLOBE_DISTANCE / distance) * 0.4 : 0.4;
 		}
 		return DEFAULT_FOV / fov;
 	}
@@ -3067,7 +3090,7 @@
 		target: THREE.Vector3,
 		up: THREE.Vector3,
 		fov: number,
-		fovScale: number
+		fovScale: number,
 	) {
 		if (!cameraRef || !controlsRef) return;
 		cameraRef.position.copy(position);
@@ -3101,7 +3124,7 @@
 		up: THREE.Vector3,
 		fov: number,
 		fovScale: number,
-		enableRotate: boolean
+		enableRotate: boolean,
 	) {
 		if (!controlsRef || !cameraRef) return;
 
@@ -3139,12 +3162,8 @@
 
 		const enableRotate = globeTransitionRestore?.enableRotate ?? controlsRef.enableRotate;
 		const viewDir = getCurrentViewDirection();
-		const endPos = on
-			? viewDir.clone().negate().multiplyScalar(GLOBE_DISTANCE)
-			: new THREE.Vector3(0, 0, 0.0001);
-		const endTarget = on
-			? new THREE.Vector3(0, 0, 0)
-			: endPos.clone().addScaledVector(viewDir, 0.001);
+		const endPos = on ? viewDir.clone().negate().multiplyScalar(GLOBE_DISTANCE) : new THREE.Vector3(0, 0, 0.0001);
+		const endTarget = on ? new THREE.Vector3(0, 0, 0) : endPos.clone().addScaledVector(viewDir, 0.001);
 		const endUp = cameraRef.up.clone();
 		const endFov = on ? getGlobeFov() : DEFAULT_FOV;
 		const endFovScale = getViewFovScale(endPos, endFov, on);
@@ -3305,7 +3324,7 @@
 		if (!sceneRef || !overlaySceneRef) return;
 
 		if (resolvedConstellations.length === 0) resolveConstellations();
-		const rc = resolvedConstellations.find(c => c.name === constellationName);
+		const rc = resolvedConstellations.find((c) => c.name === constellationName);
 		if (!rc) return;
 
 		const group = new THREE.Group();
@@ -3376,7 +3395,7 @@
 		const localNorth = new THREE.Vector3(
 			-Math.sin(dec) * Math.cos(ra),
 			Math.cos(dec),
-			Math.sin(dec) * Math.sin(ra)
+			Math.sin(dec) * Math.sin(ra),
 		).normalize();
 
 		const targetFov = globeViewActive ? getGlobeFov() : (fov ?? Math.min(60, cameraRef.fov));
@@ -3478,7 +3497,7 @@
 		if (!controlsRef || !cameraRef) return;
 
 		if (resolvedConstellations.length === 0) resolveConstellations();
-		const rc = resolvedConstellations.find(c => c.name === constellationName);
+		const rc = resolvedConstellations.find((c) => c.name === constellationName);
 		if (!rc) return;
 
 		const centroidDir = rc.centroid.clone();
@@ -3487,7 +3506,7 @@
 		const localNorth = new THREE.Vector3(
 			-Math.sin(centroidDec) * Math.cos(centroidRa),
 			Math.cos(centroidDec),
-			Math.sin(centroidDec) * Math.sin(centroidRa)
+			Math.sin(centroidDec) * Math.sin(centroidRa),
 		).normalize();
 
 		let targetFov: number;
@@ -3500,7 +3519,8 @@
 			testCam.lookAt(centroidDir.clone().multiplyScalar(10));
 			const fitMargin = 0.85;
 			const maxFov = cameraRef.aspect < 0.8 ? 110 : 80;
-			let lo = 5, hi = maxFov + 10;
+			let lo = 5,
+				hi = maxFov + 10;
 			for (let i = 0; i < 16; i++) {
 				const mid = (lo + hi) / 2;
 				testCam.fov = mid;
@@ -3508,9 +3528,13 @@
 				let fits = true;
 				for (const pos of rc.hlPositions) {
 					const ndc = pos.clone().project(testCam);
-					if (Math.abs(ndc.x) > fitMargin || Math.abs(ndc.y) > fitMargin) { fits = false; break; }
+					if (Math.abs(ndc.x) > fitMargin || Math.abs(ndc.y) > fitMargin) {
+						fits = false;
+						break;
+					}
 				}
-				if (fits) hi = mid; else lo = mid;
+				if (fits) hi = mid;
+				else lo = mid;
 			}
 			targetFov = Math.min(maxFov, Math.max(15, hi));
 		}
@@ -3578,9 +3602,11 @@
 			};
 
 			const captureObjectMaterials = (obj: THREE.Object3D) => {
-				const material = (obj as THREE.Object3D & {
-					material?: THREE.Material | THREE.Material[];
-				}).material;
+				const material = (
+					obj as THREE.Object3D & {
+						material?: THREE.Material | THREE.Material[];
+					}
+				).material;
 				if (Array.isArray(material)) {
 					for (const entry of material) captureMaterial(entry);
 				} else if (material) {
@@ -3678,9 +3704,7 @@
 		const overlayScene = new THREE.Scene();
 		overlaySceneRef = overlayScene;
 
-		const camera = new THREE.PerspectiveCamera(
-			DEFAULT_FOV, container.clientWidth / container.clientHeight, 0.1, 10
-		);
+		const camera = new THREE.PerspectiveCamera(DEFAULT_FOV, container.clientWidth / container.clientHeight, 0.1, 10);
 		camera.position.set(0, 0, 0.0001);
 		cameraRef = camera;
 		const overlayCamera = new THREE.OrthographicCamera(
@@ -3689,7 +3713,7 @@
 			container.clientHeight / 2,
 			-container.clientHeight / 2,
 			0.1,
-			10
+			10,
 		);
 		overlayCamera.position.z = 1;
 		overlayCameraRef = overlayCamera;
@@ -3724,11 +3748,11 @@
 			const fovScale = camera.fov / baseFov;
 			const sizeScale = Math.min(container.clientWidth, container.clientHeight) / 800;
 			const sign = globeViewActive ? 1 : -1;
-			controls.rotateSpeed = sign * 0.25 * fovScale / sizeScale;
+			controls.rotateSpeed = (sign * 0.25 * fovScale) / sizeScale;
 		}
 		updateRotateSpeed();
 		// Tilt default view 15° below the equator for a better sense of the sphere
-		const tiltRad = 15 * Math.PI / 180;
+		const tiltRad = (15 * Math.PI) / 180;
 		controls.target.set(0, -Math.sin(tiltRad) * 0.001, -Math.cos(tiltRad) * 0.001);
 		controls.minDistance = 0.0001;
 		controls.maxDistance = 0.01;
@@ -3819,7 +3843,9 @@
 		renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: true });
 
 		// Prevent iOS Safari pinch-to-zoom on the page
-		const onGestureStart = (e: Event) => { e.preventDefault(); };
+		const onGestureStart = (e: Event) => {
+			e.preventDefault();
+		};
 		renderer.domElement.addEventListener('gesturestart', onGestureStart, { passive: false } as any);
 
 		// --- Build star geometry with custom attributes ---
@@ -3972,9 +3998,7 @@
 							commitDrag();
 							// Show initial snap candidate at the press location
 							const r = container.getBoundingClientRect();
-							const candidate = findNearestStarToScreen(
-								mx, my, camera, r.width, r.height
-							);
+							const candidate = findNearestStarToScreen(mx, my, camera, r.width, r.height);
 							if (dragState) {
 								dragState.candidateStar = candidate;
 								updateDragVisual(candidate);
@@ -4109,7 +4133,10 @@
 		const onStarPointerUp = (e: PointerEvent) => {
 			if (!clickStart) return;
 			// If a vertex drag was active, skip star click
-			if (dragState) { clickStart = null; return; }
+			if (dragState) {
+				clickStart = null;
+				return;
+			}
 
 			const dx = e.clientX - clickStart.x;
 			const dy = e.clientY - clickStart.y;
@@ -4203,7 +4230,7 @@
 			if (!globeTransitionFovOverride) {
 				if (globeViewActive) {
 					// Only scale by distance — ignore FOV since it's fixed for framing
-					uniforms.uFovScale.value = GLOBE_DISTANCE / camera.position.length() * 0.4;
+					uniforms.uFovScale.value = (GLOBE_DISTANCE / camera.position.length()) * 0.4;
 				} else {
 					uniforms.uFovScale.value = DEFAULT_FOV / camera.fov;
 				}
@@ -4367,7 +4394,12 @@
 	});
 </script>
 
-<div bind:this={container} class="star-field" role="img" aria-label="Interactive 3D star field. Drag to rotate, scroll to zoom."></div>
+<div
+	bind:this={container}
+	class="star-field"
+	role="img"
+	aria-label="Interactive 3D star field. Drag to rotate, scroll to zoom."
+></div>
 <div bind:this={tooltip} class="star-tooltip" role="tooltip" aria-hidden="true"></div>
 
 {#if coordGridActive}

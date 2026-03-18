@@ -4,6 +4,6 @@ import { defineConfig } from 'vite';
 export default defineConfig({
 	plugins: [sveltekit()],
 	optimizeDeps: {
-		include: ['three', 'kd-tree-javascript']
-	}
+		include: ['three', 'kd-tree-javascript'],
+	},
 });

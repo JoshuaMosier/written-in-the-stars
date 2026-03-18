@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { textToGraph } from './glyphs';
-import {
-	decodeHashToShareState,
-	encodeShareStateToHash,
-	type ShareState,
-} from './sharing';
+import { decodeHashToShareState, encodeShareStateToHash, type ShareState } from './sharing';
 import type { MatchResult, Star } from './types';
 
 function fakeStar(idx: number): Star {
@@ -19,7 +15,7 @@ function fakeResult(text: string, starIndices: number[]): MatchResult {
 }
 
 function buildMap(stars: Star[]): Map<number, Star> {
-	return new Map(stars.map(star => [star.idx, star]));
+	return new Map(stars.map((star) => [star.idx, star]));
 }
 
 function makeState(entries: Array<{ text: string; color: string; baseIdx: number }>): ShareState {
@@ -52,7 +48,7 @@ describe('encodeShareStateToHash / decodeHashToShareState', () => {
 			{ text: 'Hello, Stars!', color: '#ffffff', baseIdx: 100 },
 			{ text: "Orion's Belt", color: '#00ffff', baseIdx: 500 },
 		]);
-		const allStars = state.entries.flatMap(entry => entry.result.pairs.map(pair => pair.star));
+		const allStars = state.entries.flatMap((entry) => entry.result.pairs.map((pair) => pair.star));
 
 		const hash = encodeShareStateToHash(state);
 		const decoded = decodeHashToShareState(hash, buildMap(allStars));
@@ -60,13 +56,13 @@ describe('encodeShareStateToHash / decodeHashToShareState', () => {
 		expect(decoded).not.toBeNull();
 		expect(decoded!.focusedIndex).toBe(state.focusedIndex);
 		expect(decoded!.settings).toEqual(state.settings);
-		expect(decoded!.entries.map(entry => entry.text)).toEqual(state.entries.map(entry => entry.text));
-		expect(decoded!.entries.map(entry => entry.color)).toEqual(['#ffffff', '#00ffff']);
-		expect(decoded!.entries[1].result.pairs.map(pair => pair.nodeIndex)).toEqual(
-			state.entries[1].result.pairs.map(pair => pair.nodeIndex),
+		expect(decoded!.entries.map((entry) => entry.text)).toEqual(state.entries.map((entry) => entry.text));
+		expect(decoded!.entries.map((entry) => entry.color)).toEqual(['#ffffff', '#00ffff']);
+		expect(decoded!.entries[1].result.pairs.map((pair) => pair.nodeIndex)).toEqual(
+			state.entries[1].result.pairs.map((pair) => pair.nodeIndex),
 		);
-		expect(decoded!.entries[1].result.pairs.map(pair => pair.star.idx)).toEqual(
-			state.entries[1].result.pairs.map(pair => pair.star.idx),
+		expect(decoded!.entries[1].result.pairs.map((pair) => pair.star.idx)).toEqual(
+			state.entries[1].result.pairs.map((pair) => pair.star.idx),
 		);
 	});
 
@@ -74,7 +70,7 @@ describe('encodeShareStateToHash / decodeHashToShareState', () => {
 		const state = makeState([{ text: "don't panic?", color: '#ff0000', baseIdx: 900 }]);
 		state.settings.constellationMode = 'none';
 		state.settings.brightness = 0;
-		const allStars = state.entries[0].result.pairs.map(pair => pair.star);
+		const allStars = state.entries[0].result.pairs.map((pair) => pair.star);
 
 		const hash = encodeShareStateToHash(state);
 		const decoded = decodeHashToShareState(hash, buildMap(allStars));

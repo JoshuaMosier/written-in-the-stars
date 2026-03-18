@@ -8,23 +8,23 @@
  *   npx tsx scripts/visualize.ts "HELLO"
  */
 
-import * as fs from "fs";
-import * as path from "path";
-import { textToGraph } from "../src/lib/engine/glyphs";
-import { matchStarsToAnchors } from "../src/lib/engine/matcher";
-import type { Star, MatchResult } from "../src/lib/engine/types";
+import * as fs from 'fs';
+import * as path from 'path';
+import { textToGraph } from '../src/lib/engine/glyphs';
+import { matchStarsToAnchors } from '../src/lib/engine/matcher';
+import type { Star, MatchResult } from '../src/lib/engine/types';
 
 // ---------------------------------------------------------------------------
 // Load data
 // ---------------------------------------------------------------------------
 
-import { fileURLToPath } from "url";
+import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const starsPath = path.resolve(__dirname, "../static/stars.json");
-const stars: Star[] = JSON.parse(fs.readFileSync(starsPath, "utf-8"));
+const starsPath = path.resolve(__dirname, '../static/stars.json');
+const stars: Star[] = JSON.parse(fs.readFileSync(starsPath, 'utf-8'));
 
-const text = process.argv[2] || "HELLO";
+const text = process.argv[2] || 'HELLO';
 const graph = textToGraph(text);
 
 console.log(`Graph: ${graph.nodes.length} nodes, ${graph.edges.length} edges`);
@@ -36,8 +36,8 @@ console.log(`Graph: ${graph.nodes.length} nodes, ${graph.edges.length} edges`);
 const matchResult = matchStarsToAnchors(stars, graph);
 console.log(`Match cost: ${matchResult.cost}`);
 console.log(
-  `Transform: scale=${matchResult.transform.scale.toFixed(6)}, ` +
-    `translate=(${matchResult.transform.x.toFixed(4)}, ${matchResult.transform.y.toFixed(4)})`
+	`Transform: scale=${matchResult.transform.scale.toFixed(6)}, ` +
+		`translate=(${matchResult.transform.x.toFixed(4)}, ${matchResult.transform.y.toFixed(4)})`,
 );
 console.log(`Matched ${matchResult.pairs.length} nodes to unique stars`);
 
@@ -45,9 +45,7 @@ console.log(`Matched ${matchResult.pairs.length} nodes to unique stars`);
 // Build HTML
 // ---------------------------------------------------------------------------
 
-const starsJson = JSON.stringify(
-  stars.map((s) => ({ id: s.id, ra: s.ra, dec: s.dec, mag: s.mag, name: s.name }))
-);
+const starsJson = JSON.stringify(stars.map((s) => ({ id: s.id, ra: s.ra, dec: s.dec, mag: s.mag, name: s.name })));
 const matchJson = JSON.stringify(matchResult);
 
 const html = `<!DOCTYPE html>
@@ -304,12 +302,12 @@ resize();
 // Write output
 // ---------------------------------------------------------------------------
 
-const outDir = path.resolve(__dirname, "output");
+const outDir = path.resolve(__dirname, 'output');
 if (!fs.existsSync(outDir)) {
-  fs.mkdirSync(outDir, { recursive: true });
+	fs.mkdirSync(outDir, { recursive: true });
 }
 
-const outPath = path.join(outDir, "result.html");
-fs.writeFileSync(outPath, html, "utf-8");
+const outPath = path.join(outDir, 'result.html');
+fs.writeFileSync(outPath, html, 'utf-8');
 console.log(`\nVisualization written to: ${outPath}`);
 console.log(`Open in a browser to view the star map.`);

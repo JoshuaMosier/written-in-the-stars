@@ -1,39 +1,39 @@
 {
-  "name": "written-in-the-stars",
-  "version": "1.0.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "vite dev",
-    "build": "vite build",
-    "preview": "vite preview",
-    "fetch-stars": "tsx scripts/fetch-stars.ts",
-    "visualize": "tsx scripts/visualize.ts",
-    "generate-og": "tsx scripts/generate-og-image.ts",
-    "check": "svelte-check --tsconfig ./tsconfig.json",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "format": "prettier --write .",
-    "format:check": "prettier --check ."
-  },
-  "dependencies": {
-    "kd-tree-javascript": "^1.0.3",
-    "three": "^0.172.0",
-    "troika-three-text": "^0.52.4"
-  },
-  "devDependencies": {
-    "@sveltejs/adapter-static": "^3.0.0",
-    "@sveltejs/kit": "^2.16.0",
-    "@sveltejs/vite-plugin-svelte": "^5.0.0",
-    "@types/three": "^0.172.0",
-    "prettier": "^3.8.1",
-    "prettier-plugin-svelte": "^3.5.1",
-    "sharp": "^0.34.5",
-    "svelte": "^5.0.0",
-    "svelte-check": "^4.4.5",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
-    "vite": "^6.0.0",
-    "vitest": "^4.1.0"
-  }
+	"name": "written-in-the-stars",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"fetch-stars": "tsx scripts/fetch-stars.ts",
+		"visualize": "tsx scripts/visualize.ts",
+		"generate-og": "tsx scripts/generate-og-image.ts",
+		"check": "svelte-check --tsconfig ./tsconfig.json",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"format": "prettier --write .",
+		"format:check": "prettier --check ."
+	},
+	"dependencies": {
+		"kd-tree-javascript": "^1.0.3",
+		"three": "^0.172.0",
+		"troika-three-text": "^0.52.4"
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-static": "^3.0.0",
+		"@sveltejs/kit": "^2.16.0",
+		"@sveltejs/vite-plugin-svelte": "^5.0.0",
+		"@types/three": "^0.172.0",
+		"prettier": "^3.8.1",
+		"prettier-plugin-svelte": "^3.5.1",
+		"sharp": "^0.34.5",
+		"svelte": "^5.0.0",
+		"svelte-check": "^4.4.5",
+		"tsx": "^4.21.0",
+		"typescript": "^5.9.3",
+		"vite": "^6.0.0",
+		"vitest": "^4.1.0"
+	}
 }

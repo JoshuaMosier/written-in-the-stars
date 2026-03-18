@@ -16,7 +16,7 @@ describe('textToGraph', () => {
 
 	it('assigns correct letterIndex to nodes', () => {
 		const graph = textToGraph('AB');
-		const letterIndices = new Set(graph.nodes.map(n => n.letterIndex));
+		const letterIndices = new Set(graph.nodes.map((n) => n.letterIndex));
 		expect(letterIndices.has(0)).toBe(true);
 		expect(letterIndices.has(1)).toBe(true);
 	});

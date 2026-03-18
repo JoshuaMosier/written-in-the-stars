@@ -69,9 +69,7 @@ const SHARE_TEXT_ALPHABET = [
 	...rangeChars('a', 'z'),
 ] as const;
 
-const TEXT_CODE_BY_CHAR = new Map<string, number>(
-	SHARE_TEXT_ALPHABET.map((char, index) => [char, index]),
-);
+const TEXT_CODE_BY_CHAR = new Map<string, number>(SHARE_TEXT_ALPHABET.map((char, index) => [char, index]));
 
 enum ShareFlag {
 	StarLabels = 1 << 0,
@@ -201,10 +199,7 @@ function clampBrightness(value: number): number {
 
 function encodeBrightness(value: number): number {
 	const clamped = clampBrightness(value);
-	return Math.min(
-		MAX_BRIGHTNESS_CODE,
-		Math.max(0, Math.round((clamped - MIN_BRIGHTNESS) / BRIGHTNESS_STEP)),
-	);
+	return Math.min(MAX_BRIGHTNESS_CODE, Math.max(0, Math.round((clamped - MIN_BRIGHTNESS) / BRIGHTNESS_STEP)));
 }
 
 function decodeBrightness(code: number): number {
@@ -290,11 +285,7 @@ function decodeConstellationMode(code: number): ConstellationDisplayMode | null 
 	}
 }
 
-function decodeFlags(
-	constellationModeCode: number,
-	flags: number,
-	brightnessCode: number,
-): ShareSettings | null {
+function decodeFlags(constellationModeCode: number, flags: number, brightnessCode: number): ShareSettings | null {
 	const mode = decodeConstellationMode(constellationModeCode);
 	if (mode === null) return null;
 	return {
@@ -326,8 +317,7 @@ export function encodeShareStateToHash(state: ShareState): string {
 		throw new Error(`Too many constellations to encode (${state.entries.length})`);
 	}
 
-	const focusedIndex =
-		state.focusedIndex < 0 ? FOCUSED_INDEX_NONE : state.focusedIndex;
+	const focusedIndex = state.focusedIndex < 0 ? FOCUSED_INDEX_NONE : state.focusedIndex;
 	if (focusedIndex !== FOCUSED_INDEX_NONE && focusedIndex >= state.entries.length) {
 		throw new Error(`Focused index ${focusedIndex} is out of bounds`);
 	}

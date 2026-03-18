@@ -40,7 +40,7 @@ describe('matchStarsToAnchors', () => {
 			const graph = textToGraph('L');
 			const result = matchStarsToAnchors(stars, graph);
 
-			const starIndices = result.pairs.map(p => p.star.idx);
+			const starIndices = result.pairs.map((p) => p.star.idx);
 			const unique = new Set(starIndices);
 			expect(unique.size).toBe(starIndices.length);
 		});
@@ -69,16 +69,14 @@ describe('matchStarsToAnchors', () => {
 			const graph = textToGraph('AB');
 			const result = matchStarsToAnchors(stars, graph);
 
-			const nodeIndicesInResult = new Set(result.pairs.map(p => p.nodeIndex));
+			const nodeIndicesInResult = new Set(result.pairs.map((p) => p.nodeIndex));
 			// Every node should be represented
 			for (let i = 0; i < graph.nodes.length; i++) {
 				expect(nodeIndicesInResult.has(i)).toBe(true);
 			}
 
 			// Nodes from both letters should be present
-			const letterIndices = new Set(
-				result.pairs.map(p => graph.nodes[p.nodeIndex].letterIndex)
-			);
+			const letterIndices = new Set(result.pairs.map((p) => graph.nodes[p.nodeIndex].letterIndex));
 			expect(letterIndices.has(0)).toBe(true);
 			expect(letterIndices.has(1)).toBe(true);
 		});
@@ -93,8 +91,8 @@ describe('matchStarsToAnchors', () => {
 			expect(result1.cost).toBe(result2.cost);
 			expect(result1.pairs.length).toBe(result2.pairs.length);
 
-			const indices1 = result1.pairs.map(p => p.star.idx).sort((a, b) => a - b);
-			const indices2 = result2.pairs.map(p => p.star.idx).sort((a, b) => a - b);
+			const indices1 = result1.pairs.map((p) => p.star.idx).sort((a, b) => a - b);
+			const indices2 = result2.pairs.map((p) => p.star.idx).sort((a, b) => a - b);
 			expect(indices1).toEqual(indices2);
 
 			expect(result1.transform).toEqual(result2.transform);
@@ -142,14 +140,14 @@ describe('matchStarsToAnchors', () => {
 
 			// First run without blacklist
 			const baseline = matchStarsToAnchors(stars, graph);
-			const baselineIndices = new Set(baseline.pairs.map(p => p.star.idx));
+			const baselineIndices = new Set(baseline.pairs.map((p) => p.star.idx));
 
 			// Blacklist those stars and run again
 			const result = matchStarsToAnchors(stars, graph, baselineIndices);
 
-			const resultIndices = new Set(result.pairs.map(p => p.star.idx));
+			const resultIndices = new Set(result.pairs.map((p) => p.star.idx));
 			// At least some stars should differ since we blacklisted the baseline ones
-			const overlap = [...resultIndices].filter(idx => baselineIndices.has(idx));
+			const overlap = [...resultIndices].filter((idx) => baselineIndices.has(idx));
 			expect(overlap.length).toBeLessThan(baselineIndices.size);
 		});
 	});

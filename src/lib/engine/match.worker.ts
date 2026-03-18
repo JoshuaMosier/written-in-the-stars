@@ -29,9 +29,7 @@ self.onmessage = (e: MessageEvent) => {
 		}
 		try {
 			const graph = textToGraph(payload.text);
-			const blacklist = payload.usedStarIndices
-				? new Set<number>(payload.usedStarIndices as number[])
-				: null;
+			const blacklist = payload.usedStarIndices ? new Set<number>(payload.usedStarIndices as number[]) : null;
 			const onProgress = (pct: number) => {
 				self.postMessage({ type: 'progress', payload: pct, requestId });
 			};
