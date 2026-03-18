@@ -1,19 +1,19 @@
 <script lang="ts">
 	import { onDestroy, tick } from 'svelte';
-	import {
-		type ConstellationDisplayMode,
-		decodeHashToShareState,
-		encodeShareStateToHash,
-		type ShareSettings,
-		type ShareState,
-	} from '$lib/engine/sharing';
 	import type { Star, MatchResult } from '$lib/engine/types';
-	import { CONSTELLATIONS } from '$lib/data/constellations';
-	import { SUPPORTED_CHARS } from '$lib/engine/glyphs';
+	import type { ConstellationDisplayMode, ShareSettings, ShareState } from '$lib/engine/sharing';
+	import type { ConstellationDef } from '$lib/data/constellations';
+	import { SUPPORTED_CHARS } from '$lib/engine/supported-chars';
 	import MatchWorker from '$lib/engine/match.worker?worker';
 
-	// Lazy-load StarField (pulls in Three.js tree)
-	const StarFieldPromise = import('$lib/scene/StarField.svelte');
+	function scheduleLowPriorityTask(task: () => void, timeout = 150): () => void {
+		if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+			const idleId = window.requestIdleCallback(() => task(), { timeout: 1000 });
+			return () => window.cancelIdleCallback(idleId);
+		}
+		const timerId = setTimeout(task, timeout);
+		return () => clearTimeout(timerId);
+	}
 
 	// Fetch star catalog at runtime instead of bundling it
 	// Keep a plain (non-proxy) reference for worker postMessage
@@ -24,45 +24,80 @@
 	let stars: Star[] = $state([]);
 	let starByIdx = new Map<number, Star>();
 	let starsReady = $state(false);
+	let starFieldPromise = $state<Promise<typeof import('$lib/scene/StarField.svelte')> | null>(null);
+	let constellationsData = $state<ConstellationDef[]>([]);
+	let starWikiLookup = $state<StarWikiLookup>({});
 	let constellationWikiUrls = $state<Record<string, string>>({});
 
 	let starsError = $state('');
 	const starsAbortController = new AbortController();
 	const starsLoadSignal = starsAbortController.signal;
+	const wikiAbortController = new AbortController();
+	const wikiLoadSignal = wikiAbortController.signal;
 	let pageDisposed = false;
+	let sharingModulePromise: Promise<typeof import('$lib/engine/sharing')> | null = null;
+	let constellationsLoadPromise: Promise<ConstellationDef[]> | null = null;
+	let wikiDataPromise: Promise<void> | null = null;
+	let pendingWarmupCancel: (() => void) | null = null;
 
-	const starsPromise = Promise.all([
-		fetch('/stars.json', { signal: starsLoadSignal }).then((r) => {
+	function loadSharingModule() {
+		return (sharingModulePromise ??= import('$lib/engine/sharing'));
+	}
+
+	function ensureStarFieldModule() {
+		return (starFieldPromise ??= import('$lib/scene/StarField.svelte'));
+	}
+
+	function ensureConstellationsLoaded() {
+		if (constellationsData.length > 0) return Promise.resolve(constellationsData);
+		return (constellationsLoadPromise ??= import('$lib/data/constellations').then(({ CONSTELLATIONS }) => {
+			if (!pageDisposed) constellationsData = CONSTELLATIONS;
+			return CONSTELLATIONS;
+		}));
+	}
+
+	function ensureWikiData() {
+		if (wikiDataPromise) return wikiDataPromise;
+		wikiDataPromise = Promise.all([
+			fetch('/star-wiki.json', { signal: wikiLoadSignal }).then(
+				(r): Promise<StarWikiLookup> => (r.ok ? (r.json() as Promise<StarWikiLookup>) : Promise.resolve({})),
+			),
+			fetch('/constellation-wiki.json', { signal: wikiLoadSignal }).then(
+				(r): Promise<Record<string, string>> =>
+					r.ok ? (r.json() as Promise<Record<string, string>>) : Promise.resolve({}),
+			),
+		])
+			.then(([wiki, constellationWiki]) => {
+				if (pageDisposed) return;
+				starWikiLookup = wiki;
+				constellationWikiUrls = constellationWiki;
+			})
+			.catch((err) => {
+				if (pageDisposed || wikiLoadSignal.aborted || (err instanceof DOMException && err.name === 'AbortError')) {
+					return;
+				}
+				wikiDataPromise = null;
+			});
+		return wikiDataPromise;
+	}
+
+	const starsPromise = fetch('/stars.json', { signal: starsLoadSignal })
+		.then((r) => {
 			if (!r.ok) throw new Error(`Failed to load star catalog (${r.status})`);
 			return r.json() as Promise<Star[]>;
-		}),
-		fetch('/star-wiki.json', { signal: starsLoadSignal }).then(
-			(r): Promise<StarWikiLookup> => (r.ok ? (r.json() as Promise<StarWikiLookup>) : Promise.resolve({})),
-		),
-		fetch('/constellation-wiki.json', { signal: starsLoadSignal }).then(
-			(r): Promise<Record<string, string>> =>
-				r.ok ? (r.json() as Promise<Record<string, string>>) : Promise.resolve({}),
-		),
-	])
-		.then(([data, wiki, constellationWiki]) => {
+		})
+		.then((data) => {
 			if (pageDisposed) return;
-			constellationWikiUrls = constellationWiki;
 			// Add the Sun if not already present (filtered out of older star catalog builds)
 			if (!data.some((s) => s.mag < -10)) {
 				const sunIdx = data.length;
 				data.push({ idx: sunIdx, id: 0, ra: 0, dec: 0, mag: -26.7, ci: 0.66, name: 'Sol' });
 			}
-			// Merge wiki data into star objects
-			for (const s of data) {
-				if (!s.name) continue;
-				const wikiEntry = wiki[s.name];
-				if (wikiEntry) s.wiki = wikiEntry;
-			}
 			starsRaw = data;
 			matchableStars = starsRaw.filter((s) => s.mag > -10);
 			stars = starsRaw;
 			for (const s of starsRaw) starByIdx.set(s.idx, s);
-			initAfterStarsLoaded();
+			void initAfterStarsLoaded();
 			starsReady = true;
 		})
 		.catch((err) => {
@@ -275,7 +310,8 @@
 	let hashWasPresent = typeof window !== 'undefined' && window.location.hash.length > 1;
 
 	// Initialize web worker and decode hash after stars are fetched
-	let worker = newWorker();
+	let worker: InstanceType<typeof MatchWorker> | null = null;
+	let workerInitialized = false;
 
 	function newWorker(): InstanceType<typeof MatchWorker> {
 		const w = new MatchWorker();
@@ -284,19 +320,37 @@
 		return w;
 	}
 
-	function respawnWorker() {
-		if (pageDisposed) return;
-		worker.terminate();
-		worker = newWorker();
-		if (starsReady) {
-			worker.postMessage({ type: 'init', payload: { stars: matchableStars } });
+	function ensureWorker() {
+		if (!worker) {
+			worker = newWorker();
+			workerInitialized = false;
 		}
+		if (starsReady && !workerInitialized) {
+			worker.postMessage({ type: 'init', payload: { stars: matchableStars } });
+			workerInitialized = true;
+		}
+		return worker;
 	}
 
-	function initAfterStarsLoaded() {
+	function respawnWorker() {
 		if (pageDisposed) return;
-		worker.postMessage({ type: 'init', payload: { stars: matchableStars } });
+		worker?.terminate();
+		worker = null;
+		workerInitialized = false;
+		ensureWorker();
+	}
+
+	async function initAfterStarsLoaded() {
+		if (pageDisposed) return;
+		pendingWarmupCancel?.();
+		pendingWarmupCancel = scheduleLowPriorityTask(() => {
+			if (pageDisposed) return;
+			void ensureStarFieldModule();
+			ensureWorker();
+		});
 		if (hashWasPresent) {
+			const { decodeHashToShareState } = await loadSharingModule();
+			if (pageDisposed) return;
 			pendingShareState = decodeHashToShareState(window.location.hash.slice(1), starByIdx);
 		}
 	}
@@ -347,6 +401,9 @@
 	onDestroy(() => {
 		pageDisposed = true;
 		starsAbortController.abort();
+		wikiAbortController.abort();
+		pendingWarmupCancel?.();
+		pendingWarmupCancel = null;
 		stopMatchingPhrases();
 		clearMatchTimeout();
 		clearInputRejectTimer();
@@ -354,7 +411,7 @@
 			cancelAnimationFrame(colorUpdateRaf);
 			colorUpdateRaf = 0;
 		}
-		worker.terminate();
+		worker?.terminate();
 	});
 
 	function startMatchTimeout() {
@@ -442,7 +499,7 @@
 		const usedStarIndices = getUsedStarIndices();
 		const requestId = ++matchRequestId;
 		startMatchTimeout();
-		worker.postMessage({ type: 'match', payload: { text, usedStarIndices }, requestId });
+		ensureWorker().postMessage({ type: 'match', payload: { text, usedStarIndices }, requestId });
 	}
 
 	let rerollIndex = -1; // which constellation is being re-rolled
@@ -491,7 +548,7 @@
 		const usedStarIndices = [...getUsedStarIndices(), ...rerollBlacklist];
 		const requestId = ++matchRequestId;
 		startMatchTimeout();
-		worker.postMessage({ type: 'match', payload: { text: targetEntry.text, usedStarIndices }, requestId });
+		ensureWorker().postMessage({ type: 'match', payload: { text: targetEntry.text, usedStarIndices }, requestId });
 	}
 
 	function handleFocusConstellation(index: number) {
@@ -696,7 +753,17 @@
 		starField?.toggleGlobeView(globeView, options.immediateGlobe ?? false);
 	}
 
-	function replaceShareHash() {
+	let shareHashUpdateId = 0;
+
+	async function replaceShareHash() {
+		const updateId = ++shareHashUpdateId;
+		if (constellations.length === 0) {
+			history.replaceState(null, '', window.location.pathname);
+			return;
+		}
+
+		const { encodeShareStateToHash } = await loadSharingModule();
+		if (pageDisposed || updateId !== shareHashUpdateId) return;
 		if (constellations.length === 0) {
 			history.replaceState(null, '', window.location.pathname);
 			return;
@@ -857,7 +924,7 @@
 
 	// --- Star search + info panel ---
 	let selectedStar = $state<Star | null>(null);
-	let selectedConstellation = $state<(typeof CONSTELLATIONS)[0] | null>(null);
+	let selectedConstellation = $state<ConstellationDef | null>(null);
 	let windowWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1024);
 	let searchQuery = $state('');
 	let searchOpen = $state(false);
@@ -868,7 +935,7 @@
 	// Selection history for back navigation
 	interface SelectionState {
 		star: Star | null;
-		constellation: (typeof CONSTELLATIONS)[0] | null;
+		constellation: ConstellationDef | null;
 	}
 	let selectionHistory = $state<SelectionState[]>([]);
 
@@ -896,6 +963,24 @@
 				tourStep = 1;
 			}, 1200);
 			return () => clearTimeout(timer);
+		}
+	});
+
+	$effect(() => {
+		if (
+			(searchOpen || searchQuery.trim() || selectedStar || selectedConstellation) &&
+			constellationsData.length === 0
+		) {
+			void ensureConstellationsLoaded();
+		}
+	});
+
+	$effect(() => {
+		if (
+			(selectedStar || selectedConstellation) &&
+			(Object.keys(starWikiLookup).length === 0 || Object.keys(constellationWikiUrls).length === 0)
+		) {
+			void ensureWikiData();
 		}
 	});
 
@@ -947,19 +1032,22 @@
 	});
 
 	// Build HIP → constellation(s) reverse lookup
-	const hipToConstellations = new Map<number, (typeof CONSTELLATIONS)[number][]>();
-	for (const c of CONSTELLATIONS) {
-		for (const [a, b] of c.lines) {
-			for (const hip of [a, b]) {
-				const list = hipToConstellations.get(hip);
-				if (list) {
-					if (!list.includes(c)) list.push(c);
-				} else hipToConstellations.set(hip, [c]);
+	let hipToConstellations = $derived.by(() => {
+		const map = new Map<number, ConstellationDef[]>();
+		for (const c of constellationsData) {
+			for (const [a, b] of c.lines) {
+				for (const hip of [a, b]) {
+					const list = map.get(hip);
+					if (list) {
+						if (!list.includes(c)) list.push(c);
+					} else map.set(hip, [c]);
+				}
 			}
 		}
-	}
+		return map;
+	});
 
-	function getStarConstellations(star: Star): (typeof CONSTELLATIONS)[number][] {
+	function getStarConstellations(star: Star): ConstellationDef[] {
 		if (!star.hip) return [];
 		return hipToConstellations.get(star.hip) || [];
 	}
@@ -968,7 +1056,7 @@
 		type: 'star' | 'constellation';
 		name: string;
 		star?: Star;
-		constellation?: (typeof CONSTELLATIONS)[0];
+		constellation?: ConstellationDef;
 	}
 
 	function getSearchResults(query: string): SearchResult[] {
@@ -983,7 +1071,7 @@
 			if (results.length >= 12) break;
 		}
 		// IAU constellations by name
-		for (const c of CONSTELLATIONS) {
+		for (const c of constellationsData) {
 			if (c.name.toLowerCase().includes(q)) {
 				results.push({ type: 'constellation', name: c.name, constellation: c });
 			}
@@ -1031,7 +1119,7 @@
 		});
 	}
 
-	function getConstellationStars(c: (typeof CONSTELLATIONS)[0]): Star[] {
+	function getConstellationStars(c: ConstellationDef): Star[] {
 		const hipSet = new Set<number>();
 		for (const [a, b] of c.lines) {
 			hipSet.add(a);
@@ -1073,8 +1161,14 @@
 		return 'M (red)';
 	}
 
+	function getStarWiki(star: Star): StarWikiEntry | null {
+		if (!star.name) return null;
+		return starWikiLookup[star.name] ?? null;
+	}
+
 	function starWikiUrl(star: Star): string | null {
-		if (star.wiki) return star.wiki.url;
+		const wiki = getStarWiki(star);
+		if (wiki) return wiki.url;
 		if (star.hip) {
 			return `https://simbad.u-strasbg.fr/simbad/sim-id?Ident=HIP+${star.hip}`;
 		}
@@ -1176,17 +1270,19 @@
 <svelte:window onkeydown={handleGlobalKeydown} bind:innerWidth={windowWidth} />
 
 <main class="app" aria-label="Written in the Stars" onpointerdown={handleClickOutsideSettings}>
-	{#await StarFieldPromise then StarFieldModule}
-		{#if starsReady}
-			<StarFieldModule.default
-				{stars}
-				bind:this={starField}
-				onReady={handleStarFieldReady}
-				onVertexDrag={handleVertexDrag}
-				onStarClick={handleStarClick}
-			/>
-		{/if}
-	{/await}
+	{#if starFieldPromise}
+		{#await starFieldPromise then StarFieldModule}
+			{#if starsReady}
+				<StarFieldModule.default
+					{stars}
+					bind:this={starField}
+					onReady={handleStarFieldReady}
+					onVertexDrag={handleVertexDrag}
+					onStarClick={handleStarClick}
+				/>
+			{/if}
+		{/await}
+	{/if}
 
 	<!-- Top-left toolbar: settings, info, search -->
 	<div class="top-bar">
@@ -1663,6 +1759,7 @@
 			{/if}
 
 			{#if selectedStar}
+				{@const selectedStarWiki = getStarWiki(selectedStar)}
 				<div class="star-panel-name">{selectedStar.name || `HIP ${selectedStar.hip || selectedStar.id}`}</div>
 				<div class="star-panel-rows">
 					<div class="star-panel-row">
@@ -1688,12 +1785,12 @@
 						</div>
 					{/if}
 				</div>
-				{#if selectedStar.wiki}
-					<div class="star-panel-desc">{selectedStar.wiki.description}</div>
+				{#if selectedStarWiki}
+					<div class="star-panel-desc">{selectedStarWiki.description}</div>
 				{/if}
 				{#if starWikiUrl(selectedStar)}
 					<a class="star-panel-link" href={starWikiUrl(selectedStar)} target="_blank" rel="noopener noreferrer">
-						{selectedStar.wiki ? 'Wikipedia' : 'SIMBAD'} &rarr;
+						{selectedStarWiki ? 'Wikipedia' : 'SIMBAD'} &rarr;
 					</a>
 				{/if}
 				{@const starConsts = getStarConstellations(selectedStar)}
