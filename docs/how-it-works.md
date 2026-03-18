@@ -1,6 +1,6 @@
 # How It Works
 
-`Written in the Stars` treats words and short phrases as a geometric matching problem over a real star catalog.
+`Starspelled` treats words and short phrases as a geometric matching problem over a real star catalog.
 
 ## Pipeline
 

@@ -1,4 +1,4 @@
-# Written in the Stars
+# Starspelled
 
 **[starspelled.com](https://starspelled.com)**
 

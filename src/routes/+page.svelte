@@ -902,7 +902,7 @@
 			try {
 				const blob = await starField?.captureImage();
 				const shareData: ShareData = {
-					title: 'Written in the Stars',
+					title: 'Starspelled',
 					url: window.location.href,
 				};
 				if (blob && navigator.canShare) {
@@ -1322,7 +1322,7 @@
 
 <svelte:window onkeydown={handleGlobalKeydown} bind:innerWidth={windowWidth} />
 
-<main class="app" aria-label="Written in the Stars" onpointerdown={handleClickOutsideSettings}>
+<main class="app" aria-label="Starspelled" onpointerdown={handleClickOutsideSettings}>
 	{#if starFieldPromise}
 		{#await starFieldPromise then StarFieldModule}
 			{#if starsReady}
@@ -1929,7 +1929,7 @@
 				class="about-modal"
 				role="dialog"
 				aria-modal="true"
-				aria-label="About Written in the Stars"
+				aria-label="About Starspelled"
 				tabindex="-1"
 				onpointerdown={(e) => e.stopPropagation()}
 			>
