@@ -5,15 +5,15 @@
 ## Pipeline
 
 1. Convert text into a graph.
-   Each character is built from Hershey Simplex vector strokes, then normalized into a shared coordinate space.
-2. Run a coarse search over the sky.
-   Stars are projected into equirectangular coordinates so the matcher can scan a large number of candidate positions and scales quickly.
+   Each character is built from Hershey Simplex vector strokes. The graph builder inserts within-letter intersections and T-junctions, simplifies strokes with Ramer-Douglas-Peucker, deduplicates shared vertices, and normalizes everything into a shared coordinate space.
+2. Run a hierarchical coarse search over the sky.
+   Stars are projected into equirectangular coordinates so the matcher can scan a large number of candidate positions and scales quickly. It combines a jittered grid search with RANSAC-style edge hypotheses to seed promising transforms.
 3. Reproject promising candidates into gnomonic space.
    This removes the local warping introduced by equirectangular projection and makes nearby geometry behave like a flat plane.
 4. Refine with CMA-ES.
-   The optimizer searches for the best local transform in tangent-plane space.
+   The optimizer searches for the best local transform in tangent-plane space from one or two seeds per candidate, depending on the search budget.
 5. Resolve unique star assignments.
-   A greedy nearest-match pass is followed by swap refinement so each glyph node lands on a distinct star while preserving the letter shape.
+   For each glyph node, the matcher builds a local k-nearest candidate set in gnomonic space, tries a greedy seed and, for smaller graphs, a sparse exact assignment seed, then applies swap refinement so each node lands on a distinct star while preserving the letter shape.
 
 ## Why Gnomonic Refinement Exists
 
@@ -21,7 +21,7 @@ Equirectangular projection is good for broad search, but it distorts shape away 
 
 ## Performance
 
-The app runs the matching pipeline in a Web Worker so the UI stays responsive. Short phrases generally resolve quickly on desktop-class hardware, but long or dense phrases can still take much longer. The current UI caps input at 30 characters and cancels matches that exceed the timeout budget.
+The app runs the matching pipeline in a Web Worker so the UI stays responsive. Short phrases generally resolve quickly on desktop-class hardware, but long or dense phrases can still take much longer. The current UI caps input at 30 characters and cancels matches that run longer than 60 seconds.
 
 ## Determinism
 

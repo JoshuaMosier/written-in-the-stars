@@ -6,7 +6,7 @@
  * grid to quickly identify promising sky regions.
  *
  * Phase 2 (fine refinement) re-projects nearby stars onto a gnomonic tangent
- * plane centered at each candidate, then runs Nelder-Mead in that locally-
+ * plane centered at each candidate, then runs CMA-ES in that locally-
  * Euclidean space.  This eliminates the warping artefacts that equirectangular
  * projection introduces, producing constellations that look correct when
  * rendered on a 3D celestial sphere.
@@ -1153,14 +1153,15 @@ function resolveDuplicates(
  * 2. **Gnomonic refinement** — re-projects stars onto a gnomonic tangent plane
  *    at each candidate and runs CMA-ES to minimize placement cost in locally-
  *    Euclidean space (eliminates equirectangular warping artifacts).
- * 3. **Duplicate resolution** — assigns unique stars to nodes via greedy +
- *    iterative swap refinement using a KD-tree for k-nearest candidates.
+ * 3. **Duplicate resolution** — builds k-nearest candidate sets, seeds
+ *    assignments with a greedy pass and (for smaller graphs) a sparse exact
+ *    assignment solve, then applies iterative swap refinement.
  *
  * @param stars - Full star catalog
  * @param graph - Glyph graph from {@link textToGraph}
  * @param blacklist - Star indices to penalize (e.g. already used in other constellations)
  * @param onProgress - Optional callback with progress fraction [0, 1]
- * @returns Best match with star-to-node pairs, cost, and camera transform
+ * @returns Best match with star-to-node pairs, costs, and normalized sky transform
  */
 export function matchStarsToAnchors(
 	stars: Star[],
@@ -1514,7 +1515,7 @@ export function matchStarsToAnchors(
 	// =========================================================================
 
 	// For each top candidate, project nearby stars onto a gnomonic tangent plane
-	// centered at the candidate's equirectangular position, then run Nelder-Mead
+	// centered at the candidate's equirectangular position, then run CMA-ES
 	// in that locally-Euclidean space.
 	const refineStart = captureProfile ? performance.now() : 0;
 

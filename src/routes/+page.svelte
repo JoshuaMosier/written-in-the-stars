@@ -1742,7 +1742,7 @@
 			{:else if starsError}
 				<div id="input-helper" class="input-helper input-helper-loading">Star catalog unavailable.</div>
 			{:else if !starsReady}
-				<div id="input-helper" class="input-helper input-helper-loading">Loading ~9,000 cataloged stars...</div>
+				<div id="input-helper" class="input-helper input-helper-loading">Loading ~8,900 cataloged stars...</div>
 			{:else if constellations.length === 0}
 				<div id="input-helper" class="input-helper">Press Enter to map it to real stars.</div>
 			{:else if constellations.length > 0}
@@ -1950,7 +1950,7 @@
 				<h2 class="about-title">Starspelled</h2>
 				<p class="about-text">
 					Type a word or short phrase and it becomes a constellation made from real stars. The matcher works against
-					~9,000 cataloged stars, so each result maps to real positions in the sky.
+					~8,900 cataloged stars, so each result maps to real positions in the sky.
 				</p>
 
 				<div class="about-section">

@@ -2,7 +2,7 @@
 
 **[starspelled.com](https://starspelled.com)**
 
-Turn words and short phrases into constellations made from real cataloged stars. The matcher works against roughly 9,000 stars from the HYG catalog and uses actual sky positions throughout. No invented points, no hand-placed examples.
+Turn words and short phrases into constellations made from real cataloged stars. The matcher works against about 8,900 stars from the HYG catalog and uses actual sky positions throughout. No invented points, no hand-placed examples.
 
 <p align="center">
   <img src="docs/Hi_Github.png" alt="HI GITHUB spelled out in real star positions" width="600"/>
@@ -21,7 +21,7 @@ Text is converted into a graph using Hershey Simplex vector data. The matcher th
 - runs a coarse sky search in equirectangular space
 - reprojects promising regions onto a gnomonic tangent plane to avoid projection distortion
 - refines the fit with CMA-ES
-- assigns unique stars to each glyph node with greedy matching plus swap refinement
+- assigns unique stars to each glyph node from local candidate sets using a greedy or sparse exact seed, then swap refinement
 
 The result is rendered on an interactive 3D celestial sphere. You can orbit, zoom, and inspect the surrounding sky, then share the exact matched stars and display settings through an encoded URL.
 
@@ -30,7 +30,7 @@ See [docs/how-it-works.md](docs/how-it-works.md) for a concise technical walkthr
 ## Practical limits
 
 - The UI currently caps input at 30 characters.
-- Short phrases usually resolve quickly in the browser; longer or denser phrases can take much longer and may time out.
+- Short phrases usually resolve quickly in the browser; longer or denser phrases can take much longer and may hit the 60-second match timeout.
 - Matching is deterministic for the same input text and star catalog.
 
 ## Example
