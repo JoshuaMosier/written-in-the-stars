@@ -23,6 +23,8 @@ export interface MatchCostBreakdown {
 	edgeShape: number;
 	duplicates: number;
 	blacklist: number;
+	spacing: number;
+	clutter: number;
 	total: number;
 }
 
@@ -40,6 +42,7 @@ export interface MatchProfile {
 	gnomonicCacheHits: number;
 	gnomonicCacheMisses: number;
 	refinedCandidateCount: number;
+	rerankedCandidateCount: number;
 }
 
 export interface MatchResult {

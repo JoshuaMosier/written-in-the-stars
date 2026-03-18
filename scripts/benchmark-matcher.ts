@@ -64,6 +64,7 @@ const rows = phrases.map((text) => {
 	let gnomonicCacheHits = 0;
 	let gnomonicCacheMisses = 0;
 	let refinedCandidateCount = 0;
+	let rerankedCandidateCount = 0;
 
 	for (let i = 0; i < iterations; i++) {
 		const start = performance.now();
@@ -85,6 +86,7 @@ const rows = phrases.map((text) => {
 		gnomonicCacheHits += lastResult.profile?.gnomonicCacheHits ?? 0;
 		gnomonicCacheMisses += lastResult.profile?.gnomonicCacheMisses ?? 0;
 		refinedCandidateCount += lastResult.profile?.refinedCandidateCount ?? 0;
+		rerankedCandidateCount += lastResult.profile?.rerankedCandidateCount ?? 0;
 	}
 
 	return {
@@ -101,6 +103,8 @@ const rows = phrases.map((text) => {
 		edge: Number((lastResult.costBreakdown?.edgeShape ?? Number.NaN).toFixed(4)),
 		duplicates: Number((lastResult.costBreakdown?.duplicates ?? Number.NaN).toFixed(4)),
 		blacklist: Number((lastResult.costBreakdown?.blacklist ?? Number.NaN).toFixed(4)),
+		spacing: Number((lastResult.costBreakdown?.spacing ?? Number.NaN).toFixed(4)),
+		clutter: Number((lastResult.costBreakdown?.clutter ?? Number.NaN).toFixed(4)),
 		prepMs: Number((prepMs / iterations).toFixed(2)),
 		coarseMs: Number((coarseMs / iterations).toFixed(1)),
 		ransacMs: Number((ransacMs / iterations).toFixed(1)),
@@ -114,6 +118,7 @@ const rows = phrases.map((text) => {
 		gnomonicCacheHits: Math.round(gnomonicCacheHits / iterations),
 		gnomonicCacheMisses: Math.round(gnomonicCacheMisses / iterations),
 		refinedCandidateCount: Math.round(refinedCandidateCount / iterations),
+		rerankedCandidateCount: Math.round(rerankedCandidateCount / iterations),
 	};
 });
 
@@ -133,6 +138,8 @@ console.table(
 			edge,
 			duplicates,
 			blacklist,
+			spacing,
+			clutter,
 		}) => ({
 			text,
 			nodes,
@@ -147,6 +154,8 @@ console.table(
 			edge,
 			duplicates,
 			blacklist,
+			spacing,
+			clutter,
 		}),
 	),
 );
@@ -169,6 +178,7 @@ console.table(
 			gnomonicCacheHits,
 			gnomonicCacheMisses,
 			refinedCandidateCount,
+			rerankedCandidateCount,
 		}) => ({
 			text,
 			prepMs,
@@ -184,6 +194,7 @@ console.table(
 			gnomonicCacheHits,
 			gnomonicCacheMisses,
 			refinedCandidateCount,
+			rerankedCandidateCount,
 		}),
 	),
 );

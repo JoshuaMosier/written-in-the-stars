@@ -64,6 +64,8 @@ describe('matchStarsToAnchors', () => {
 			expect(result.costBreakdown).toBeDefined();
 			expect(result.costBreakdown!.total).toBe(result.cost);
 			expect(result.costBreakdown!.duplicates).toBe(0);
+			expect(result.costBreakdown!.spacing).toBeGreaterThanOrEqual(0);
+			expect(result.costBreakdown!.clutter).toBeGreaterThanOrEqual(0);
 		});
 
 		it('captures optional phase timing profile', () => {
@@ -75,6 +77,7 @@ describe('matchStarsToAnchors', () => {
 			expect(result.profile!.coarseEvalCount).toBeGreaterThan(0);
 			expect(result.profile!.gnomonicEvalCount).toBeGreaterThan(0);
 			expect(result.profile!.refinedCandidateCount).toBeGreaterThan(0);
+			expect(result.profile!.rerankedCandidateCount).toBeGreaterThan(0);
 		});
 	});
 

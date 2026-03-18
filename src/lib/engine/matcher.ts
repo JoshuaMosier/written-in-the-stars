@@ -95,6 +95,7 @@ interface SearchBudget {
 	ransacEdgeCount: number;
 	secondaryStartCount: number;
 	coarseJitterCount: number;
+	finalistCount: number;
 }
 
 class StarGrid {
@@ -242,6 +243,7 @@ function getSearchBudget(nodeCount: number): SearchBudget {
 			ransacEdgeCount: 1,
 			secondaryStartCount: 12,
 			coarseJitterCount: 2,
+			finalistCount: 8,
 		};
 	}
 
@@ -253,6 +255,7 @@ function getSearchBudget(nodeCount: number): SearchBudget {
 			ransacEdgeCount: 1,
 			secondaryStartCount: 20,
 			coarseJitterCount: 2,
+			finalistCount: 6,
 		};
 	}
 
@@ -263,6 +266,7 @@ function getSearchBudget(nodeCount: number): SearchBudget {
 		ransacEdgeCount: 2,
 		secondaryStartCount: 80,
 		coarseJitterCount: 3,
+		finalistCount: 4,
 	};
 }
 
@@ -275,6 +279,10 @@ const POINT_DISTANCE_SQ_WEIGHT = 1.0;
 const EDGE_SHAPE_WEIGHT = 1.5;
 const DUPLICATE_WEIGHT = 0.3;
 const BLACKLIST_WEIGHT = 2.0;
+const SPACING_WEIGHT = 0.8;
+const CLUTTER_WEIGHT = 0.5;
+const MIN_ASSIGNED_SEPARATION = 0.45;
+const CLUTTER_RADIUS = 0.55;
 
 function totalMatchCost(
 	pointDistance: number,
@@ -282,13 +290,17 @@ function totalMatchCost(
 	edgeShape: number,
 	duplicates: number,
 	blacklist: number,
+	spacing = 0,
+	clutter = 0,
 ): number {
 	return (
 		pointDistance * POINT_DISTANCE_WEIGHT +
 		pointDistanceSq * POINT_DISTANCE_SQ_WEIGHT +
 		edgeShape * EDGE_SHAPE_WEIGHT +
 		duplicates * DUPLICATE_WEIGHT +
-		blacklist * BLACKLIST_WEIGHT
+		blacklist * BLACKLIST_WEIGHT +
+		spacing * SPACING_WEIGHT +
+		clutter * CLUTTER_WEIGHT
 	);
 }
 
@@ -298,6 +310,8 @@ function makeMatchCostBreakdown(
 	edgeShape: number,
 	duplicates: number,
 	blacklist: number,
+	spacing = 0,
+	clutter = 0,
 ): MatchCostBreakdown {
 	return {
 		pointDistance,
@@ -305,7 +319,9 @@ function makeMatchCostBreakdown(
 		edgeShape,
 		duplicates,
 		blacklist,
-		total: totalMatchCost(pointDistance, pointDistanceSq, edgeShape, duplicates, blacklist),
+		spacing,
+		clutter,
+		total: totalMatchCost(pointDistance, pointDistanceSq, edgeShape, duplicates, blacklist, spacing, clutter),
 	};
 }
 
@@ -314,6 +330,11 @@ interface EqProjectionRow {
 	pointY: Float64Array;
 	offsetX: Float64Array;
 	invScale: number;
+}
+
+interface AssignmentCandidate {
+	starIdx: number;
+	dist: number;
 }
 
 function buildEqProjectionRow(anchorDx: Float64Array, anchorDy: Float64Array, ty: number, scale: number): EqProjectionRow {
@@ -342,12 +363,13 @@ function computeAssignedMatchCost(
 	projected: Point2D[],
 	starPositions: Point2D[],
 	assignedStarIdx: Int32Array,
+	candidates: AssignmentCandidate[][],
 	edges: [number, number][],
 	scale: number,
 	blacklist: Set<number> | null = null,
 ): MatchCostBreakdown {
 	if (scale <= 0) {
-		return makeMatchCostBreakdown(Infinity, 0, 0, 0, 0);
+		return makeMatchCostBreakdown(Infinity, 0, 0, 0, 0, 0, 0);
 	}
 
 	const invScale = 1 / scale;
@@ -355,6 +377,8 @@ function computeAssignedMatchCost(
 	let pointDistanceSq = 0;
 	let edgeShape = 0;
 	let blacklistPenalty = 0;
+	let spacingPenalty = 0;
+	let clutterPenalty = 0;
 	let uniqueCount = 0;
 	const seenStars = new Set<number>();
 
@@ -394,12 +418,39 @@ function computeAssignedMatchCost(
 		edgeShape += Math.sqrt(errX * errX + errY * errY) * invScale;
 	}
 
+	for (let i = 0; i < assignedStarIdx.length; i++) {
+		const starPos = assignedStarIdx[i] >= 0 ? starPositions[assignedStarIdx[i]] : undefined;
+		if (!starPos) continue;
+
+		for (let j = i + 1; j < assignedStarIdx.length; j++) {
+			const otherPos = assignedStarIdx[j] >= 0 ? starPositions[assignedStarIdx[j]] : undefined;
+			if (!otherPos) continue;
+			const dx = otherPos.x - starPos.x;
+			const dy = otherPos.y - starPos.y;
+			const dist = Math.sqrt(dx * dx + dy * dy) * invScale;
+			if (dist < MIN_ASSIGNED_SEPARATION) {
+				const overlap = MIN_ASSIGNED_SEPARATION - dist;
+				spacingPenalty += overlap * overlap;
+			}
+		}
+
+		for (const candidate of candidates[i]) {
+			if (seenStars.has(candidate.starIdx)) continue;
+			const dist = Math.sqrt(candidate.dist) * invScale;
+			if (dist >= CLUTTER_RADIUS) continue;
+			const overlap = CLUTTER_RADIUS - dist;
+			clutterPenalty += overlap * overlap;
+		}
+	}
+
 	return makeMatchCostBreakdown(
 		pointDistance,
 		pointDistanceSq,
 		edgeShape,
 		assignedStarIdx.length - uniqueCount,
 		blacklistPenalty,
+		spacingPenalty / assignedStarIdx.length,
+		clutterPenalty / assignedStarIdx.length,
 	);
 }
 
@@ -644,7 +695,7 @@ function resolveDuplicates(
 	stars: Star[],
 	nodeCount: number,
 	edges: [number, number][],
-): { pairs: { star: Star; nodeIndex: number }[]; assignment: Int32Array } {
+): { pairs: { star: Star; nodeIndex: number }[]; assignment: Int32Array; candidates: AssignmentCandidate[][] } {
 	// Build KD-tree in gnomonic space for k-nearest queries
 	const gnoTree = new kdTree(
 		gnoStars,
@@ -658,7 +709,7 @@ function resolveDuplicates(
 
 	const k = Math.min(50, gnoStars.length);
 
-	const candidates: { starIdx: number; dist: number }[][] = projected.map((p) => {
+	const candidates: AssignmentCandidate[][] = projected.map((p) => {
 		const nearest = gnoTree.nearest(p as KDPoint, k);
 		return nearest.map((n: [KDPoint, number]) => ({ starIdx: n[0].idx, dist: n[1] }));
 	});
@@ -789,7 +840,7 @@ function resolveDuplicates(
 			result.push({ star: stars[assignment[i]], nodeIndex: i });
 		}
 	}
-	return { pairs: result, assignment: Int32Array.from(assignment) };
+	return { pairs: result, assignment: Int32Array.from(assignment), candidates };
 }
 
 // ---------------------------------------------------------------------------
@@ -1177,6 +1228,37 @@ export function matchStarsToAnchors(
 	}
 
 	let bestResult: NMResult = { params: [0, 0, 0], cost: Infinity, ra0: 0, dec0: 0 };
+	const refinedFinalists: NMResult[] = [];
+	let worstFinalistCost = Infinity;
+
+	const insertFinalist = (candidate: NMResult): void => {
+		if (refinedFinalists.length < budget.finalistCount) {
+			let lo = 0;
+			let hi = refinedFinalists.length;
+			while (lo < hi) {
+				const mid = (lo + hi) >> 1;
+				if (refinedFinalists[mid].cost < candidate.cost) lo = mid + 1;
+				else hi = mid;
+			}
+			refinedFinalists.splice(lo, 0, candidate);
+			if (refinedFinalists.length === budget.finalistCount) {
+				worstFinalistCost = refinedFinalists[budget.finalistCount - 1].cost;
+			}
+			return;
+		}
+
+		if (candidate.cost >= worstFinalistCost) return;
+		let lo = 0;
+		let hi = budget.finalistCount - 1;
+		while (lo < hi) {
+			const mid = (lo + hi) >> 1;
+			if (refinedFinalists[mid].cost < candidate.cost) lo = mid + 1;
+			else hi = mid;
+		}
+		refinedFinalists.splice(lo, 0, candidate);
+		refinedFinalists.length = budget.finalistCount;
+		worstFinalistCost = refinedFinalists[budget.finalistCount - 1].cost;
+	};
 
 	// Scratch arrays reusable across candidates (gnomonic cost fn uses same layout)
 	const gnoProjX = new Float64Array(n);
@@ -1283,11 +1365,18 @@ export function matchStarsToAnchors(
 			ci < budget.secondaryStartCount
 				? [startPoint, [offX0 + searchRadius * 0.01, offY0 + searchRadius * 0.01, gnoScaleInit]]
 				: [startPoint];
+		let candidateBest: NMResult | null = null;
 		for (const cmaStart of cmaStarts) {
 			const optimized = cmaes(costFn, cmaStart, { sigma: searchRadius, maxEvals: 350 });
 			const cost = costFn(optimized);
-			if (cost < bestResult.cost) {
-				bestResult = { params: optimized, cost, ra0: gridRa0, dec0: gridDec0 };
+			if (!candidateBest || cost < candidateBest.cost) {
+				candidateBest = { params: optimized, cost, ra0: gridRa0, dec0: gridDec0 };
+			}
+		}
+		if (candidateBest) {
+			insertFinalist(candidateBest);
+			if (candidateBest.cost < bestResult.cost) {
+				bestResult = candidateBest;
 			}
 		}
 
@@ -1300,80 +1389,143 @@ export function matchStarsToAnchors(
 	// =========================================================================
 	// Phase 3: Final pair assignment in gnomonic space
 	// =========================================================================
+	interface FinalizedCandidate {
+		pairs: { star: Star; nodeIndex: number }[];
+		costBreakdown: MatchCostBreakdown;
+		searchCost: number;
+		transform: { x: number; y: number; scale: number };
+	}
+
+	const { sinRa, cosRa, sinDec, cosDec } = prepared;
+	const finalizeCandidate = (candidate: NMResult): FinalizedCandidate | null => {
+		const { ra0, dec0 } = candidate;
+		const sinRa0 = Math.sin(ra0);
+		const cosRa0 = Math.cos(ra0);
+		const sinDec0 = Math.sin(dec0);
+		const cosDec0 = Math.cos(dec0);
+		const [offX, offY, gnoScale] = candidate.params;
+
+		const gnoStarsFinal: KDPoint[] = [];
+		const gnoStarPositions: Point2D[] = new Array(stars.length);
+		for (let i = 0; i < stars.length; i++) {
+			const sinDecI = sinDec[i];
+			const cosDecI = cosDec[i];
+			const cosDra = cosRa[i] * cosRa0 + sinRa[i] * sinRa0;
+			const sinDra = sinRa[i] * cosRa0 - cosRa[i] * sinRa0;
+			const cosC = sinDec0 * sinDecI + cosDec0 * cosDecI * cosDra;
+			if (cosC <= 0.01) continue;
+
+			const invCosC = 1 / cosC;
+			const gp = {
+				x: cosDecI * sinDra * invCosC,
+				y: (cosDec0 * sinDecI - sinDec0 * cosDecI * cosDra) * invCosC,
+			};
+			gnoStarsFinal.push({ x: gp.x, y: gp.y, idx: i });
+			gnoStarPositions[i] = gp;
+		}
+		if (gnoStarsFinal.length < n) return null;
+
+		const projected: Point2D[] = new Array(n);
+		for (let i = 0; i < n; i++) {
+			projected[i] = {
+				x: offX - gnoScale * anchorDx[i],
+				y: offY + gnoScale * anchorDy[i],
+			};
+		}
+
+		const { pairs, assignment: assignedStarIdx, candidates } = resolveDuplicates(
+			gnoStarsFinal,
+			gnoStarPositions,
+			projected,
+			stars,
+			nodes.length,
+			edges,
+		);
+		const costBreakdown = computeAssignedMatchCost(
+			projected,
+			gnoStarPositions,
+			assignedStarIdx,
+			candidates,
+			edges,
+			gnoScale,
+			blacklist,
+		);
+
+		const rho = Math.sqrt(offX * offX + offY * offY);
+		let finalRa: number, finalDec: number;
+		if (rho < 1e-10) {
+			finalRa = ra0;
+			finalDec = dec0;
+		} else {
+			const c = Math.atan(rho);
+			const sinC = Math.sin(c);
+			const cosC = Math.cos(c);
+			finalDec = Math.asin(cosC * sinDec0 + (offY * sinC * cosDec0) / rho);
+			finalRa = ra0 + Math.atan2(offX * sinC, rho * cosDec0 * cosC - offY * sinDec0 * sinC);
+		}
+
+		const normRa = ((finalRa % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+		return {
+			pairs,
+			costBreakdown,
+			searchCost: candidate.cost,
+			transform: {
+				x: normRa / (2 * Math.PI),
+				y: (finalDec + Math.PI / 2) / Math.PI,
+				scale: gnoScale,
+			},
+		};
+	};
+
 	const assignStart = captureProfile ? performance.now() : 0;
 
-	const { ra0, dec0 } = bestResult;
-	const sinRa0 = Math.sin(ra0);
-	const cosRa0 = Math.cos(ra0);
-	const sinDec0 = Math.sin(dec0);
-	const cosDec0 = Math.cos(dec0);
-	const [offX, offY, gnoScale] = bestResult.params;
-
-	// Project all stars to gnomonic space for final k-nearest assignment
-	const gnoStarsFinal: KDPoint[] = [];
-	const gnoStarPositions: Point2D[] = new Array(stars.length);
-	const { sinRa, cosRa, sinDec, cosDec } = prepared;
-	for (let i = 0; i < stars.length; i++) {
-		const sinDecI = sinDec[i];
-		const cosDecI = cosDec[i];
-		const cosDra = cosRa[i] * cosRa0 + sinRa[i] * sinRa0;
-		const sinDra = sinRa[i] * cosRa0 - cosRa[i] * sinRa0;
-		const cosC = sinDec0 * sinDecI + cosDec0 * cosDecI * cosDra;
-		if (cosC <= 0.01) continue;
-
-		const invCosC = 1 / cosC;
-		const gp = {
-			x: cosDecI * sinDra * invCosC,
-			y: (cosDec0 * sinDecI - sinDec0 * cosDecI * cosDra) * invCosC,
-		};
-		gnoStarsFinal.push({ x: gp.x, y: gp.y, idx: i });
-		gnoStarPositions[i] = gp;
+	const rerankPool =
+		refinedFinalists.length > 0 ? refinedFinalists : Number.isFinite(bestResult.cost) ? [bestResult] : [];
+	let bestFinalized: FinalizedCandidate | null = null;
+	for (let i = 0; i < rerankPool.length; i++) {
+		onProgress?.(0.9 + 0.1 * ((i + 1) / rerankPool.length));
+		const finalized = finalizeCandidate(rerankPool[i]);
+		if (!finalized) continue;
+		if (
+			!bestFinalized ||
+			finalized.costBreakdown.total < bestFinalized.costBreakdown.total ||
+			(finalized.costBreakdown.total === bestFinalized.costBreakdown.total &&
+				finalized.searchCost < bestFinalized.searchCost)
+		) {
+			bestFinalized = finalized;
+		}
 	}
-
-	// Project anchors in gnomonic space
-	const finalProjected: Point2D[] = [];
-	for (let i = 0; i < n; i++) {
-		finalProjected.push({
-			x: offX - gnoScale * anchorDx[i],
-			y: offY + gnoScale * anchorDy[i],
-		});
-	}
-
-	const { pairs, assignment: assignedStarIdx } = resolveDuplicates(
-		gnoStarsFinal,
-		gnoStarPositions,
-		finalProjected,
-		stars,
-		nodes.length,
-		edges,
-	);
-	const costBreakdown = computeAssignedMatchCost(
-		finalProjected,
-		gnoStarPositions,
-		assignedStarIdx,
-		edges,
-		gnoScale,
-		blacklist,
-	);
 	const assignMs = captureProfile ? performance.now() - assignStart : 0;
 
-	// Convert gnomonic center + offset back to equirectangular for camera
-	// Inverse gnomonic: recover (ra, dec) from tangent-plane (x, y)
-	const rho = Math.sqrt(offX * offX + offY * offY);
-	let finalRa: number, finalDec: number;
-	if (rho < 1e-10) {
-		finalRa = ra0;
-		finalDec = dec0;
-	} else {
-		const c = Math.atan(rho);
-		const sinC = Math.sin(c);
-		const cosC = Math.cos(c);
-		finalDec = Math.asin(cosC * sinDec0 + (offY * sinC * cosDec0) / rho);
-		finalRa = ra0 + Math.atan2(offX * sinC, rho * cosDec0 * cosC - offY * sinDec0 * sinC);
+	if (!bestFinalized) {
+		return {
+			pairs: [],
+			cost: Infinity,
+			searchCost: Number.isFinite(bestResult.cost) ? bestResult.cost : undefined,
+			costBreakdown: makeMatchCostBreakdown(Infinity, 0, 0, 0, 0, 0, 0),
+			profile: captureProfile
+				? {
+						prepMs,
+						coarseMs,
+						ransacMs,
+						refineMs,
+						assignMs,
+						totalMs: performance.now() - totalStart,
+						coarseEvalCount,
+						fineEvalCount,
+						ransacEvalCount,
+						gnomonicEvalCount,
+						gnomonicCacheHits,
+						gnomonicCacheMisses,
+						refinedCandidateCount: bestLen,
+						rerankedCandidateCount: rerankPool.length,
+					}
+				: undefined,
+			transform: { x: 0, y: 0, scale: 0 },
+			graph,
+		};
 	}
 
-	// Normalize RA to [0, 2π)
-	const normRa = ((finalRa % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
 	const profile: MatchProfile | undefined = captureProfile
 		? {
 				prepMs,
@@ -1389,20 +1541,17 @@ export function matchStarsToAnchors(
 				gnomonicCacheHits,
 				gnomonicCacheMisses,
 				refinedCandidateCount: bestLen,
+				rerankedCandidateCount: rerankPool.length,
 			}
 		: undefined;
 
 	return {
-		pairs,
-		cost: costBreakdown.total,
-		searchCost: bestResult.cost,
-		costBreakdown,
+		pairs: bestFinalized.pairs,
+		cost: bestFinalized.costBreakdown.total,
+		searchCost: bestFinalized.searchCost,
+		costBreakdown: bestFinalized.costBreakdown,
 		profile,
-		transform: {
-			x: normRa / (2 * Math.PI),
-			y: (finalDec + Math.PI / 2) / Math.PI,
-			scale: gnoScale,
-		},
+		transform: bestFinalized.transform,
 		graph,
 	};
 }
