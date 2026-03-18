@@ -86,6 +86,7 @@ interface PreparedCatalog {
 
 interface MatchOptions {
 	captureProfile?: boolean;
+	searchMode?: 'default' | 'oracle';
 }
 
 interface SearchBudget {
@@ -96,6 +97,7 @@ interface SearchBudget {
 	secondaryStartCount: number;
 	coarseJitterCount: number;
 	finalistCount: number;
+	cmaMaxEvals: number;
 }
 
 class StarGrid {
@@ -234,7 +236,46 @@ export function prepareMatcherCatalog(stars: Star[]): PreparedCatalog {
 	return prepared;
 }
 
-function getSearchBudget(nodeCount: number): SearchBudget {
+function getSearchBudget(nodeCount: number, searchMode: 'default' | 'oracle'): SearchBudget {
+	if (searchMode === 'oracle') {
+		if (nodeCount >= 70) {
+			return {
+				topN: 144,
+				coarseTopN: 480,
+				ransacSampleSize: 3600,
+				ransacEdgeCount: 3,
+				secondaryStartCount: 96,
+				coarseJitterCount: 3,
+				finalistCount: 24,
+				cmaMaxEvals: 600,
+			};
+		}
+
+		if (nodeCount >= 40) {
+			return {
+				topN: 128,
+				coarseTopN: 420,
+				ransacSampleSize: 3200,
+				ransacEdgeCount: 3,
+				secondaryStartCount: 96,
+				coarseJitterCount: 3,
+				finalistCount: 18,
+				cmaMaxEvals: 550,
+			};
+		}
+
+		return {
+			topN: 112,
+			coarseTopN: 360,
+			ransacSampleSize: 2600,
+			ransacEdgeCount: 3,
+			secondaryStartCount: 96,
+			coarseJitterCount: 3,
+			finalistCount: 12,
+			cmaMaxEvals: 500,
+		};
+	}
+
 	if (nodeCount >= 70) {
 		return {
 			topN: 48,
@@ -244,6 +285,7 @@ function getSearchBudget(nodeCount: number): SearchBudget {
 			secondaryStartCount: 12,
 			coarseJitterCount: 2,
 			finalistCount: 8,
+			cmaMaxEvals: 350,
 		};
 	}
 
@@ -256,6 +298,7 @@ function getSearchBudget(nodeCount: number): SearchBudget {
 			secondaryStartCount: 20,
 			coarseJitterCount: 2,
 			finalistCount: 6,
+			cmaMaxEvals: 350,
 		};
 	}
 
@@ -267,6 +310,7 @@ function getSearchBudget(nodeCount: number): SearchBudget {
 		secondaryStartCount: 80,
 		coarseJitterCount: 3,
 		finalistCount: 4,
+		cmaMaxEvals: 350,
 	};
 }
 
@@ -335,6 +379,56 @@ interface EqProjectionRow {
 interface AssignmentCandidate {
 	starIdx: number;
 	dist: number;
+	pointCost: number;
+}
+
+interface FlowEdge {
+	to: number;
+	rev: number;
+	cap: number;
+	cost: number;
+}
+
+class MinHeap {
+	private readonly values: { node: number; priority: number }[] = [];
+
+	push(node: number, priority: number): void {
+		const values = this.values;
+		values.push({ node, priority });
+		let idx = values.length - 1;
+		while (idx > 0) {
+			const parent = (idx - 1) >> 1;
+			if (values[parent].priority <= values[idx].priority) break;
+			[values[parent], values[idx]] = [values[idx], values[parent]];
+			idx = parent;
+		}
+	}
+
+	pop(): { node: number; priority: number } | undefined {
+		const values = this.values;
+		if (values.length === 0) return undefined;
+		const top = values[0];
+		const last = values.pop()!;
+		if (values.length > 0) {
+			values[0] = last;
+			let idx = 0;
+			while (true) {
+				const left = idx * 2 + 1;
+				const right = left + 1;
+				let smallest = idx;
+				if (left < values.length && values[left].priority < values[smallest].priority) smallest = left;
+				if (right < values.length && values[right].priority < values[smallest].priority) smallest = right;
+				if (smallest === idx) break;
+				[values[idx], values[smallest]] = [values[smallest], values[idx]];
+				idx = smallest;
+			}
+		}
+		return top;
+	}
+
+	get size(): number {
+		return this.values.length;
+	}
 }
 
 function buildEqProjectionRow(anchorDx: Float64Array, anchorDy: Float64Array, ty: number, scale: number): EqProjectionRow {
@@ -688,6 +782,117 @@ function computeCostGnomonic(
 // Duplicate resolution
 // ---------------------------------------------------------------------------
 
+function solveSparseAssignment(candidates: AssignmentCandidate[][], nodeCount: number): Int32Array | null {
+	const uniqueStarIndices: number[] = [];
+	const starToLocal = new Map<number, number>();
+
+	for (const nodeCandidates of candidates) {
+		for (const candidate of nodeCandidates) {
+			if (starToLocal.has(candidate.starIdx)) continue;
+			starToLocal.set(candidate.starIdx, uniqueStarIndices.length);
+			uniqueStarIndices.push(candidate.starIdx);
+		}
+	}
+
+	if (uniqueStarIndices.length < nodeCount) return null;
+
+	const source = 0;
+	const sink = 1;
+	const nodeOffset = 2;
+	const starOffset = nodeOffset + nodeCount;
+	const graphSize = starOffset + uniqueStarIndices.length;
+	const graph: FlowEdge[][] = Array.from({ length: graphSize }, () => []);
+
+	const addEdge = (from: number, to: number, cap: number, cost: number): void => {
+		const forward: FlowEdge = { to, rev: graph[to].length, cap, cost };
+		const backward: FlowEdge = { to: from, rev: graph[from].length, cap: 0, cost: -cost };
+		graph[from].push(forward);
+		graph[to].push(backward);
+	};
+
+	for (let nodeIdx = 0; nodeIdx < nodeCount; nodeIdx++) {
+		addEdge(source, nodeOffset + nodeIdx, 1, 0);
+		for (const candidate of candidates[nodeIdx]) {
+			const starLocalIdx = starToLocal.get(candidate.starIdx);
+			if (starLocalIdx === undefined) continue;
+			addEdge(nodeOffset + nodeIdx, starOffset + starLocalIdx, 1, candidate.pointCost);
+		}
+	}
+
+	for (let starLocalIdx = 0; starLocalIdx < uniqueStarIndices.length; starLocalIdx++) {
+		addEdge(starOffset + starLocalIdx, sink, 1, 0);
+	}
+
+	const potentials = new Float64Array(graphSize);
+	const dist = new Float64Array(graphSize);
+	const prevNode = new Int32Array(graphSize);
+	const prevEdge = new Int32Array(graphSize);
+	let flow = 0;
+
+	while (flow < nodeCount) {
+		dist.fill(Infinity);
+		prevNode.fill(-1);
+		prevEdge.fill(-1);
+		dist[source] = 0;
+
+		const heap = new MinHeap();
+		heap.push(source, 0);
+
+		while (heap.size > 0) {
+			const current = heap.pop()!;
+			if (current.priority !== dist[current.node]) continue;
+			if (current.node === sink) break;
+
+			const edges = graph[current.node];
+			for (let edgeIdx = 0; edgeIdx < edges.length; edgeIdx++) {
+				const edge = edges[edgeIdx];
+				if (edge.cap <= 0) continue;
+				const nextCost = current.priority + edge.cost + potentials[current.node] - potentials[edge.to];
+				if (nextCost >= dist[edge.to]) continue;
+				dist[edge.to] = nextCost;
+				prevNode[edge.to] = current.node;
+				prevEdge[edge.to] = edgeIdx;
+				heap.push(edge.to, nextCost);
+			}
+		}
+
+		if (!Number.isFinite(dist[sink])) return null;
+
+		for (let node = 0; node < graphSize; node++) {
+			if (Number.isFinite(dist[node])) potentials[node] += dist[node];
+		}
+
+		let node = sink;
+		while (node !== source) {
+			const parent = prevNode[node];
+			const edgeIdx = prevEdge[node];
+			if (parent === -1 || edgeIdx === -1) return null;
+			const edge = graph[parent][edgeIdx];
+			edge.cap -= 1;
+			graph[node][edge.rev].cap += 1;
+			node = parent;
+		}
+		flow++;
+	}
+
+	const assignment = new Int32Array(nodeCount).fill(-1);
+	for (let nodeIdx = 0; nodeIdx < nodeCount; nodeIdx++) {
+		const nodeEdges = graph[nodeOffset + nodeIdx];
+		for (const edge of nodeEdges) {
+			if (edge.to < starOffset || edge.to >= graphSize) continue;
+			if (edge.cap !== 0) continue;
+			assignment[nodeIdx] = uniqueStarIndices[edge.to - starOffset];
+			break;
+		}
+	}
+
+	for (let nodeIdx = 0; nodeIdx < nodeCount; nodeIdx++) {
+		if (assignment[nodeIdx] === -1) return null;
+	}
+
+	return assignment;
+}
+
 function resolveDuplicates(
 	gnoStars: KDPoint[],
 	gnoStarPositions: Point2D[],
@@ -695,7 +900,14 @@ function resolveDuplicates(
 	stars: Star[],
 	nodeCount: number,
 	edges: [number, number][],
-): { pairs: { star: Star; nodeIndex: number }[]; assignment: Int32Array; candidates: AssignmentCandidate[][] } {
+	scale: number,
+	blacklist: Set<number> | null = null,
+): {
+	pairs: { star: Star; nodeIndex: number }[];
+	assignment: Int32Array;
+	candidates: AssignmentCandidate[][];
+	costBreakdown: MatchCostBreakdown;
+} {
 	// Build KD-tree in gnomonic space for k-nearest queries
 	const gnoTree = new kdTree(
 		gnoStars,
@@ -707,11 +919,22 @@ function resolveDuplicates(
 		['x', 'y'],
 	);
 
+	const invScale = scale > 0 ? 1 / scale : 0;
+	const invScaleSq = invScale * invScale;
+	const missingPointCost = POINT_DISTANCE_WEIGHT * invScale + POINT_DISTANCE_SQ_WEIGHT * invScaleSq;
 	const k = Math.min(50, gnoStars.length);
 
 	const candidates: AssignmentCandidate[][] = projected.map((p) => {
 		const nearest = gnoTree.nearest(p as KDPoint, k);
-		return nearest.map((n: [KDPoint, number]) => ({ starIdx: n[0].idx, dist: n[1] }));
+		return nearest.map((n: [KDPoint, number]) => {
+			const distSq = n[1] * invScaleSq;
+			const dist = Math.sqrt(distSq);
+			return {
+				starIdx: n[0].idx,
+				dist: n[1],
+				pointCost: dist * POINT_DISTANCE_WEIGHT + distSq * POINT_DISTANCE_SQ_WEIGHT + (blacklist?.has(n[0].idx) ? BLACKLIST_WEIGHT : 0),
+			};
+		});
 	});
 
 	const adjacency: number[][] = Array.from({ length: nodeCount }, () => []);
@@ -720,127 +943,201 @@ function resolveDuplicates(
 		adjacency[nB].push(nA);
 	}
 
-	// --- Phase 1: Greedy assignment (closest-first) ---
-	const sortedNodes = Array.from({ length: nodeCount }, (_, i) => i);
-	sortedNodes.sort((a, b) => {
-		const da = candidates[a].length > 0 ? candidates[a][0].dist : Infinity;
-		const db = candidates[b].length > 0 ? candidates[b][0].dist : Infinity;
-		return da - db;
-	});
+	const buildGreedyAssignment = (): Int32Array => {
+		const assignment = new Int32Array(nodeCount).fill(-1);
+		const usedStars = new Set<number>();
+		const sortedNodes = Array.from({ length: nodeCount }, (_, i) => i);
+		sortedNodes.sort((a, b) => {
+			const aDist = candidates[a].length > 0 ? candidates[a][0].dist : Infinity;
+			const bDist = candidates[b].length > 0 ? candidates[b][0].dist : Infinity;
+			return aDist - bDist;
+		});
 
-	const assignment: number[] = new Array(nodeCount).fill(-1);
-	const usedStars = new Set<number>();
-
-	for (const nodeIdx of sortedNodes) {
-		const cands = candidates[nodeIdx];
-		for (const c of cands) {
-			if (!usedStars.has(c.starIdx)) {
-				usedStars.add(c.starIdx);
-				assignment[nodeIdx] = c.starIdx;
+		for (const nodeIdx of sortedNodes) {
+			const nodeCandidates = candidates[nodeIdx];
+			for (const candidate of nodeCandidates) {
+				if (usedStars.has(candidate.starIdx)) continue;
+				assignment[nodeIdx] = candidate.starIdx;
+				usedStars.add(candidate.starIdx);
 				break;
 			}
+			if (assignment[nodeIdx] === -1 && nodeCandidates.length > 0) {
+				assignment[nodeIdx] = nodeCandidates[0].starIdx;
+			}
 		}
-		if (assignment[nodeIdx] === -1 && cands.length > 0) {
-			assignment[nodeIdx] = cands[0].starIdx;
-		}
-	}
 
-	// --- Phase 2: Iterative swap refinement ---
-	const starToNode = new Map<number, number>();
-	for (let i = 0; i < nodeCount; i++) {
-		if (assignment[i] !== -1) {
-			starToNode.set(assignment[i], i);
-		}
-	}
-
-	const nodeEdgeCost = (nodeIdx: number): number => {
-		let cost = 0;
-		const starPos = gnoStarPositions[assignment[nodeIdx]];
-		if (!starPos) return 1e6;
-		for (const neighbor of adjacency[nodeIdx]) {
-			if (assignment[neighbor] === -1) continue;
-			const neighborStarPos = gnoStarPositions[assignment[neighbor]];
-			if (!neighborStarPos) continue;
-			const expectedDx = projected[neighbor].x - projected[nodeIdx].x;
-			const expectedDy = projected[neighbor].y - projected[nodeIdx].y;
-			const actualDx = neighborStarPos.x - starPos.x;
-			const actualDy = neighborStarPos.y - starPos.y;
-			const errX = actualDx - expectedDx;
-			const errY = actualDy - expectedDy;
-			cost += Math.sqrt(errX * errX + errY * errY);
-		}
-		const dx = starPos.x - projected[nodeIdx].x;
-		const dy = starPos.y - projected[nodeIdx].y;
-		cost += Math.sqrt(dx * dx + dy * dy);
-		return cost;
+		return assignment;
 	};
 
-	const MAX_ROUNDS = 5;
-	for (let round = 0; round < MAX_ROUNDS; round++) {
-		let improved = false;
+	const buildExactSeed = (): Int32Array | null => {
+		if (nodeCount > 40) return null;
+		const seedCandidateLimit = nodeCount >= 70 ? 12 : nodeCount >= 40 ? 16 : 24;
+		const seedCandidates = candidates.map((nodeCandidates) => nodeCandidates.slice(0, Math.min(seedCandidateLimit, nodeCandidates.length)));
+		return solveSparseAssignment(seedCandidates, nodeCount);
+	};
 
+	const sameAssignment = (left: ArrayLike<number>, right: ArrayLike<number>): boolean => {
+		if (left.length !== right.length) return false;
+		for (let i = 0; i < left.length; i++) {
+			if (left[i] !== right[i]) return false;
+		}
+		return true;
+	};
+
+	const refineAssignment = (seed: ArrayLike<number>): Int32Array => {
+		const assignment = Int32Array.from(seed);
+		const usedStars = new Set<number>();
+		const starToNode = new Map<number, number>();
 		for (let nodeIdx = 0; nodeIdx < nodeCount; nodeIdx++) {
-			const currentStar = assignment[nodeIdx];
-			const currentNodeCost = nodeEdgeCost(nodeIdx);
-			let bestImprovement = 0;
-			let bestStar = currentStar;
-			let bestSwapNode = -1;
+			const starIdx = assignment[nodeIdx];
+			if (starIdx < 0) continue;
+			usedStars.add(starIdx);
+			starToNode.set(starIdx, nodeIdx);
+		}
 
-			for (const c of candidates[nodeIdx]) {
-				if (c.starIdx === currentStar) continue;
-				const ownerNode = starToNode.get(c.starIdx) ?? -1;
-
-				if (ownerNode === -1) {
-					assignment[nodeIdx] = c.starIdx;
-					const improvement = currentNodeCost - nodeEdgeCost(nodeIdx);
-					if (improvement > bestImprovement) {
-						bestImprovement = improvement;
-						bestStar = c.starIdx;
-						bestSwapNode = -1;
-					}
-					assignment[nodeIdx] = currentStar;
-				} else {
-					const oldTotal = currentNodeCost + nodeEdgeCost(ownerNode);
-					assignment[nodeIdx] = c.starIdx;
-					assignment[ownerNode] = currentStar;
-					const newTotal = nodeEdgeCost(nodeIdx) + nodeEdgeCost(ownerNode);
-					const improvement = oldTotal - newTotal;
-					if (improvement > bestImprovement) {
-						bestImprovement = improvement;
-						bestStar = c.starIdx;
-						bestSwapNode = ownerNode;
-					}
-					assignment[nodeIdx] = currentStar;
-					assignment[ownerNode] = c.starIdx;
-				}
+		const nodeEdgeCost = (nodeIdx: number): number => {
+			let cost = 0;
+			const starPos = assignment[nodeIdx] >= 0 ? gnoStarPositions[assignment[nodeIdx]] : undefined;
+			if (!starPos) return missingPointCost;
+			for (const neighbor of adjacency[nodeIdx]) {
+				if (assignment[neighbor] === -1) continue;
+				const neighborStarPos = gnoStarPositions[assignment[neighbor]];
+				if (!neighborStarPos) continue;
+				const expectedDx = projected[neighbor].x - projected[nodeIdx].x;
+				const expectedDy = projected[neighbor].y - projected[nodeIdx].y;
+				const actualDx = neighborStarPos.x - starPos.x;
+				const actualDy = neighborStarPos.y - starPos.y;
+				const errX = actualDx - expectedDx;
+				const errY = actualDy - expectedDy;
+				cost += Math.sqrt(errX * errX + errY * errY);
 			}
+			const dx = starPos.x - projected[nodeIdx].x;
+			const dy = starPos.y - projected[nodeIdx].y;
+			cost += Math.sqrt(dx * dx + dy * dy);
+			return cost;
+		};
 
-			if (bestStar !== currentStar) {
-				starToNode.delete(currentStar);
-				starToNode.set(bestStar, nodeIdx);
+		const maxRounds = 5;
+		for (let round = 0; round < maxRounds; round++) {
+			let improved = false;
+
+			for (let nodeIdx = 0; nodeIdx < nodeCount; nodeIdx++) {
+				const currentStar = assignment[nodeIdx];
+				const currentNodeCost = nodeEdgeCost(nodeIdx);
+				let bestImprovement = 0;
+				let bestStar = currentStar;
+				let bestSwapNode = -1;
+				const nodeCandidates = candidates[nodeIdx];
+
+				for (const candidate of nodeCandidates) {
+					if (candidate.starIdx === currentStar) continue;
+
+					const ownerNode = starToNode.get(candidate.starIdx) ?? -1;
+					if (ownerNode === nodeIdx) continue;
+
+					if (ownerNode === -1) {
+						if (currentStar >= 0) {
+							usedStars.delete(currentStar);
+							starToNode.delete(currentStar);
+						}
+						assignment[nodeIdx] = candidate.starIdx;
+						usedStars.add(candidate.starIdx);
+						starToNode.set(candidate.starIdx, nodeIdx);
+
+						const improvement = currentNodeCost - nodeEdgeCost(nodeIdx);
+						if (improvement > bestImprovement) {
+							bestImprovement = improvement;
+							bestStar = candidate.starIdx;
+							bestSwapNode = -1;
+						}
+
+						assignment[nodeIdx] = currentStar;
+						starToNode.delete(candidate.starIdx);
+						usedStars.delete(candidate.starIdx);
+						if (currentStar >= 0) {
+							usedStars.add(currentStar);
+							starToNode.set(currentStar, nodeIdx);
+						}
+					} else {
+						const ownerNodeCost = nodeEdgeCost(ownerNode);
+						const oldTotal = currentNodeCost + ownerNodeCost;
+						assignment[nodeIdx] = candidate.starIdx;
+						assignment[ownerNode] = currentStar;
+						starToNode.set(candidate.starIdx, nodeIdx);
+						if (currentStar >= 0) starToNode.set(currentStar, ownerNode);
+
+						const newTotal = nodeEdgeCost(nodeIdx) + nodeEdgeCost(ownerNode);
+						const improvement = oldTotal - newTotal;
+						if (improvement > bestImprovement) {
+							bestImprovement = improvement;
+							bestStar = candidate.starIdx;
+							bestSwapNode = ownerNode;
+						}
+
+						assignment[nodeIdx] = currentStar;
+						assignment[ownerNode] = candidate.starIdx;
+						starToNode.set(candidate.starIdx, ownerNode);
+						if (currentStar >= 0) starToNode.set(currentStar, nodeIdx);
+					}
+				}
+
+				if (bestImprovement <= 1e-6 || bestStar === currentStar) continue;
+
 				if (bestSwapNode === -1) {
-					usedStars.delete(currentStar);
-					usedStars.add(bestStar);
+					if (currentStar >= 0) {
+						usedStars.delete(currentStar);
+						starToNode.delete(currentStar);
+					}
 					assignment[nodeIdx] = bestStar;
+					usedStars.add(bestStar);
+					starToNode.set(bestStar, nodeIdx);
 				} else {
-					starToNode.set(currentStar, bestSwapNode);
 					assignment[nodeIdx] = bestStar;
 					assignment[bestSwapNode] = currentStar;
+					starToNode.set(bestStar, nodeIdx);
+					if (currentStar >= 0) starToNode.set(currentStar, bestSwapNode);
 				}
 				improved = true;
 			}
+
+			if (!improved) break;
 		}
 
-		if (!improved) break;
+		return assignment;
+	};
+
+	const finalizeAssignment = (assignment: Int32Array) => ({
+		assignment,
+		costBreakdown: computeAssignedMatchCost(projected, gnoStarPositions, assignment, candidates, edges, scale, blacklist),
+	});
+
+	const greedyAssignment = refineAssignment(buildGreedyAssignment());
+	let bestSolution = finalizeAssignment(greedyAssignment);
+
+	const exactSeed = buildExactSeed();
+	if (exactSeed && !sameAssignment(exactSeed, greedyAssignment)) {
+		const exactSolution = finalizeAssignment(refineAssignment(exactSeed));
+		if (
+			exactSolution.costBreakdown.total < bestSolution.costBreakdown.total ||
+			(exactSolution.costBreakdown.total === bestSolution.costBreakdown.total &&
+				exactSolution.costBreakdown.pointDistance < bestSolution.costBreakdown.pointDistance)
+		) {
+			bestSolution = exactSolution;
+		}
 	}
 
 	const result: { star: Star; nodeIndex: number }[] = [];
-	for (let i = 0; i < nodeCount; i++) {
-		if (assignment[i] !== -1) {
-			result.push({ star: stars[assignment[i]], nodeIndex: i });
-		}
+	for (let nodeIdx = 0; nodeIdx < nodeCount; nodeIdx++) {
+		const starIdx = bestSolution.assignment[nodeIdx];
+		if (starIdx >= 0) result.push({ star: stars[starIdx], nodeIndex: nodeIdx });
 	}
-	return { pairs: result, assignment: Int32Array.from(assignment), candidates };
+
+	return {
+		pairs: result,
+		assignment: bestSolution.assignment,
+		candidates,
+		costBreakdown: bestSolution.costBreakdown,
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -874,6 +1171,7 @@ export function matchStarsToAnchors(
 ): MatchResult {
 	const { nodes, edges } = graph;
 	const captureProfile = options.captureProfile === true;
+	const searchMode = options.searchMode ?? 'default';
 	const totalStart = captureProfile ? performance.now() : 0;
 
 	if (nodes.length === 0 || stars.length === 0) {
@@ -894,7 +1192,7 @@ export function matchStarsToAnchors(
 
 	// --- Compute node centroid and pre-center anchor offsets ---
 	const n = nodes.length;
-	const budget = getSearchBudget(n);
+	const budget = getSearchBudget(n, searchMode);
 	let cx = 0;
 	let cy = 0;
 	for (const a of nodes) {
@@ -1367,7 +1665,7 @@ export function matchStarsToAnchors(
 				: [startPoint];
 		let candidateBest: NMResult | null = null;
 		for (const cmaStart of cmaStarts) {
-			const optimized = cmaes(costFn, cmaStart, { sigma: searchRadius, maxEvals: 350 });
+			const optimized = cmaes(costFn, cmaStart, { sigma: searchRadius, maxEvals: budget.cmaMaxEvals });
 			const cost = costFn(optimized);
 			if (!candidateBest || cost < candidateBest.cost) {
 				candidateBest = { params: optimized, cost, ra0: gridRa0, dec0: gridDec0 };
@@ -1433,19 +1731,12 @@ export function matchStarsToAnchors(
 			};
 		}
 
-		const { pairs, assignment: assignedStarIdx, candidates } = resolveDuplicates(
+		const { pairs, costBreakdown } = resolveDuplicates(
 			gnoStarsFinal,
 			gnoStarPositions,
 			projected,
 			stars,
 			nodes.length,
-			edges,
-		);
-		const costBreakdown = computeAssignedMatchCost(
-			projected,
-			gnoStarPositions,
-			assignedStarIdx,
-			candidates,
 			edges,
 			gnoScale,
 			blacklist,

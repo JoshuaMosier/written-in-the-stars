@@ -79,6 +79,19 @@ describe('matchStarsToAnchors', () => {
 			expect(result.profile!.refinedCandidateCount).toBeGreaterThan(0);
 			expect(result.profile!.rerankedCandidateCount).toBeGreaterThan(0);
 		});
+
+		it('supports oracle search mode for slower benchmark comparisons', () => {
+			const graph = textToGraph('STAR');
+			const result = matchStarsToAnchors(stars, graph, null, undefined, {
+				captureProfile: true,
+				searchMode: 'oracle',
+			});
+
+			expect(result.cost).toBeLessThan(Infinity);
+			expect(result.profile).toBeDefined();
+			expect(result.profile!.refinedCandidateCount).toBeGreaterThan(0);
+			expect(result.profile!.rerankedCandidateCount).toBeGreaterThan(0);
+		});
 	});
 
 	describe('multi-letter text', () => {

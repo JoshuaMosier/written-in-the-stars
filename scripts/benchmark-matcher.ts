@@ -10,11 +10,64 @@ const __dirname = path.dirname(__filename);
 const starsPath = path.resolve(__dirname, '../static/stars.json');
 const stars: Star[] = JSON.parse(fs.readFileSync(starsPath, 'utf-8'));
 
-const DEFAULT_PHRASES = ['I', 'STAR', 'ORION', 'HELLO', 'GALAXY', 'NIGHT SKY', 'WRITTEN IN THE STARS'];
+type SearchMode = 'default' | 'oracle';
+type BenchmarkMode = SearchMode | 'compare';
 
-function parseArgs() {
+const DEFAULT_PHRASES = ['I', 'STAR', 'ORION', 'HELLO', 'GALAXY', 'NIGHT SKY', 'WRITTEN IN THE STARS'];
+const EXTENDED_PHRASES = [
+	...DEFAULT_PHRASES,
+	'LOOK UP AT THE NIGHT SKY',
+	'DANCING AMONG THE STARS',
+	'COUNTING ALL THE CONSTELLATIONS',
+	'MEET ME UNDER STARLIGHT',
+	'FOLLOW THE NORTHERN LIGHTS',
+	'DREAMS WRITTEN IN STARLIGHT',
+];
+
+interface ParsedArgs {
+	iterations: number;
+	mode: BenchmarkMode;
+	phrases: string[];
+}
+
+interface BenchmarkRow {
+	text: string;
+	nodes: number;
+	edges: number;
+	avgMs: number;
+	minMs: number;
+	maxMs: number;
+	cost: number;
+	searchCost: number;
+	point: number;
+	pointSq: number;
+	edge: number;
+	duplicates: number;
+	blacklist: number;
+	spacing: number;
+	clutter: number;
+	prepMs: number;
+	coarseMs: number;
+	ransacMs: number;
+	refineMs: number;
+	assignMs: number;
+	profiledTotalMs: number;
+	coarseEvalCount: number;
+	fineEvalCount: number;
+	ransacEvalCount: number;
+	gnomonicEvalCount: number;
+	gnomonicCacheHits: number;
+	gnomonicCacheMisses: number;
+	refinedCandidateCount: number;
+	rerankedCandidateCount: number;
+	pairStarIndices: number[];
+}
+
+function parseArgs(): ParsedArgs {
 	const args = process.argv.slice(2);
 	let iterations = 3;
+	let mode: BenchmarkMode = 'default';
+	let useExtended = false;
 	const phrases: string[] = [];
 
 	for (let i = 0; i < args.length; i++) {
@@ -28,29 +81,34 @@ function parseArgs() {
 			i++;
 			continue;
 		}
+		if (arg === '--oracle') {
+			mode = 'oracle';
+			continue;
+		}
+		if (arg === '--compare') {
+			mode = 'compare';
+			continue;
+		}
+		if (arg === '--extended') {
+			useExtended = true;
+			continue;
+		}
 		phrases.push(arg);
 	}
 
 	return {
 		iterations,
-		phrases: phrases.length > 0 ? phrases : DEFAULT_PHRASES,
+		mode,
+		phrases: phrases.length > 0 ? phrases : useExtended ? EXTENDED_PHRASES : DEFAULT_PHRASES,
 	};
 }
 
-const { iterations, phrases } = parseArgs();
-
-prepareMatcherCatalog(stars);
-
-console.log(`Benchmarking matcher on ${stars.length} stars`);
-console.log(`Iterations per phrase: ${iterations}`);
-console.log('');
-
-const rows = phrases.map((text) => {
+function runPhrase(text: string, iterations: number, searchMode: SearchMode): BenchmarkRow {
 	const graph = textToGraph(text);
 	let totalMs = 0;
 	let minMs = Infinity;
 	let maxMs = 0;
-	let lastResult = matchStarsToAnchors(stars, graph, null, undefined, { captureProfile: true });
+	let lastResult = matchStarsToAnchors(stars, graph, null, undefined, { captureProfile: true, searchMode });
 	let prepMs = 0;
 	let coarseMs = 0;
 	let ransacMs = 0;
@@ -68,7 +126,7 @@ const rows = phrases.map((text) => {
 
 	for (let i = 0; i < iterations; i++) {
 		const start = performance.now();
-		lastResult = matchStarsToAnchors(stars, graph, null, undefined, { captureProfile: true });
+		lastResult = matchStarsToAnchors(stars, graph, null, undefined, { captureProfile: true, searchMode });
 		const elapsed = performance.now() - start;
 		totalMs += elapsed;
 		minMs = Math.min(minMs, elapsed);
@@ -119,82 +177,205 @@ const rows = phrases.map((text) => {
 		gnomonicCacheMisses: Math.round(gnomonicCacheMisses / iterations),
 		refinedCandidateCount: Math.round(refinedCandidateCount / iterations),
 		rerankedCandidateCount: Math.round(rerankedCandidateCount / iterations),
+		pairStarIndices: lastResult.pairs.map((pair) => pair.star.idx).sort((a, b) => a - b),
 	};
-});
+}
 
-console.table(
-	rows.map(
-		({
-			text,
-			nodes,
-			edges,
-			avgMs,
-			minMs,
-			maxMs,
-			cost,
-			searchCost,
-			point,
-			pointSq,
-			edge,
-			duplicates,
-			blacklist,
-			spacing,
-			clutter,
-		}) => ({
-			text,
-			nodes,
-			edges,
-			avgMs,
-			minMs,
-			maxMs,
-			cost,
-			searchCost,
-			point,
-			pointSq,
-			edge,
-			duplicates,
-			blacklist,
-			spacing,
-			clutter,
-		}),
-	),
-);
+function overlapRatio(left: number[], right: number[]): number {
+	if (left.length === 0 && right.length === 0) return 1;
+	const rightSet = new Set(right);
+	let intersection = 0;
+	for (const idx of left) {
+		if (rightSet.has(idx)) intersection++;
+	}
+	return intersection / Math.max(left.length, right.length, 1);
+}
 
+function printSingleMode(rows: BenchmarkRow[], mode: SearchMode): void {
+	console.log(`Mode: ${mode}`);
+	console.table(
+		rows.map(
+			({
+				text,
+				nodes,
+				edges,
+				avgMs,
+				minMs,
+				maxMs,
+				cost,
+				searchCost,
+				point,
+				pointSq,
+				edge,
+				duplicates,
+				blacklist,
+				spacing,
+				clutter,
+			}) => ({
+				text,
+				nodes,
+				edges,
+				avgMs,
+				minMs,
+				maxMs,
+				cost,
+				searchCost,
+				point,
+				pointSq,
+				edge,
+				duplicates,
+				blacklist,
+				spacing,
+				clutter,
+			}),
+		),
+	);
+
+	console.log('');
+	console.table(
+		rows.map(
+			({
+				text,
+				prepMs,
+				coarseMs,
+				ransacMs,
+				refineMs,
+				assignMs,
+				profiledTotalMs,
+				coarseEvalCount,
+				fineEvalCount,
+				ransacEvalCount,
+				gnomonicEvalCount,
+				gnomonicCacheHits,
+				gnomonicCacheMisses,
+				refinedCandidateCount,
+				rerankedCandidateCount,
+			}) => ({
+				text,
+				prepMs,
+				coarseMs,
+				ransacMs,
+				refineMs,
+				assignMs,
+				profiledTotalMs,
+				coarseEvalCount,
+				fineEvalCount,
+				ransacEvalCount,
+				gnomonicEvalCount,
+				gnomonicCacheHits,
+				gnomonicCacheMisses,
+				refinedCandidateCount,
+				rerankedCandidateCount,
+			}),
+		),
+	);
+}
+
+const { iterations, mode, phrases } = parseArgs();
+prepareMatcherCatalog(stars);
+
+console.log(`Benchmarking matcher on ${stars.length} stars`);
+console.log(`Iterations per phrase: ${iterations}`);
+console.log(`Phrases: ${phrases.length}`);
 console.log('');
-console.table(
-	rows.map(
-		({
+
+if (mode === 'compare') {
+	const rows = phrases.map((text) => {
+		const defaultRow = runPhrase(text, iterations, 'default');
+		const oracleRow = runPhrase(text, iterations, 'oracle');
+		return {
 			text,
-			prepMs,
-			coarseMs,
-			ransacMs,
-			refineMs,
-			assignMs,
-			profiledTotalMs,
-			coarseEvalCount,
-			fineEvalCount,
-			ransacEvalCount,
-			gnomonicEvalCount,
-			gnomonicCacheHits,
-			gnomonicCacheMisses,
-			refinedCandidateCount,
-			rerankedCandidateCount,
-		}) => ({
-			text,
-			prepMs,
-			coarseMs,
-			ransacMs,
-			refineMs,
-			assignMs,
-			profiledTotalMs,
-			coarseEvalCount,
-			fineEvalCount,
-			ransacEvalCount,
-			gnomonicEvalCount,
-			gnomonicCacheHits,
-			gnomonicCacheMisses,
-			refinedCandidateCount,
-			rerankedCandidateCount,
-		}),
-	),
-);
+			nodes: defaultRow.nodes,
+			edges: defaultRow.edges,
+			defaultMs: defaultRow.avgMs,
+			oracleMs: oracleRow.avgMs,
+			overheadPct: Number((((oracleRow.avgMs - defaultRow.avgMs) / defaultRow.avgMs) * 100).toFixed(1)),
+			defaultCost: defaultRow.cost,
+			oracleCost: oracleRow.cost,
+			costGain: Number((defaultRow.cost - oracleRow.cost).toFixed(4)),
+			defaultSearchCost: defaultRow.searchCost,
+			oracleSearchCost: oracleRow.searchCost,
+			searchGain: Number((defaultRow.searchCost - oracleRow.searchCost).toFixed(4)),
+			starOverlap: Number(overlapRatio(defaultRow.pairStarIndices, oracleRow.pairStarIndices).toFixed(2)),
+			defaultCoarseMs: defaultRow.coarseMs,
+			oracleCoarseMs: oracleRow.coarseMs,
+			defaultRefineMs: defaultRow.refineMs,
+			oracleRefineMs: oracleRow.refineMs,
+			defaultAssignMs: defaultRow.assignMs,
+			oracleAssignMs: oracleRow.assignMs,
+			defaultRefined: defaultRow.refinedCandidateCount,
+			oracleRefined: oracleRow.refinedCandidateCount,
+			defaultReranked: defaultRow.rerankedCandidateCount,
+			oracleReranked: oracleRow.rerankedCandidateCount,
+		};
+	});
+
+	console.log('Mode: compare (default vs oracle)');
+	console.table(
+		rows.map(
+			({
+				text,
+				nodes,
+				edges,
+				defaultMs,
+				oracleMs,
+				overheadPct,
+				defaultCost,
+				oracleCost,
+				costGain,
+				defaultSearchCost,
+				oracleSearchCost,
+				searchGain,
+				starOverlap,
+			}) => ({
+				text,
+				nodes,
+				edges,
+				defaultMs,
+				oracleMs,
+				overheadPct,
+				defaultCost,
+				oracleCost,
+				costGain,
+				defaultSearchCost,
+				oracleSearchCost,
+				searchGain,
+				starOverlap,
+			}),
+		),
+	);
+
+	console.log('');
+	console.table(
+		rows.map(
+			({
+				text,
+				defaultCoarseMs,
+				oracleCoarseMs,
+				defaultRefineMs,
+				oracleRefineMs,
+				defaultAssignMs,
+				oracleAssignMs,
+				defaultRefined,
+				oracleRefined,
+				defaultReranked,
+				oracleReranked,
+			}) => ({
+				text,
+				defaultCoarseMs,
+				oracleCoarseMs,
+				defaultRefineMs,
+				oracleRefineMs,
+				defaultAssignMs,
+				oracleAssignMs,
+				defaultRefined,
+				oracleRefined,
+				defaultReranked,
+				oracleReranked,
+			}),
+		),
+	);
+} else {
+	const rows = phrases.map((text) => runPhrase(text, iterations, mode));
+	printSingleMode(rows, mode);
+}
