@@ -2408,7 +2408,7 @@
 			if (ambientPaused || !group.parent) return;
 
 			const now = performance.now();
-			const phaseElapsed = now - ac.phaseStart;
+			let phaseElapsed = now - ac.phaseStart;
 
 			// Phase transitions
 			if (ac.phase === 'draw' && phaseElapsed >= totalDrawTime) {
@@ -2425,12 +2425,14 @@
 				return;
 			}
 
+			phaseElapsed = now - ac.phaseStart;
+
 			// Compute overall opacity
 			let opacity = 1.0;
 			if (ac.phase === 'draw') {
 				opacity = Math.min(1, phaseElapsed / 500);
 			} else if (ac.phase === 'fade') {
-				opacity = 1 - phaseElapsed / AMBIENT_FADE;
+				opacity = Math.max(0, 1 - phaseElapsed / AMBIENT_FADE);
 			}
 
 			const drawElapsed = ac.phase === 'draw' ? phaseElapsed : totalDrawTime;
