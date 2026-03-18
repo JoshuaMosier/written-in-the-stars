@@ -69,6 +69,21 @@ interface KDPoint {
 	idx: number;
 }
 
+interface PreparedCatalog {
+	eqStars: KDPoint[];
+	eqGrid: StarGrid;
+	eqX: Float64Array;
+	eqY: Float64Array;
+	sinRa: Float64Array;
+	cosRa: Float64Array;
+	sinDec: Float64Array;
+	cosDec: Float64Array;
+	minSX: number;
+	maxSX: number;
+	minSY: number;
+	maxSY: number;
+}
+
 class StarGrid {
 	private readonly cells: (KDPoint[] | null)[];
 	private readonly cellSize: number;
@@ -143,6 +158,66 @@ class StarGrid {
 		this.lastDistSq = bestDistSq;
 		return bestPoint;
 	}
+}
+
+const preparedCatalogCache = new WeakMap<Star[], PreparedCatalog>();
+
+export function prepareMatcherCatalog(stars: Star[]): PreparedCatalog {
+	const cached = preparedCatalogCache.get(stars);
+	if (cached) return cached;
+
+	const count = stars.length;
+	const eqStars: KDPoint[] = new Array(count);
+	const eqX = new Float64Array(count);
+	const eqY = new Float64Array(count);
+	const sinRa = new Float64Array(count);
+	const cosRa = new Float64Array(count);
+	const sinDec = new Float64Array(count);
+	const cosDec = new Float64Array(count);
+
+	let minSX = Infinity;
+	let maxSX = -Infinity;
+	let minSY = Infinity;
+	let maxSY = -Infinity;
+
+	for (let i = 0; i < count; i++) {
+		const star = stars[i];
+		const eq = projectStarEq(star);
+		const sinRaVal = Math.sin(star.ra);
+		const cosRaVal = Math.cos(star.ra);
+		const sinDecVal = Math.sin(star.dec);
+		const cosDecVal = Math.cos(star.dec);
+
+		eqX[i] = eq.x;
+		eqY[i] = eq.y;
+		sinRa[i] = sinRaVal;
+		cosRa[i] = cosRaVal;
+		sinDec[i] = sinDecVal;
+		cosDec[i] = cosDecVal;
+		eqStars[i] = { x: eq.x, y: eq.y, idx: i };
+
+		if (eq.x < minSX) minSX = eq.x;
+		if (eq.x > maxSX) maxSX = eq.x;
+		if (eq.y < minSY) minSY = eq.y;
+		if (eq.y > maxSY) maxSY = eq.y;
+	}
+
+	const prepared: PreparedCatalog = {
+		eqStars,
+		eqGrid: new StarGrid(eqStars),
+		eqX,
+		eqY,
+		sinRa,
+		cosRa,
+		sinDec,
+		cosDec,
+		minSX,
+		maxSX,
+		minSY,
+		maxSY,
+	};
+	preparedCatalogCache.set(stars, prepared);
+	return prepared;
 }
 
 // ---------------------------------------------------------------------------
@@ -606,13 +681,9 @@ export function matchStarsToAnchors(
 		return { pairs: [], cost: Infinity, transform: { x: 0, y: 0, scale: 0 }, graph };
 	}
 
-	// --- Project stars to equirectangular 2D ---
-	const eqStars: KDPoint[] = stars.map((s, i) => {
-		const p = projectStarEq(s);
-		return { x: p.x, y: p.y, idx: i };
-	});
-
-	const eqGrid = new StarGrid(eqStars);
+	const prepared = prepareMatcherCatalog(stars);
+	const { eqStars, eqGrid, minSX: preparedMinSX, maxSX: preparedMaxSX, minSY: preparedMinSY, maxSY: preparedMaxSY } =
+		prepared;
 
 	// --- Compute node centroid and pre-center anchor offsets ---
 	const n = nodes.length;
@@ -638,23 +709,12 @@ export function matchStarsToAnchors(
 	// coarse grid to be useful; gnomonic refinement handles any declination.
 	const Y_MIN_CLAMP = 0.139; // ~-65° dec in [0,1] normalized space
 	const Y_MAX_CLAMP = 0.861; // ~+65° dec
-	let minSX = Infinity,
-		maxSX = -Infinity;
-	let minSY = Infinity,
-		maxSY = -Infinity;
-	for (const s of eqStars) {
-		if (s.x < minSX) minSX = s.x;
-		if (s.x > maxSX) maxSX = s.x;
-		if (s.y < minSY) minSY = s.y;
-		if (s.y > maxSY) maxSY = s.y;
-	}
-	minSY = Math.max(minSY, Y_MIN_CLAMP);
-	maxSY = Math.min(maxSY, Y_MAX_CLAMP);
+	const minSX = preparedMinSX;
+	const maxSX = preparedMaxSX;
+	const minSY = Math.max(preparedMinSY, Y_MIN_CLAMP);
+	const maxSY = Math.min(preparedMaxSY, Y_MAX_CLAMP);
 
 	// --- Coarse grid search in equirectangular space ---
-	const posStepsX = 100;
-	const posStepsY = 100;
-
 	let anchorMinX = Infinity,
 		anchorMaxX = -Infinity;
 	for (let i = 0; i < n; i++) {
@@ -951,23 +1011,26 @@ export function matchStarsToAnchors(
 
 	// Helper to build gnomonic grid for a given sky center
 	const buildGnoGrid = (ra0: number, dec0: number): { grid: StarGrid; points: KDPoint[] } | null => {
+		const sinRa0 = Math.sin(ra0);
+		const cosRa0 = Math.cos(ra0);
 		const sinDec0 = Math.sin(dec0);
 		const cosDec0 = Math.cos(dec0);
 		const gnoPoints: KDPoint[] = [];
 		const maxCosC = Math.cos((40 * Math.PI) / 180);
+		const { sinRa, cosRa, sinDec, cosDec } = prepared;
 
 		for (let i = 0; i < stars.length; i++) {
-			const s = stars[i];
-			const cosDec = Math.cos(s.dec);
-			const sinDec = Math.sin(s.dec);
-			const cosDra = Math.cos(s.ra - ra0);
-			const cosC = sinDec0 * sinDec + cosDec0 * cosDec * cosDra;
+			const sinDecI = sinDec[i];
+			const cosDecI = cosDec[i];
+			const cosDra = cosRa[i] * cosRa0 + sinRa[i] * sinRa0;
+			const sinDra = sinRa[i] * cosRa0 - cosRa[i] * sinRa0;
+			const cosC = sinDec0 * sinDecI + cosDec0 * cosDecI * cosDra;
 			if (cosC <= maxCosC) continue;
 
 			const invCosC = 1 / cosC;
 			gnoPoints.push({
-				x: cosDec * Math.sin(s.ra - ra0) * invCosC,
-				y: (cosDec0 * sinDec - sinDec0 * cosDec * cosDra) * invCosC,
+				x: cosDecI * sinDra * invCosC,
+				y: (cosDec0 * sinDecI - sinDec0 * cosDecI * cosDra) * invCosC,
 				idx: i,
 			});
 		}
@@ -1054,6 +1117,8 @@ export function matchStarsToAnchors(
 	// =========================================================================
 
 	const { ra0, dec0 } = bestResult;
+	const sinRa0 = Math.sin(ra0);
+	const cosRa0 = Math.cos(ra0);
 	const sinDec0 = Math.sin(dec0);
 	const cosDec0 = Math.cos(dec0);
 	const [offX, offY, gnoScale] = bestResult.params;
@@ -1061,12 +1126,22 @@ export function matchStarsToAnchors(
 	// Project all stars to gnomonic space for final k-nearest assignment
 	const gnoStarsFinal: KDPoint[] = [];
 	const gnoStarPositions: Point2D[] = new Array(stars.length);
+	const { sinRa, cosRa, sinDec, cosDec } = prepared;
 	for (let i = 0; i < stars.length; i++) {
-		const gp = projectStarGnomonic(stars[i].ra, stars[i].dec, ra0, sinDec0, cosDec0);
-		if (gp) {
-			gnoStarsFinal.push({ x: gp.x, y: gp.y, idx: i });
-			gnoStarPositions[i] = gp;
-		}
+		const sinDecI = sinDec[i];
+		const cosDecI = cosDec[i];
+		const cosDra = cosRa[i] * cosRa0 + sinRa[i] * sinRa0;
+		const sinDra = sinRa[i] * cosRa0 - cosRa[i] * sinRa0;
+		const cosC = sinDec0 * sinDecI + cosDec0 * cosDecI * cosDra;
+		if (cosC <= 0.01) continue;
+
+		const invCosC = 1 / cosC;
+		const gp = {
+			x: cosDecI * sinDra * invCosC,
+			y: (cosDec0 * sinDecI - sinDec0 * cosDecI * cosDra) * invCosC,
+		};
+		gnoStarsFinal.push({ x: gp.x, y: gp.y, idx: i });
+		gnoStarPositions[i] = gp;
 	}
 
 	// Project anchors in gnomonic space

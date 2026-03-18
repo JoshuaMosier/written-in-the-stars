@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { textToGraph } from '../src/lib/engine/glyphs';
-import { matchStarsToAnchors } from '../src/lib/engine/matcher';
+import { matchStarsToAnchors, prepareMatcherCatalog } from '../src/lib/engine/matcher';
 import type { Star } from '../src/lib/engine/types';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -38,6 +38,8 @@ function parseArgs() {
 }
 
 const { iterations, phrases } = parseArgs();
+
+prepareMatcherCatalog(stars);
 
 console.log(`Benchmarking matcher on ${stars.length} stars`);
 console.log(`Iterations per phrase: ${iterations}`);

@@ -10,7 +10,7 @@
  *   ← { type: 'error', payload: string }              — on failure
  */
 import { textToGraph } from './glyphs';
-import { matchStarsToAnchors } from './matcher';
+import { matchStarsToAnchors, prepareMatcherCatalog } from './matcher';
 import type { Star } from './types';
 
 let stars: Star[] | null = null;
@@ -20,6 +20,7 @@ self.onmessage = (e: MessageEvent) => {
 
 	if (type === 'init') {
 		stars = payload.stars;
+		if (stars) prepareMatcherCatalog(stars);
 		self.postMessage({ type: 'ready' });
 	} else if (type === 'match') {
 		const requestId = e.data.requestId;
