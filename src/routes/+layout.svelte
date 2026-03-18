@@ -3,7 +3,18 @@
 </script>
 
 <svelte:head>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+	<link
+		href="https://fonts.googleapis.com/css2?family=Marcellus&family=Space+Grotesk:wght@400;500;600&display=swap"
+		rel="stylesheet"
+	/>
 	<style>
+		:root {
+			--font-ui: 'Space Grotesk', 'Segoe UI', system-ui, sans-serif;
+			--font-display: 'Marcellus', 'Iowan Old Style', 'Palatino Linotype', serif;
+		}
+
 		html, body {
 			margin: 0;
 			padding: 0;
@@ -12,7 +23,13 @@
 			overflow: hidden;
 			background: #000;
 			color: #ccc;
-			font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+			font-family: var(--font-ui);
+			font-synthesis: none;
+			text-rendering: optimizeLegibility;
+		}
+
+		button, input, textarea, select {
+			font: inherit;
 		}
 	</style>
 	{@html `<script type="application/ld+json">${JSON.stringify({

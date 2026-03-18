@@ -790,6 +790,7 @@
 	// --- Star search + info panel ---
 	let selectedStar = $state<Star | null>(null);
 	let selectedConstellation = $state<typeof CONSTELLATIONS[0] | null>(null);
+	let windowWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1024);
 	let searchQuery = $state('');
 	let searchOpen = $state(false);
 	let searchHighlight = $state(0);
@@ -1066,7 +1067,7 @@
 	}
 </script>
 
-<svelte:window onkeydown={handleGlobalKeydown} />
+<svelte:window onkeydown={handleGlobalKeydown} bind:innerWidth={windowWidth} />
 
 <div class="app" role="application" aria-label="Written in the Stars - constellation creator" onpointerdown={handleClickOutsideSettings}>
 	{#await StarFieldPromise then StarFieldModule}
@@ -1257,7 +1258,7 @@
 					else if (e.key === 'Enter' && results.length > 0) { handleSearchSelect(results[searchHighlight]); searchInputEl?.blur(); }
 					else if (e.key === 'Escape') { searchOpen = false; searchInputEl?.blur(); }
 				}}
-				placeholder="Search stars & constellations..."
+				placeholder={windowWidth <= 480 ? "Search stars..." : "Search stars & constellations..."}
 				autocomplete="off"
 			/>
 			{#if searchQuery}
@@ -1739,9 +1740,11 @@
 	.input-sizer > .input-measure {
 		grid-area: 1 / 1;
 		font-size: 24px;
-		font-family: inherit;
+		font-family: var(--font-display);
+		font-weight: 400;
+		line-height: 1.1;
 		padding: 16px 28px;
-		letter-spacing: 2px;
+		letter-spacing: 0.12em;
 		white-space: pre;
 	}
 
@@ -1759,11 +1762,12 @@
 		border-radius: 8px;
 		color: #fff;
 		font-size: 24px;
-		font-family: inherit;
+		font-family: var(--font-display);
+		font-weight: 400;
 		padding: 16px 28px;
 		width: 100%;
 		text-align: center;
-		letter-spacing: 2px;
+		letter-spacing: 0.12em;
 		box-sizing: border-box;
 		outline: none;
 		transition: border-color 0.2s;
@@ -2083,6 +2087,8 @@
 	}
 
 	.constellation-name {
+		font-family: var(--font-display);
+		font-weight: 400;
 		font-size: 28px;
 		letter-spacing: 6px;
 	}
@@ -2428,7 +2434,7 @@
 		.input-overlay input {
 			font-size: 18px;
 			padding: 14px 20px;
-			letter-spacing: 1.5px;
+			letter-spacing: 0.1em;
 			width: 85vw;
 			max-width: 85vw;
 		}
@@ -2514,9 +2520,10 @@
 		border-radius: 8px;
 		color: #fff;
 		font-size: 13px;
-		font-family: inherit;
+		font-family: var(--font-ui);
+		font-weight: 500;
 		padding: 0 28px 0 30px;
-		letter-spacing: 0.5px;
+		letter-spacing: 0.08em;
 		outline: none;
 		transition: border-color 0.2s, background 0.2s;
 	}
@@ -2684,8 +2691,10 @@
 	}
 
 	.star-panel-name {
+		font-family: var(--font-display);
+		font-weight: 400;
 		font-size: 16px;
-		letter-spacing: 1px;
+		letter-spacing: 0.08em;
 		color: rgba(255, 215, 0, 0.9);
 		margin-bottom: 4px;
 		padding-right: 20px;
@@ -2888,6 +2897,7 @@
 	}
 
 	.about-title {
+		font-family: var(--font-display);
 		font-size: 14px;
 		letter-spacing: 2px;
 		text-transform: uppercase;
