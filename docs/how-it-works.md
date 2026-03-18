@@ -1,6 +1,6 @@
 # How It Works
 
-`Written in the Stars` treats arbitrary text as a geometric matching problem over a real star catalog.
+`Written in the Stars` treats words and short phrases as a geometric matching problem over a real star catalog.
 
 ## Pipeline
 
@@ -27,6 +27,6 @@ The app runs the matching pipeline in a Web Worker so the UI stays responsive. S
 
 Given the same input text and the same star catalog, the matcher is deterministic. The optimizer uses a seeded PRNG derived from its start parameters, which keeps repeated runs stable and makes debugging easier.
 
-## What The Share URL Contains
+## What the Share URL Contains
 
-Shared links encode the matched constellation result, not just the input text. That means recipients open the exact same star assignment and camera framing that was originally found.
+Shared links encode the matched constellation result and scene settings, not just the input text. Recipients reopen the same text, star assignment, colors, focused constellation, display toggles, brightness, and globe view state.

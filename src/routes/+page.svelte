@@ -1949,18 +1949,18 @@
 
 				<h2 class="about-title">Starspelled</h2>
 				<p class="about-text">
-					Type anything and it becomes a constellation made from real stars. There are ~9,000 stars in here from an
-					actual star catalog, so your constellations are mapped to real positions in the sky.
+					Type a word or short phrase and it becomes a constellation made from real stars. The matcher works against
+					~9,000 cataloged stars, so each result maps to real positions in the sky.
 				</p>
 
 				<div class="about-section">
 					<h3 class="about-heading">How to use</h3>
 					<ul class="about-list">
-						<li>Type any word or phrase to create your constellation</li>
+						<li>Type a word or short phrase to create your constellation</li>
 						<li>Drag vertices to snap them to nearby stars</li>
 						<li>Search for real stars and IAU constellations</li>
 						<li>Click any star to see its details</li>
-						<li>Share your creation via the generated link</li>
+						<li>Share the exact matched stars and settings via the generated link</li>
 					</ul>
 				</div>
 

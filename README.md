@@ -8,7 +8,7 @@ Turn words and short phrases into constellations made from real cataloged stars.
   <img src="docs/Hi_Github.png" alt="HI GITHUB spelled out in real star positions" width="600"/>
 </p>
 <p align="center">
-  <a href="https://starspelled.com/#SGkgR2l0aHVi~Yo4UWAvFbDOcPzLVQrgsQcRog8xeQtSWBucARH2pSdfEGqc15W_HVQf7exEYFX6YVXw5VyL4RjJcuTiUQUGyPoAwxzvBuym1mzA">Open the live "Hi Github" example</a>
+  <a href="https://starspelled.com/#BAEAAKAlRDAJ4c6FPef___mQbLedsMKZnDEzlKLZqEavWrcUxKrlQtiZhwaMDml8GyD1oFfs2JYQJpjmx5sLPHB5lCk-is5WgGgl7YLeJLmXq7MwkIMS04A">Open the live "Hi GitHub" example</a>
 </p>
 <p align="center">
   <img src="docs/Hi_Github_globe.png" alt="HI GITHUB shown in globe view with labels and overlays enabled" width="600"/>
@@ -23,7 +23,7 @@ Text is converted into a graph using Hershey Simplex vector data. The matcher th
 - refines the fit with CMA-ES
 - assigns unique stars to each glyph node with greedy matching plus swap refinement
 
-The result is rendered on an interactive 3D celestial sphere. You can orbit, zoom, and inspect the surrounding sky, then share the exact result through an encoded URL.
+The result is rendered on an interactive 3D celestial sphere. You can orbit, zoom, and inspect the surrounding sky, then share the exact matched stars and display settings through an encoded URL.
 
 See [docs/how-it-works.md](docs/how-it-works.md) for a concise technical walkthrough.
 
@@ -35,7 +35,7 @@ See [docs/how-it-works.md](docs/how-it-works.md) for a concise technical walkthr
 
 ## Example
 
-- Live example: [`HI GITHUB`](https://starspelled.com/#SGkgR2l0aHVi~Yo4UWAvFbDOcPzLVQrgsQcRog8xeQtSWBucARH2pSdfEGqc15W_HVQf7exEYFX6YVXw5VyL4RjJcuTiUQUGyPoAwxzvBuym1mzA)
+- Live example: [`HI GITHUB`](https://starspelled.com/#BAEAAKAlRDAJ4c6FPef___mQbLedsMKZnDEzlKLZqEavWrcUxKrlQtiZhwaMDml8GyD1oFfs2JYQJpjmx5sLPHB5lCk-is5WgGgl7YLeJLmXq7MwkIMS04A)
 
 ## Features
 
