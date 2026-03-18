@@ -2420,14 +2420,14 @@
 			{#if !showInput}
 				<div class="result-actions" role="toolbar" aria-label="Constellation actions">
 					<button
-						class="reset-btn"
+						class="reset-btn result-action-reroll"
 						onclick={handleReroll}
 						disabled={isRerolling}
 						aria-label="Try again for a different constellation placement"
 					>
 						{isRerolling ? 'Trying...' : 'Try again'}
 					</button>
-					<div class="save-image-container">
+					<div class="save-image-container result-action-save">
 						<button
 							class="reset-btn"
 							onclick={() => (saveMenuOpen = !saveMenuOpen)}
@@ -2452,14 +2452,14 @@
 						{/if}
 					</div>
 					<button
-						class="reset-btn share-btn"
+						class="reset-btn share-btn result-action-share"
 						onclick={handleShare}
 						aria-label={copied ? 'Link copied to clipboard' : 'Copy shareable link'}
 					>
 						{copied ? 'Copied!' : 'Share'}
 					</button>
-					<button class="reset-btn" onclick={handleAddAnother} aria-label="Add another constellation">Add more</button>
-					<button class="reset-btn" onclick={handleReset} aria-label="Clear all constellations">Clear all</button>
+					<button class="reset-btn result-action-add" onclick={handleAddAnother} aria-label="Add another constellation">Add more</button>
+					<button class="reset-btn result-action-clear" onclick={handleReset} aria-label="Clear all constellations">Clear all</button>
 				</div>
 			{/if}
 		</div>
@@ -3648,12 +3648,49 @@
 		}
 
 		.result-actions {
+			display: grid;
+			grid-template-columns: repeat(6, minmax(0, 1fr));
 			gap: 8px;
+			width: min(92vw, 420px);
 		}
 
 		.reset-btn {
 			padding: 8px 14px;
 			font-size: 12px;
+		}
+
+		.result-action-reroll {
+			grid-column: 1 / span 2;
+			grid-row: 1;
+			width: 100%;
+		}
+
+		.result-action-add {
+			grid-column: 3 / span 2;
+			grid-row: 1;
+			width: 100%;
+		}
+
+		.result-action-clear {
+			grid-column: 5 / span 2;
+			grid-row: 1;
+			width: 100%;
+		}
+
+		.result-action-save {
+			grid-column: 2 / span 2;
+			grid-row: 2;
+			width: 100%;
+		}
+
+		.result-action-save > .reset-btn {
+			width: 100%;
+		}
+
+		.result-action-share {
+			grid-column: 4 / span 2;
+			grid-row: 2;
+			width: 100%;
 		}
 
 		.result-overlay {
@@ -3708,6 +3745,7 @@
 	@media (max-width: 360px) {
 		.result-actions {
 			gap: 6px;
+			width: min(94vw, 360px);
 		}
 
 		.reset-btn {
