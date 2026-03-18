@@ -92,6 +92,7 @@ interface SearchBudget {
 	topN: number;
 	coarseTopN: number;
 	ransacSampleSize: number;
+	ransacEdgeCount: number;
 	secondaryStartCount: number;
 	coarseJitterCount: number;
 }
@@ -238,6 +239,7 @@ function getSearchBudget(nodeCount: number): SearchBudget {
 			topN: 48,
 			coarseTopN: 180,
 			ransacSampleSize: 900,
+			ransacEdgeCount: 1,
 			secondaryStartCount: 12,
 			coarseJitterCount: 2,
 		};
@@ -248,6 +250,7 @@ function getSearchBudget(nodeCount: number): SearchBudget {
 			topN: 64,
 			coarseTopN: 220,
 			ransacSampleSize: 1100,
+			ransacEdgeCount: 1,
 			secondaryStartCount: 20,
 			coarseJitterCount: 2,
 		};
@@ -257,6 +260,7 @@ function getSearchBudget(nodeCount: number): SearchBudget {
 		topN: 80,
 		coarseTopN: 300,
 		ransacSampleSize: 1500,
+		ransacEdgeCount: 2,
 		secondaryStartCount: 80,
 		coarseJitterCount: 3,
 	};
@@ -302,6 +306,35 @@ function makeMatchCostBreakdown(
 		duplicates,
 		blacklist,
 		total: totalMatchCost(pointDistance, pointDistanceSq, edgeShape, duplicates, blacklist),
+	};
+}
+
+interface EqProjectionRow {
+	ty: number;
+	pointY: Float64Array;
+	offsetX: Float64Array;
+	invScale: number;
+}
+
+function buildEqProjectionRow(anchorDx: Float64Array, anchorDy: Float64Array, ty: number, scale: number): EqProjectionRow {
+	const n = anchorDx.length;
+	const pointY = new Float64Array(n);
+	const offsetX = new Float64Array(n);
+
+	for (let i = 0; i < n; i++) {
+		const py = ty + scale * anchorDy[i];
+		const pointDec = py * Math.PI - Math.PI / 2;
+		const cosDec = Math.cos(pointDec);
+		const xStretch = Math.min(2.5, cosDec > 0.1 ? 1 / cosDec : 2.5);
+		pointY[i] = py;
+		offsetX[i] = scale * anchorDx[i] * xStretch;
+	}
+
+	return {
+		ty,
+		pointY,
+		offsetX,
+		invScale: 1 / scale,
 	};
 }
 
@@ -368,6 +401,76 @@ function computeAssignedMatchCost(
 		assignedStarIdx.length - uniqueCount,
 		blacklistPenalty,
 	);
+}
+
+function computeCostEqProjected(
+	grid: StarGrid,
+	edges: [number, number][],
+	tx: number,
+	row: EqProjectionRow,
+	projX: Float64Array,
+	projY: Float64Array,
+	nearestIdx: Int32Array,
+	nearestX: Float64Array,
+	nearestY: Float64Array,
+	usedGen: Uint32Array,
+	gen: number,
+	costCeiling: number,
+	blacklist: Set<number> | null = null,
+): number {
+	const n = row.pointY.length;
+	const invScale = row.invScale;
+	let pointDistance = 0;
+	let pointDistanceSq = 0;
+	let blacklistPenalty = 0;
+	let uniqueCount = 0;
+
+	for (let i = 0; i < n; i++) {
+		const pointY = row.pointY[i];
+		const px = tx - row.offsetX[i];
+		projX[i] = px;
+		projY[i] = pointY;
+
+		const nn = grid.nearest1WithDist(px, pointY);
+		if (nn) {
+			const d = Math.sqrt(grid.lastDistSq) * invScale;
+			pointDistance += d;
+			pointDistanceSq += d * d;
+			if (blacklist && blacklist.has(nn.idx)) blacklistPenalty += 1;
+			nearestIdx[i] = nn.idx;
+			nearestX[i] = nn.x;
+			nearestY[i] = nn.y;
+			if (usedGen[nn.idx] !== gen) {
+				usedGen[nn.idx] = gen;
+				uniqueCount++;
+			}
+		} else {
+			pointDistance += invScale;
+			pointDistanceSq += invScale * invScale;
+			nearestIdx[i] = -1;
+		}
+
+		const partialTotal =
+			pointDistance * POINT_DISTANCE_WEIGHT +
+			pointDistanceSq * POINT_DISTANCE_SQ_WEIGHT +
+			blacklistPenalty * BLACKLIST_WEIGHT;
+		if (partialTotal > costCeiling) return partialTotal;
+	}
+
+	let edgeShape = 0;
+	for (let e = 0; e < edges.length; e++) {
+		const nA = edges[e][0];
+		const nB = edges[e][1];
+		if (nearestIdx[nA] === -1 || nearestIdx[nB] === -1) {
+			edgeShape += invScale;
+			continue;
+		}
+		const errX = nearestX[nB] - nearestX[nA] - (projX[nB] - projX[nA]);
+		const errY = nearestY[nB] - nearestY[nA] - (projY[nB] - projY[nA]);
+		edgeShape += Math.sqrt(errX * errX + errY * errY) * invScale;
+	}
+
+	return totalMatchCost(pointDistance, pointDistanceSq, edgeShape, n - uniqueCount, blacklistPenalty);
 }
 
 function computeCostEq(
@@ -891,22 +994,25 @@ export function matchStarsToAnchors(
 	// highly correlated. Skip redundant positions proportionally.
 	for (const [jx, jy] of activeJitterOffsets) {
 		for (const scale of scaleValues) {
+			const coarseRows: EqProjectionRow[] = new Array(coarseStepsY);
+			for (let yi = 0; yi < coarseStepsY; yi++) {
+				const ty = minSY + (rangeY * (yi + jy + 0.5)) / coarseStepsY;
+				coarseRows[yi] = buildEqProjectionRow(anchorDx, anchorDy, ty, scale);
+			}
+
 			const strideX = Math.max(1, Math.floor(scale / coarseCellW));
 			const strideY = Math.max(1, Math.floor(scale / coarseCellH));
 			for (let xi = 0; xi < coarseStepsX; xi += strideX) {
 				const tx = minSX + (rangeX * (xi + jx + 0.5)) / coarseStepsX;
 				for (let yi = 0; yi < coarseStepsY; yi += strideY) {
-					const ty = minSY + (rangeY * (yi + jy + 0.5)) / coarseStepsY;
+					const row = coarseRows[yi];
 					gen++;
 					coarseEvalCount++;
-					const cost = computeCostEq(
+					const cost = computeCostEqProjected(
 						eqGrid,
-						anchorDx,
-						anchorDy,
 						edges,
 						tx,
-						ty,
-						scale,
+						row,
 						projX,
 						projY,
 						nearestIdx,
@@ -917,7 +1023,7 @@ export function matchStarsToAnchors(
 						coarseWorstCost,
 						blacklist,
 					);
-					insertCoarse({ tx, ty, scale, cost });
+					insertCoarse({ tx, ty: row.ty, scale, cost });
 				}
 			}
 		}
@@ -943,20 +1049,23 @@ export function matchStarsToAnchors(
 		if (scaleIdx < scaleValues.length - 1) fineScales.push(scaleValues[scaleIdx + 1]);
 
 		for (const fineScale of fineScales) {
+			const fineRows: EqProjectionRow[] = new Array(fineSteps);
+			for (let fj = 0; fj < fineSteps; fj++) {
+				const fty = cand.ty - fineHalfH + fineStepH * (fj + 0.5);
+				fineRows[fj] = buildEqProjectionRow(anchorDx, anchorDy, fty, fineScale);
+			}
+
 			for (let fi = 0; fi < fineSteps; fi++) {
 				const ftx = cand.tx - fineHalfW + fineStepW * (fi + 0.5);
 				for (let fj = 0; fj < fineSteps; fj++) {
-					const fty = cand.ty - fineHalfH + fineStepH * (fj + 0.5);
+					const row = fineRows[fj];
 					gen++;
 					fineEvalCount++;
-					const cost = computeCostEq(
+					const cost = computeCostEqProjected(
 						eqGrid,
-						anchorDx,
-						anchorDy,
 						edges,
 						ftx,
-						fty,
-						fineScale,
+						row,
 						projX,
 						projY,
 						nearestIdx,
@@ -967,7 +1076,7 @@ export function matchStarsToAnchors(
 						worstBestCost,
 						blacklist,
 					);
-					insertCandidate({ tx: ftx, ty: fty, scale: fineScale, cost });
+					insertCandidate({ tx: ftx, ty: row.ty, scale: fineScale, cost });
 				}
 			}
 		}
@@ -989,7 +1098,9 @@ export function matchStarsToAnchors(
 		return { a, b, dx, dy, len: Math.sqrt(dx * dx + dy * dy) };
 	});
 	edgeInfos.sort((a, b) => b.len - a.len);
-	const ransacEdges = edgeInfos.slice(0, Math.min(2, edgeInfos.length));
+	// Longer phrases already have stronger coarse candidates, so one dominant
+	// edge is usually enough to seed RANSAC without doubling the pass cost.
+	const ransacEdges = edgeInfos.slice(0, Math.min(budget.ransacEdgeCount, edgeInfos.length));
 
 	// Sample stars with a stride; use two different offsets to catch different stars
 	const ransacSampleSize = budget.ransacSampleSize;
