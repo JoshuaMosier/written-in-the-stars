@@ -55,6 +55,16 @@ describe('matchStarsToAnchors', () => {
 			expect(result.transform.y).toBeLessThanOrEqual(1);
 			expect(result.transform.scale).toBeGreaterThan(0);
 		});
+
+		it('reports both proxy and final standardized costs', () => {
+			const graph = textToGraph('HI');
+			const result = matchStarsToAnchors(stars, graph);
+
+			expect(result.searchCost).toBeLessThan(Infinity);
+			expect(result.costBreakdown).toBeDefined();
+			expect(result.costBreakdown!.total).toBe(result.cost);
+			expect(result.costBreakdown!.duplicates).toBe(0);
+		});
 	});
 
 	describe('multi-letter text', () => {

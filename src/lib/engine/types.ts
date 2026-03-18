@@ -17,9 +17,20 @@ export interface Star {
 	wiki?: { url: string; description: string };
 }
 
+export interface MatchCostBreakdown {
+	pointDistance: number;
+	pointDistanceSq: number;
+	edgeShape: number;
+	duplicates: number;
+	blacklist: number;
+	total: number;
+}
+
 export interface MatchResult {
 	pairs: { star: Star; nodeIndex: number }[];
-	cost: number;
+	cost: number; // standardized final-assignment score
+	searchCost?: number; // nearest-neighbor proxy score used during optimization
+	costBreakdown?: MatchCostBreakdown;
 	transform: { x: number; y: number; scale: number };
 	graph: GlyphGraph;
 }

@@ -68,6 +68,7 @@ npm run dev
 - `npm run dev` - dev server
 - `npm run check` - Svelte and TypeScript checks
 - `npm run test` - matcher and sharing tests
+- `npm run benchmark:matcher` - fixed matcher timing + score benchmark
 - `npm run build` - production build
 - `npm run fetch-stars` - regenerate the star catalog from source
 - `npm run generate-og` - regenerate the Open Graph image

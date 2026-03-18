@@ -8,6 +8,7 @@
 		"build": "vite build",
 		"preview": "vite preview",
 		"fetch-stars": "tsx scripts/fetch-stars.ts",
+		"benchmark:matcher": "tsx scripts/benchmark-matcher.ts",
 		"visualize": "tsx scripts/visualize.ts",
 		"generate-og": "tsx scripts/generate-og-image.ts",
 		"check": "svelte-check --tsconfig ./tsconfig.json",

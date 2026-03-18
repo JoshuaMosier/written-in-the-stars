@@ -15,7 +15,7 @@
 import kdTreePkg from 'kd-tree-javascript';
 const { kdTree } = kdTreePkg;
 import { cmaes } from './optimizer';
-import type { Star, MatchResult, GlyphGraph } from './types';
+import type { Star, MatchResult, GlyphGraph, MatchCostBreakdown } from './types';
 
 // ---------------------------------------------------------------------------
 // Projection helpers
@@ -149,6 +149,110 @@ class StarGrid {
 // Cost computation — equirectangular (coarse grid search)
 // ---------------------------------------------------------------------------
 
+const POINT_DISTANCE_WEIGHT = 1.0;
+const POINT_DISTANCE_SQ_WEIGHT = 1.0;
+const EDGE_SHAPE_WEIGHT = 1.5;
+const DUPLICATE_WEIGHT = 0.3;
+const BLACKLIST_WEIGHT = 2.0;
+
+function totalMatchCost(
+	pointDistance: number,
+	pointDistanceSq: number,
+	edgeShape: number,
+	duplicates: number,
+	blacklist: number,
+): number {
+	return (
+		pointDistance * POINT_DISTANCE_WEIGHT +
+		pointDistanceSq * POINT_DISTANCE_SQ_WEIGHT +
+		edgeShape * EDGE_SHAPE_WEIGHT +
+		duplicates * DUPLICATE_WEIGHT +
+		blacklist * BLACKLIST_WEIGHT
+	);
+}
+
+function makeMatchCostBreakdown(
+	pointDistance: number,
+	pointDistanceSq: number,
+	edgeShape: number,
+	duplicates: number,
+	blacklist: number,
+): MatchCostBreakdown {
+	return {
+		pointDistance,
+		pointDistanceSq,
+		edgeShape,
+		duplicates,
+		blacklist,
+		total: totalMatchCost(pointDistance, pointDistanceSq, edgeShape, duplicates, blacklist),
+	};
+}
+
+function computeAssignedMatchCost(
+	projected: Point2D[],
+	starPositions: Point2D[],
+	assignedStarIdx: Int32Array,
+	edges: [number, number][],
+	scale: number,
+	blacklist: Set<number> | null = null,
+): MatchCostBreakdown {
+	if (scale <= 0) {
+		return makeMatchCostBreakdown(Infinity, 0, 0, 0, 0);
+	}
+
+	const invScale = 1 / scale;
+	let pointDistance = 0;
+	let pointDistanceSq = 0;
+	let edgeShape = 0;
+	let blacklistPenalty = 0;
+	let uniqueCount = 0;
+	const seenStars = new Set<number>();
+
+	for (let i = 0; i < assignedStarIdx.length; i++) {
+		const starIdx = assignedStarIdx[i];
+		const starPos = starIdx >= 0 ? starPositions[starIdx] : undefined;
+		if (!starPos) {
+			pointDistance += invScale;
+			pointDistanceSq += invScale * invScale;
+			continue;
+		}
+
+		const dx = starPos.x - projected[i].x;
+		const dy = starPos.y - projected[i].y;
+		const d = Math.sqrt(dx * dx + dy * dy) * invScale;
+		pointDistance += d;
+		pointDistanceSq += d * d;
+		if (blacklist && blacklist.has(starIdx)) blacklistPenalty += 1;
+		if (!seenStars.has(starIdx)) {
+			seenStars.add(starIdx);
+			uniqueCount++;
+		}
+	}
+
+	for (let e = 0; e < edges.length; e++) {
+		const nA = edges[e][0];
+		const nB = edges[e][1];
+		const starA = assignedStarIdx[nA] >= 0 ? starPositions[assignedStarIdx[nA]] : undefined;
+		const starB = assignedStarIdx[nB] >= 0 ? starPositions[assignedStarIdx[nB]] : undefined;
+		if (!starA || !starB) {
+			edgeShape += invScale;
+			continue;
+		}
+
+		const errX = starB.x - starA.x - (projected[nB].x - projected[nA].x);
+		const errY = starB.y - starA.y - (projected[nB].y - projected[nA].y);
+		edgeShape += Math.sqrt(errX * errX + errY * errY) * invScale;
+	}
+
+	return makeMatchCostBreakdown(
+		pointDistance,
+		pointDistanceSq,
+		edgeShape,
+		assignedStarIdx.length - uniqueCount,
+		blacklistPenalty,
+	);
+}
+
 function computeCostEq(
 	grid: StarGrid,
 	anchorDx: Float64Array,
@@ -171,7 +275,9 @@ function computeCostEq(
 
 	const n = anchorDx.length;
 	const invScale = 1 / scale;
-	let totalDist = 0;
+	let pointDistance = 0;
+	let pointDistanceSq = 0;
+	let blacklistPenalty = 0;
 	let uniqueCount = 0;
 
 	for (let i = 0; i < n; i++) {
@@ -186,9 +292,9 @@ function computeCostEq(
 		const nn = grid.nearest1WithDist(px, pointY);
 		if (nn) {
 			const d = Math.sqrt(grid.lastDistSq) * invScale;
-			totalDist += d + d * d;
-			// Heavy penalty for reusing blacklisted stars
-			if (blacklist && blacklist.has(nn.idx)) totalDist += 2.0;
+			pointDistance += d;
+			pointDistanceSq += d * d;
+			if (blacklist && blacklist.has(nn.idx)) blacklistPenalty += 1;
 			nearestIdx[i] = nn.idx;
 			nearestX[i] = nn.x;
 			nearestY[i] = nn.y;
@@ -197,30 +303,34 @@ function computeCostEq(
 				uniqueCount++;
 			}
 		} else {
-			totalDist += invScale + invScale * invScale;
+			pointDistance += invScale;
+			pointDistanceSq += invScale * invScale;
 			nearestIdx[i] = -1;
 		}
 
-		if (totalDist > costCeiling) return totalDist;
+		const partialTotal =
+			pointDistance * POINT_DISTANCE_WEIGHT +
+			pointDistanceSq * POINT_DISTANCE_SQ_WEIGHT +
+			blacklistPenalty * BLACKLIST_WEIGHT;
+		if (partialTotal > costCeiling) return partialTotal;
 	}
 
-	let edgeCost = 0;
+	let edgeShape = 0;
 	for (let e = 0; e < edges.length; e++) {
 		const nA = edges[e][0];
 		const nB = edges[e][1];
 		if (nearestIdx[nA] === -1 || nearestIdx[nB] === -1) {
-			edgeCost += invScale;
+			edgeShape += invScale;
 			continue;
 		}
 		const errX = nearestX[nB] - nearestX[nA] - (projX[nB] - projX[nA]);
 		const errY = nearestY[nB] - nearestY[nA] - (projY[nB] - projY[nA]);
-		edgeCost += Math.sqrt(errX * errX + errY * errY) * invScale;
+		edgeShape += Math.sqrt(errX * errX + errY * errY) * invScale;
 	}
 
-	const duplicates = n - uniqueCount;
 	// 1.5× edge weight: penalize shape distortion more than raw distance
 	// 0.3× duplicate penalty: discourage reusing the same star for multiple nodes
-	return totalDist + edgeCost * 1.5 + duplicates * 0.3;
+	return totalMatchCost(pointDistance, pointDistanceSq, edgeShape, n - uniqueCount, blacklistPenalty);
 }
 
 // ---------------------------------------------------------------------------
@@ -249,7 +359,9 @@ function computeCostGnomonic(
 
 	const n = anchorDx.length;
 	const invScale = 1 / scale;
-	let totalDist = 0;
+	let pointDistance = 0;
+	let pointDistanceSq = 0;
+	let blacklistPenalty = 0;
 	let uniqueCount = 0;
 
 	// In gnomonic space: no cos(dec) correction needed — isotropic geometry
@@ -262,9 +374,9 @@ function computeCostGnomonic(
 		const nn = grid.nearest1WithDist(px, py);
 		if (nn) {
 			const d = Math.sqrt(grid.lastDistSq) * invScale;
-			totalDist += d + d * d;
-			// Heavy penalty for reusing blacklisted stars
-			if (blacklist && blacklist.has(nn.idx)) totalDist += 2.0;
+			pointDistance += d;
+			pointDistanceSq += d * d;
+			if (blacklist && blacklist.has(nn.idx)) blacklistPenalty += 1;
 			nearestIdx[i] = nn.idx;
 			nearestX[i] = nn.x;
 			nearestY[i] = nn.y;
@@ -273,28 +385,32 @@ function computeCostGnomonic(
 				uniqueCount++;
 			}
 		} else {
-			totalDist += invScale + invScale * invScale;
+			pointDistance += invScale;
+			pointDistanceSq += invScale * invScale;
 			nearestIdx[i] = -1;
 		}
 
-		if (totalDist > costCeiling) return totalDist;
+		const partialTotal =
+			pointDistance * POINT_DISTANCE_WEIGHT +
+			pointDistanceSq * POINT_DISTANCE_SQ_WEIGHT +
+			blacklistPenalty * BLACKLIST_WEIGHT;
+		if (partialTotal > costCeiling) return partialTotal;
 	}
 
-	let edgeCost = 0;
+	let edgeShape = 0;
 	for (let e = 0; e < edges.length; e++) {
 		const nA = edges[e][0];
 		const nB = edges[e][1];
 		if (nearestIdx[nA] === -1 || nearestIdx[nB] === -1) {
-			edgeCost += invScale;
+			edgeShape += invScale;
 			continue;
 		}
 		const errX = nearestX[nB] - nearestX[nA] - (projX[nB] - projX[nA]);
 		const errY = nearestY[nB] - nearestY[nA] - (projY[nB] - projY[nA]);
-		edgeCost += Math.sqrt(errX * errX + errY * errY) * invScale;
+		edgeShape += Math.sqrt(errX * errX + errY * errY) * invScale;
 	}
 
-	const duplicates = n - uniqueCount;
-	return totalDist + edgeCost * 1.5 + duplicates * 0.3;
+	return totalMatchCost(pointDistance, pointDistanceSq, edgeShape, n - uniqueCount, blacklistPenalty);
 }
 
 // ---------------------------------------------------------------------------
@@ -308,7 +424,7 @@ function resolveDuplicates(
 	stars: Star[],
 	nodeCount: number,
 	edges: [number, number][],
-): { star: Star; nodeIndex: number }[] {
+): { pairs: { star: Star; nodeIndex: number }[]; assignment: Int32Array } {
 	// Build KD-tree in gnomonic space for k-nearest queries
 	const gnoTree = new kdTree(
 		gnoStars,
@@ -453,7 +569,7 @@ function resolveDuplicates(
 			result.push({ star: stars[assignment[i]], nodeIndex: i });
 		}
 	}
-	return result;
+	return { pairs: result, assignment: Int32Array.from(assignment) };
 }
 
 // ---------------------------------------------------------------------------
@@ -962,7 +1078,22 @@ export function matchStarsToAnchors(
 		});
 	}
 
-	const pairs = resolveDuplicates(gnoStarsFinal, gnoStarPositions, finalProjected, stars, nodes.length, edges);
+	const { pairs, assignment: assignedStarIdx } = resolveDuplicates(
+		gnoStarsFinal,
+		gnoStarPositions,
+		finalProjected,
+		stars,
+		nodes.length,
+		edges,
+	);
+	const costBreakdown = computeAssignedMatchCost(
+		finalProjected,
+		gnoStarPositions,
+		assignedStarIdx,
+		edges,
+		gnoScale,
+		blacklist,
+	);
 
 	// Convert gnomonic center + offset back to equirectangular for camera
 	// Inverse gnomonic: recover (ra, dec) from tangent-plane (x, y)
@@ -984,7 +1115,9 @@ export function matchStarsToAnchors(
 
 	return {
 		pairs,
-		cost: bestResult.cost,
+		cost: costBreakdown.total,
+		searchCost: bestResult.cost,
+		costBreakdown,
 		transform: {
 			x: normRa / (2 * Math.PI),
 			y: (finalDec + Math.PI / 2) / Math.PI,
