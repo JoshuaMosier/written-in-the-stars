@@ -1,6 +1,24 @@
 import { describe, it, expect } from 'vitest';
 import { textToGraph } from './glyphs';
 
+const SMALL_GRAPH_WORDS = [
+	'STAR',
+	'ORION',
+	'HELLO',
+	'GALAXY',
+	'NEBULA',
+	'AURORA',
+	'STELLA',
+	'NOVA',
+	'COMET',
+	'LUNAR',
+	'SOLAR',
+	'LYRA',
+	'ASTRAL',
+	'METEOR',
+	'ZENITH',
+];
+
 describe('textToGraph', () => {
 	it('returns nodes and edges for a single letter', () => {
 		const graph = textToGraph('A');
@@ -55,5 +73,12 @@ describe('textToGraph', () => {
 		const b = textToGraph('STAR');
 		expect(a.nodes).toEqual(b.nodes);
 		expect(a.edges).toEqual(b.edges);
+	});
+
+	it('keeps the small-graph benchmark corpus below the medium budget cutoff', () => {
+		for (const word of SMALL_GRAPH_WORDS) {
+			const graph = textToGraph(word);
+			expect(graph.nodes.length, word).toBeLessThan(40);
+		}
 	});
 });

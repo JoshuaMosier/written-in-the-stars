@@ -14,6 +14,23 @@ type SearchMode = 'default' | 'oracle';
 type BenchmarkMode = SearchMode | 'compare';
 
 const DEFAULT_PHRASES = ['I', 'STAR', 'ORION', 'HELLO', 'GALAXY', 'NIGHT SKY', 'WRITTEN IN THE STARS'];
+const SMALL_GRAPH_PHRASES = [
+	'STAR',
+	'ORION',
+	'HELLO',
+	'GALAXY',
+	'NEBULA',
+	'AURORA',
+	'STELLA',
+	'NOVA',
+	'COMET',
+	'LUNAR',
+	'SOLAR',
+	'LYRA',
+	'ASTRAL',
+	'METEOR',
+	'ZENITH',
+];
 const EXTENDED_PHRASES = [
 	...DEFAULT_PHRASES,
 	'LOOK UP AT THE NIGHT SKY',
@@ -68,6 +85,7 @@ function parseArgs(): ParsedArgs {
 	let iterations = 3;
 	let mode: BenchmarkMode = 'default';
 	let useExtended = false;
+	let useSmallGraphs = false;
 	const phrases: string[] = [];
 
 	for (let i = 0; i < args.length; i++) {
@@ -93,13 +111,24 @@ function parseArgs(): ParsedArgs {
 			useExtended = true;
 			continue;
 		}
+		if (arg === '--small-graphs') {
+			useSmallGraphs = true;
+			continue;
+		}
 		phrases.push(arg);
 	}
 
 	return {
 		iterations,
 		mode,
-		phrases: phrases.length > 0 ? phrases : useExtended ? EXTENDED_PHRASES : DEFAULT_PHRASES,
+		phrases:
+			phrases.length > 0
+				? phrases
+				: useSmallGraphs
+					? SMALL_GRAPH_PHRASES
+					: useExtended
+						? EXTENDED_PHRASES
+						: DEFAULT_PHRASES,
 	};
 }
 

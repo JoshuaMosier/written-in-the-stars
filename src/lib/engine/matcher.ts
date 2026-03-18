@@ -303,13 +303,13 @@ function getSearchBudget(nodeCount: number, searchMode: 'default' | 'oracle'): S
 	}
 
 	return {
-		topN: 80,
+		topN: 96,
 		coarseTopN: 300,
 		ransacSampleSize: 1500,
 		ransacEdgeCount: 2,
-		secondaryStartCount: 80,
+		secondaryStartCount: 96,
 		coarseJitterCount: 3,
-		finalistCount: 4,
+		finalistCount: 8,
 		cmaMaxEvals: 350,
 	};
 }
@@ -971,7 +971,7 @@ function resolveDuplicates(
 
 	const buildExactSeed = (): Int32Array | null => {
 		if (nodeCount > 40) return null;
-		const seedCandidateLimit = nodeCount >= 70 ? 12 : nodeCount >= 40 ? 16 : 24;
+		const seedCandidateLimit = nodeCount >= 30 ? 28 : 32;
 		const seedCandidates = candidates.map((nodeCandidates) => nodeCandidates.slice(0, Math.min(seedCandidateLimit, nodeCandidates.length)));
 		return solveSparseAssignment(seedCandidates, nodeCount);
 	};
