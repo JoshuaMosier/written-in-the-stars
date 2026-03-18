@@ -1051,8 +1051,10 @@
 	let pinchStartDist = 0;
 	let pinchStartFov = DEFAULT_FOV;
 
-	// IAU overlay state
-	let iauOverlayActive = false;
+	type ConstellationDisplayMode = 'ambient' | 'all' | 'none';
+
+	// IAU overlay / ambient display mode
+	let constellationDisplayMode: ConstellationDisplayMode = 'ambient';
 	let iauOverlayGroup: THREE.Group | null = null;
 	let iauLabelData: { label: Text; centroid: THREE.Vector3 }[] = [];
 
@@ -1132,7 +1134,7 @@
 			}
 		}
 
-		if (iauOverlayActive) {
+		if (iauOverlayGroup) {
 			for (const { label, centroid } of iauLabelData) {
 				const dot = centroid.dot(overlayCameraDir);
 				if (dot <= 0.2) {
@@ -1431,7 +1433,7 @@
 		if (uniformsRef) uniformsRef.uDim.value = 0.55;
 
 		// Dim IAU overlay further when showing user constellation
-		if (iauOverlayActive && iauOverlayGroup) {
+		if (iauOverlayGroup) {
 			iauOverlayGroup.traverse((child) => {
 				if ((child as any).material && (child as any).material.opacity !== undefined) {
 					(child as any).material.opacity *= 0.12;
@@ -2130,15 +2132,101 @@
 		ambientConstellations = [];
 	}
 
-	function resumeAmbientCycle() {
-		ambientPaused = false;
-		for (const timerId of ambientTimerIds) {
-			clearTimeout(timerId);
+	function clearIAUOverlay() {
+		if (iauOverlayGroup && sceneRef) {
+			disposeObject3D(iauOverlayGroup);
+			iauOverlayGroup = null;
 		}
-		ambientTimerIds.clear();
-		scheduleNext(1000);
-		scheduleNext(2500);
-		scheduleNext(4000);
+		for (const { label } of iauLabelData) {
+			disposeOverlayLabel(label);
+		}
+		iauLabelData = [];
+	}
+
+	function showIAUOverlay() {
+		if (iauOverlayGroup || !sceneRef || !cameraRef) return;
+
+		// Ensure constellations are resolved
+		if (resolvedConstellations.length === 0) resolveConstellations();
+
+		// Build a single batched LineSegments geometry for all 88 constellations
+		const group = new THREE.Group();
+		const allPositions: number[] = [];
+
+		for (const rc of resolvedConstellations) {
+			for (const { posA, posB } of rc.edges) {
+				allPositions.push(posA.x, posA.y, posA.z, posB.x, posB.y, posB.z);
+			}
+		}
+
+		if (allPositions.length > 0) {
+			const segGeom = new LineSegmentsGeometry();
+			segGeom.setPositions(allPositions);
+
+			// Halo pass - wider, soft glow (matches ambient constellation style)
+			const haloMat = new LineMaterial({
+				color: 0xffffff,
+				linewidth: 6,
+				transparent: true,
+				opacity: 0.07,
+				depthTest: false,
+				blending: THREE.AdditiveBlending,
+			});
+			haloMat.resolution.copy(rendererSize);
+			const halo = new LineSegments2(segGeom, haloMat);
+			halo.renderOrder = 1;
+			group.add(halo);
+
+			// Core pass - thinner, brighter
+			const coreMat = new LineMaterial({
+				color: 0xffffff,
+				linewidth: 2,
+				transparent: true,
+				opacity: 0.22,
+				depthTest: false,
+				blending: THREE.AdditiveBlending,
+			});
+			coreMat.resolution.copy(rendererSize);
+			const core = new LineSegments2(segGeom, coreMat);
+			core.renderOrder = 1;
+			group.add(core);
+		}
+
+		sceneRef.add(group);
+		iauOverlayGroup = group;
+
+		// If user constellations are already active, dim the IAU overlay
+		if (constellationGroups.length > 0) {
+			iauOverlayGroup.traverse((child) => {
+				if ((child as any).material && (child as any).material.opacity !== undefined) {
+					(child as any).material.opacity *= 0.12;
+				}
+			});
+		}
+
+		iauLabelData = [];
+		for (const rc of resolvedConstellations) {
+			iauLabelData.push({ label: createOverlayLabel(rc.name), centroid: rc.centroid });
+		}
+	}
+
+	function syncConstellationDisplayMode(mode: ConstellationDisplayMode) {
+		constellationDisplayMode = mode;
+
+		if (mode === 'all') {
+			stopAmbientCycle();
+			showIAUOverlay();
+			return;
+		}
+
+		clearIAUOverlay();
+
+		if (mode === 'ambient' && constellationGroups.length === 0) {
+			startAmbientCycle();
+			return;
+		}
+
+		stopAmbientCycle();
 	}
 
 	const AMBIENT_DRAW_DURATION = 400;
@@ -2330,94 +2418,8 @@
 		}
 	}
 
-	export function toggleIAUOverlay(show: boolean) {
-		if (show === iauOverlayActive) return;
-		iauOverlayActive = show;
-
-		if (show) {
-			if (!sceneRef || !cameraRef) return;
-
-			// Ensure constellations are resolved
-			if (resolvedConstellations.length === 0) resolveConstellations();
-
-			// Stop ambient cycling
-			stopAmbientCycle();
-
-			// Build a single batched LineSegments geometry for all 88 constellations
-			const group = new THREE.Group();
-			const allPositions: number[] = [];
-
-			for (const rc of resolvedConstellations) {
-				for (const { posA, posB } of rc.edges) {
-					allPositions.push(posA.x, posA.y, posA.z, posB.x, posB.y, posB.z);
-				}
-			}
-
-			if (allPositions.length > 0) {
-				const segGeom = new LineSegmentsGeometry();
-				segGeom.setPositions(allPositions);
-
-				// Halo pass - wider, soft glow (matches ambient constellation style)
-				const haloMat = new LineMaterial({
-					color: 0xffffff,
-					linewidth: 6,
-					transparent: true,
-					opacity: 0.07,
-					depthTest: false,
-					blending: THREE.AdditiveBlending,
-				});
-				haloMat.resolution.copy(rendererSize);
-				const halo = new LineSegments2(segGeom, haloMat);
-				halo.renderOrder = 1;
-				group.add(halo);
-
-				// Core pass - thinner, brighter
-				const coreMat = new LineMaterial({
-					color: 0xffffff,
-					linewidth: 2,
-					transparent: true,
-					opacity: 0.22,
-					depthTest: false,
-					blending: THREE.AdditiveBlending,
-				});
-				coreMat.resolution.copy(rendererSize);
-				const core = new LineSegments2(segGeom, coreMat);
-				core.renderOrder = 1;
-				group.add(core);
-			}
-
-			sceneRef.add(group);
-			iauOverlayGroup = group;
-
-			// If user constellations are already active, dim the IAU overlay
-			if (constellationGroups.length > 0) {
-				iauOverlayGroup.traverse((child) => {
-					if ((child as any).material && (child as any).material.opacity !== undefined) {
-						(child as any).material.opacity *= 0.12;
-					}
-				});
-			}
-
-			iauLabelData = [];
-			for (const rc of resolvedConstellations) {
-				iauLabelData.push({ label: createOverlayLabel(rc.name), centroid: rc.centroid });
-			}
-		} else {
-			// Remove overlay
-			if (iauOverlayGroup && sceneRef) {
-				disposeObject3D(iauOverlayGroup);
-				iauOverlayGroup = null;
-			}
-			for (const { label } of iauLabelData) {
-				disposeOverlayLabel(label);
-			}
-			iauLabelData = [];
-
-			// Resume ambient cycling if no user constellation is active
-			if (constellationGroups.length === 0) {
-				resumeAmbientCycle();
-			}
-		}
+	export function setConstellationDisplayMode(mode: ConstellationDisplayMode) {
+		syncConstellationDisplayMode(mode);
 	}
 
 	export function animateToMatch(result: MatchResult, fast = false, color?: string) {
@@ -2593,7 +2595,7 @@
 		clearAllConstellations();
 		if (uniformsRef) uniformsRef.uDim.value = 1.0;
 		// Restore IAU overlay opacity if it was dimmed
-		if (iauOverlayActive && iauOverlayGroup) {
+		if (iauOverlayGroup) {
 			let matIdx = 0;
 			const restoreOpacities = [0.07, 0.22]; // halo, core
 			iauOverlayGroup.traverse((child) => {
@@ -2604,8 +2606,9 @@
 			});
 		}
 
-		// Only resume ambient if IAU overlay is not active
-		if (!iauOverlayActive && resolvedConstellations.length > 0) resumeAmbientCycle();
+		if (constellationDisplayMode === 'ambient' && resolvedConstellations.length > 0) {
+			startAmbientCycle();
+		}
 		if (!meteorsEnabled) resumeMeteors();
 		if (!cometsEnabled) resumeComets();
 
@@ -4082,7 +4085,12 @@
 		};
 		const onContextRestored = () => {
 			render();
-			startAmbientCycle();
+			if (constellationDisplayMode === 'all') {
+				clearIAUOverlay();
+				showIAUOverlay();
+			} else if (constellationDisplayMode === 'ambient' && constellationGroups.length === 0) {
+				startAmbientCycle();
+			}
 			scheduleMeteor();
 			scheduleComet();
 		};
@@ -4092,7 +4100,7 @@
 		onReady();
 
 		// Start ambient constellation cycling
-		startAmbientCycle();
+		if (constellationDisplayMode === 'ambient') startAmbientCycle();
 
 		return () => {
 			cancelAnimationFrame(animId);

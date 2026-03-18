@@ -35,7 +35,7 @@ function makeState(entries: Array<{ text: string; color: string; baseIdx: number
 		}),
 		focusedIndex: entries.length - 1,
 		settings: {
-			iauOverlay: true,
+			constellationMode: 'all',
 			starLabels: false,
 			coordGrid: true,
 			brightness: 1.4,
@@ -72,6 +72,8 @@ describe('encodeShareStateToHash / decodeHashToShareState', () => {
 
 	it('round-trips lowercase and punctuation text through the packed alphabet', () => {
 		const state = makeState([{ text: "don't panic?", color: '#ff0000', baseIdx: 900 }]);
+		state.settings.constellationMode = 'none';
+		state.settings.brightness = 0;
 		const allStars = state.entries[0].result.pairs.map(pair => pair.star);
 
 		const hash = encodeShareStateToHash(state);
@@ -80,6 +82,8 @@ describe('encodeShareStateToHash / decodeHashToShareState', () => {
 		expect(decoded).not.toBeNull();
 		expect(decoded!.entries[0].text).toBe("don't panic?");
 		expect(decoded!.entries[0].color).toBe('#ff0000');
+		expect(decoded!.settings.constellationMode).toBe('none');
+		expect(decoded!.settings.brightness).toBe(0);
 	});
 
 	it('returns null for invalid or corrupted hashes', () => {

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import {
+		type ConstellationDisplayMode,
 		decodeHashToShareState,
 		encodeShareStateToHash,
 		type ShareSettings,
@@ -534,7 +535,8 @@
 	const reducedMotion = typeof window !== 'undefined'
 		? window.matchMedia('(prefers-reduced-motion: reduce)').matches
 		: false;
-	let iauOverlay = $state(false);
+	const hasSeenTour = typeof localStorage !== 'undefined' && localStorage.getItem('starspelled-tour-seen') === '1';
+	let constellationMode = $state<ConstellationDisplayMode>('ambient');
 	let autoRotate = $state(!reducedMotion);
 	let starLabels = $state(false);
 	let coordGrid = $state(false);
@@ -543,12 +545,54 @@
 	let monoColor = $state(false);
 	let showSun = $state(false);
 	let globeView = $state(false);
-	let settingsOpen = $state(false);
+	let settingsOpen = $state(!hasSeenTour);
 	let aboutOpen = $state(false);
+
+	function constellationModeLabel(mode: ConstellationDisplayMode): string {
+		switch (mode) {
+			case 'ambient':
+				return 'Ambient';
+			case 'all':
+				return 'All';
+			case 'none':
+				return 'None';
+		}
+	}
+
+	function nextConstellationMode(mode: ConstellationDisplayMode): ConstellationDisplayMode {
+		switch (mode) {
+			case 'ambient':
+				return 'all';
+			case 'all':
+				return 'none';
+			case 'none':
+				return 'ambient';
+		}
+	}
+
+	function toggleLabel(on: boolean): string {
+		return on ? 'On' : 'Off';
+	}
+
+	function starColorLabel(monochrome: boolean): string {
+		return monochrome ? 'Mono' : 'Color';
+	}
+
+	function viewLabel(globe: boolean): string {
+		return globe ? 'Globe' : '2D';
+	}
+
+	function nextViewLabel(globe: boolean): string {
+		return globe ? '2D' : 'Globe';
+	}
+
+	function brightnessLabel(value: number): string {
+		return value <= 0 ? 'Off' : `${value.toFixed(1)}x`;
+	}
 
 	function getShareSettings(): ShareSettings {
 		return {
-			iauOverlay,
+			constellationMode,
 			starLabels,
 			coordGrid,
 			brightness,
@@ -559,7 +603,7 @@
 	}
 
 	function applyShareSettings(settings: ShareSettings, options: { immediateGlobe?: boolean } = {}) {
-		iauOverlay = settings.iauOverlay;
+		constellationMode = settings.constellationMode;
 		starLabels = settings.starLabels;
 		coordGrid = settings.coordGrid;
 		brightness = settings.brightness;
@@ -567,7 +611,7 @@
 		showSun = settings.showSun;
 		globeView = settings.globeView;
 
-		starField?.toggleIAUOverlay(iauOverlay);
+		starField?.setConstellationDisplayMode(constellationMode);
 		starField?.toggleCoordinateGrid(coordGrid);
 		starField?.setBrightness(brightness);
 		starField?.setMonochrome(monoColor);
@@ -603,9 +647,9 @@
 		starField?.toggleAutoRotate(autoRotate);
 	}
 
-	function handleToggleIAU() {
-		iauOverlay = !iauOverlay;
-		starField?.toggleIAUOverlay(iauOverlay);
+	function handleCycleConstellationMode() {
+		constellationMode = nextConstellationMode(constellationMode);
+		starField?.setConstellationDisplayMode(constellationMode);
 		replaceShareHash();
 	}
 
@@ -759,7 +803,7 @@
 		'Undo with Ctrl+Z, redo with Ctrl+Y',
 	];
 	let tourStep = $state(0);
-	let tourSeen = $state(typeof localStorage !== 'undefined' && localStorage.getItem('starspelled-tour-seen') === '1');
+	let tourSeen = $state(hasSeenTour);
 
 	// Auto-focus search box when result overlay appears
 	$effect(() => {
@@ -1052,16 +1096,48 @@
 					</svg>
 				</button>
 
+				<button
+					class="top-bar-btn top-bar-mode-btn"
+					onclick={handleToggleGlobeView}
+					aria-label={`Switch to ${nextViewLabel(globeView)} view`}
+				>
+					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+						{#if !globeView}
+							<circle cx="12" cy="12" r="9" />
+							<ellipse cx="12" cy="12" rx="9" ry="4" />
+							<ellipse cx="12" cy="12" rx="4" ry="9" />
+						{:else}
+							<rect x="3" y="6" width="18" height="12" rx="2" />
+							<line x1="3" y1="15" x2="21" y2="15" />
+							<circle cx="8" cy="11" r="1.2" fill="currentColor" stroke="none" />
+							<circle cx="14" cy="9" r="1.2" fill="currentColor" stroke="none" />
+							<line x1="8" y1="11" x2="14" y2="9" />
+						{/if}
+					</svg>
+					<span>{nextViewLabel(globeView)}</span>
+				</button>
+
 				{#if settingsOpen}
 					<div class="settings-panel" role="menu">
+						<div class="settings-panel-header">
+							<div class="settings-panel-title">Display Settings</div>
+							<div class="settings-panel-subtitle">Sky visibility, motion, and labels</div>
+						</div>
 						<button class="settings-item" class:active={autoRotate} onclick={handleToggleAutoRotate} role="menuitemcheckbox" aria-checked={autoRotate}>
 							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
 								<path d="M21 12a9 9 0 1 1-3-6.7" />
 								<polyline points="21 3 21 9 15 9" />
 							</svg>
-							<span>Auto-rotate</span>
+							<span class="settings-item-label">Auto-rotate</span>
+							<span class="settings-item-value">{toggleLabel(autoRotate)}</span>
 						</button>
-						<button class="settings-item" class:active={iauOverlay} onclick={handleToggleIAU} role="menuitemcheckbox" aria-checked={iauOverlay}>
+						<button
+							class="settings-item"
+							class:active={constellationMode !== 'none'}
+							onclick={handleCycleConstellationMode}
+							role="menuitem"
+							aria-label={`Constellations: ${constellationModeLabel(constellationMode)}`}
+						>
 							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
 								<circle cx="5" cy="5" r="1.5" fill="currentColor" stroke="none"/>
 								<circle cx="19" cy="4" r="1.5" fill="currentColor" stroke="none"/>
@@ -1069,13 +1145,33 @@
 								<line x1="5" y1="5" x2="12" y2="12" />
 								<line x1="19" y1="4" x2="12" y2="12" />
 							</svg>
-							<span>Constellations</span>
+							<span class="settings-item-label">Constellations</span>
+							<span class="settings-item-value">{constellationModeLabel(constellationMode)}</span>
 						</button>
+						<div class="settings-item slider-row">
+							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+								<circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
+								<circle cx="12" cy="12" r="6" />
+								<circle cx="12" cy="12" r="9" opacity="0.4" />
+							</svg>
+							<label for="mag-slider" class="settings-item-label">Brightness</label>
+							<span class="settings-item-value">{brightnessLabel(brightness)}</span>
+							<input
+								id="mag-slider"
+								type="range"
+								min="0.0"
+								max="2.0"
+								step="0.1"
+								value={brightness}
+								oninput={handleBrightnessChange}
+							/>
+						</div>
 						<button class="settings-item" class:active={starLabels} onclick={handleToggleStarLabels} role="menuitemcheckbox" aria-checked={starLabels}>
 							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
 								<polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
 							</svg>
-							<span>Star names</span>
+							<span class="settings-item-label">Star names</span>
+							<span class="settings-item-value">{toggleLabel(starLabels)}</span>
 						</button>
 						<button class="settings-item" class:active={coordGrid} onclick={handleToggleCoordGrid} role="menuitemcheckbox" aria-checked={coordGrid}>
 							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
@@ -1084,21 +1180,16 @@
 								<line x1="3" y1="12" x2="21" y2="12" />
 								<ellipse cx="12" cy="12" rx="4" ry="9" />
 							</svg>
-							<span>Coordinates</span>
-						</button>
-						<button class="settings-item" class:active={shootingStars} onclick={handleToggleShootingStars} role="menuitemcheckbox" aria-checked={shootingStars}>
-							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-								<line x1="4" y1="20" x2="18" y2="6" />
-								<polyline points="18 14 18 6 10 6" />
-							</svg>
-							<span>Shooting stars</span>
+							<span class="settings-item-label">Coordinates</span>
+							<span class="settings-item-value">{toggleLabel(coordGrid)}</span>
 						</button>
 						<button class="settings-item" class:active={!monoColor} onclick={handleToggleMonoColor} role="menuitemcheckbox" aria-checked={!monoColor}>
 							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
 								<circle cx="12" cy="12" r="9" />
 								<circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" />
 							</svg>
-							<span>Star color</span>
+							<span class="settings-item-label">Star color</span>
+							<span class="settings-item-value">{starColorLabel(monoColor)}</span>
 						</button>
 						<button class="settings-item" class:active={showSun} onclick={handleToggleSun} role="menuitemcheckbox" aria-checked={showSun}>
 							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
@@ -1112,33 +1203,17 @@
 								<line x1="4.93" y1="19.07" x2="7.05" y2="16.95" />
 								<line x1="16.95" y1="7.05" x2="19.07" y2="4.93" />
 							</svg>
-							<span>Sun</span>
+							<span class="settings-item-label">Sun</span>
+							<span class="settings-item-value">{toggleLabel(showSun)}</span>
 						</button>
-						<button class="settings-item" class:active={globeView} onclick={handleToggleGlobeView} role="menuitemcheckbox" aria-checked={globeView}>
+						<button class="settings-item" class:active={shootingStars} onclick={handleToggleShootingStars} role="menuitemcheckbox" aria-checked={shootingStars}>
 							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-								<circle cx="12" cy="12" r="9" />
-								<ellipse cx="12" cy="12" rx="9" ry="4" />
-								<ellipse cx="12" cy="12" rx="4" ry="9" />
+								<line x1="4" y1="20" x2="18" y2="6" />
+								<polyline points="18 14 18 6 10 6" />
 							</svg>
-							<span>Globe</span>
+							<span class="settings-item-label">Shooting stars</span>
+							<span class="settings-item-value">{toggleLabel(shootingStars)}</span>
 						</button>
-						<div class="settings-item slider-row">
-							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-								<circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
-								<circle cx="12" cy="12" r="6" />
-								<circle cx="12" cy="12" r="9" opacity="0.4" />
-							</svg>
-							<label for="mag-slider">Brightness</label>
-							<input
-								id="mag-slider"
-								type="range"
-								min="0.2"
-								max="2.0"
-								step="0.1"
-								value={brightness}
-								oninput={handleBrightnessChange}
-							/>
-						</div>
 					</div>
 				{/if}
 			</div>
@@ -2128,6 +2203,9 @@
 	.settings-container {
 		position: relative;
 		z-index: 10;
+		display: flex;
+		align-items: center;
+		gap: 6px;
 	}
 
 	.top-bar-btn {
@@ -2135,7 +2213,11 @@
 		border: 1px solid rgba(255, 255, 255, 0.12);
 		color: rgba(255, 255, 255, 0.4);
 		border-radius: 8px;
-		padding: 8px;
+		width: 34px;
+		height: 34px;
+		padding: 0;
+		box-sizing: border-box;
+		flex-shrink: 0;
 		cursor: pointer;
 		display: flex;
 		align-items: center;
@@ -2160,19 +2242,55 @@
 		box-shadow: 0 0 0 2px rgba(170, 200, 255, 0.5);
 	}
 
+	.top-bar-mode-btn {
+		gap: 6px;
+		min-width: 86px;
+		height: 34px;
+		padding: 0 10px;
+		box-sizing: border-box;
+		font-size: 11px;
+		letter-spacing: 1.1px;
+		text-transform: uppercase;
+		line-height: 1;
+	}
+
 	.settings-panel {
 		position: absolute;
 		top: calc(100% + 6px);
 		left: 0;
-		background: rgba(0, 0, 0, 0.85);
-		border: 1px solid rgba(255, 255, 255, 0.1);
-		border-radius: 10px;
-		padding: 6px;
+		background: rgba(4, 6, 12, 0.92);
+		border: 1px solid rgba(255, 255, 255, 0.12);
+		border-radius: 14px;
+		padding: 8px;
 		display: flex;
 		flex-direction: column;
-		gap: 2px;
+		gap: 4px;
 		animation: panel-in 0.15s ease-out;
 		white-space: nowrap;
+		min-width: 272px;
+		box-sizing: border-box;
+		backdrop-filter: blur(18px);
+		box-shadow: 0 16px 32px rgba(0, 0, 0, 0.35);
+	}
+
+	.settings-panel-header {
+		padding: 8px 10px 10px;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+		margin-bottom: 2px;
+	}
+
+	.settings-panel-title {
+		font-size: 10px;
+		letter-spacing: 1.8px;
+		text-transform: uppercase;
+		color: rgba(255, 255, 255, 0.7);
+	}
+
+	.settings-panel-subtitle {
+		margin-top: 4px;
+		font-size: 11px;
+		letter-spacing: 0.4px;
+		color: rgba(255, 255, 255, 0.34);
 	}
 
 	@keyframes panel-in {
@@ -2188,9 +2306,12 @@
 	}
 
 	.settings-item {
-		display: flex;
+		display: grid;
+		grid-template-columns: 16px minmax(0, 1fr) auto;
 		align-items: center;
 		gap: 10px;
+		width: 100%;
+		box-sizing: border-box;
 		background: none;
 		border: none;
 		border-radius: 6px;
@@ -2204,6 +2325,21 @@
 		white-space: nowrap;
 	}
 
+	.settings-item-label {
+		min-width: 0;
+	}
+
+	.settings-item-value {
+		justify-self: end;
+		min-width: 58px;
+		text-align: right;
+		font-size: 10px;
+		letter-spacing: 1.2px;
+		text-transform: uppercase;
+		color: rgba(255, 255, 255, 0.3);
+		font-variant-numeric: tabular-nums;
+	}
+
 	.settings-item:hover {
 		background: rgba(255, 255, 255, 0.06);
 		color: rgba(255, 255, 255, 0.7);
@@ -2213,6 +2349,10 @@
 		color: rgba(170, 200, 255, 0.85);
 	}
 
+	.settings-item.active .settings-item-value {
+		color: rgba(170, 200, 255, 0.7);
+	}
+
 	.settings-item:focus-visible {
 		outline: none;
 		box-shadow: 0 0 0 2px rgba(170, 200, 255, 0.4);
@@ -2220,25 +2360,24 @@
 
 	.slider-row {
 		cursor: default;
+		grid-template-rows: auto auto;
+		row-gap: 8px;
 	}
 
-	.slider-row label {
-		font-size: 13px;
-		letter-spacing: 0.5px;
-		color: rgba(255, 255, 255, 0.4);
+	.slider-row .settings-item-label {
 		cursor: default;
-		white-space: nowrap;
 	}
 
 	.slider-row input[type="range"] {
+		grid-column: 2 / 4;
 		-webkit-appearance: none;
 		appearance: none;
-		width: 64px;
+		width: 100%;
 		height: 2px;
 		background: rgba(255, 255, 255, 0.15);
 		border-radius: 2px;
 		outline: none;
-		margin: 0 0 0 auto;
+		margin: 0;
 		padding: 0;
 	}
 
@@ -2345,6 +2484,7 @@
 		position: relative;
 		display: flex;
 		align-items: center;
+		height: 34px;
 	}
 
 	.star-search-icon {
@@ -2357,7 +2497,7 @@
 
 	.star-search-input {
 		width: 100%;
-		height: 36px;
+		height: 34px;
 		box-sizing: border-box;
 		background: rgba(255, 255, 255, 0.06);
 		border: 1px solid rgba(255, 255, 255, 0.12);
@@ -2669,6 +2809,18 @@
 
 		.star-search-input {
 			font-size: 16px;
+		}
+
+		.top-bar-mode-btn {
+			min-width: 78px;
+			height: 34px;
+			padding: 0 9px;
+			font-size: 10px;
+			letter-spacing: 0.9px;
+		}
+
+		.settings-panel {
+			min-width: 248px;
 		}
 
 		.star-panel {

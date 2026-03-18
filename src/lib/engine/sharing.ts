@@ -7,8 +7,9 @@
  * - 8 bits  : format version
  * - 8 bits  : constellation count
  * - 8 bits  : focused constellation index (255 = none)
- * - 6 bits  : scene toggle bitfield
- * - 5 bits  : brightness slider step (0.2..2.0 in 0.1 increments)
+ * - 2 bits  : constellation display mode (ambient, all, none)
+ * - 5 bits  : scene toggle bitfield
+ * - 5 bits  : brightness slider step (0.0..2.0 in 0.1 increments)
  * - per constellation:
  *   - 10 bits : text length (characters)
  *   - 7 bits  : character code for each supported character
@@ -21,13 +22,14 @@ import type { MatchResult, Star } from './types';
 
 /** Number of bits used to encode each star index. */
 const BITS_PER_IDX = 14;
-const FORMAT_VERSION = 1;
+const FORMAT_VERSION = 3;
 const TEXT_LENGTH_BITS = 10;
 const TEXT_CHAR_BITS = 7;
 const COLOR_BITS = 9;
 const COLOR_WHITE_CODE = 360;
 const FOCUSED_INDEX_NONE = 0xff;
-const MIN_BRIGHTNESS = 0.2;
+const CONSTELLATION_MODE_BITS = 2;
+const MIN_BRIGHTNESS = 0.0;
 const MAX_BRIGHTNESS = 2.0;
 const BRIGHTNESS_STEP = 0.1;
 const MAX_BRIGHTNESS_CODE = Math.round((MAX_BRIGHTNESS - MIN_BRIGHTNESS) / BRIGHTNESS_STEP);
@@ -72,16 +74,17 @@ const TEXT_CODE_BY_CHAR = new Map<string, number>(
 );
 
 enum ShareFlag {
-	IauOverlay = 1 << 0,
-	StarLabels = 1 << 1,
-	CoordGrid = 1 << 2,
-	MonoColor = 1 << 3,
-	ShowSun = 1 << 4,
-	GlobeView = 1 << 5,
+	StarLabels = 1 << 0,
+	CoordGrid = 1 << 1,
+	MonoColor = 1 << 2,
+	ShowSun = 1 << 3,
+	GlobeView = 1 << 4,
 }
 
+export type ConstellationDisplayMode = 'ambient' | 'all' | 'none';
+
 export interface ShareSettings {
-	iauOverlay: boolean;
+	constellationMode: ConstellationDisplayMode;
 	starLabels: boolean;
 	coordGrid: boolean;
 	brightness: number;
@@ -253,7 +256,6 @@ function decodeColor(code: number): string | null {
 
 function encodeFlags(settings: ShareSettings): number {
 	let flags = 0;
-	if (settings.iauOverlay) flags |= ShareFlag.IauOverlay;
 	if (settings.starLabels) flags |= ShareFlag.StarLabels;
 	if (settings.coordGrid) flags |= ShareFlag.CoordGrid;
 	if (settings.monoColor) flags |= ShareFlag.MonoColor;
@@ -262,9 +264,41 @@ function encodeFlags(settings: ShareSettings): number {
 	return flags;
 }
 
-function decodeFlags(flags: number, brightnessCode: number): ShareSettings {
+function encodeConstellationMode(mode: ConstellationDisplayMode): number {
+	switch (mode) {
+		case 'ambient':
+			return 0;
+		case 'all':
+			return 1;
+		case 'none':
+			return 2;
+	}
+	const exhaustive: never = mode;
+	return exhaustive;
+}
+
+function decodeConstellationMode(code: number): ConstellationDisplayMode | null {
+	switch (code) {
+		case 0:
+			return 'ambient';
+		case 1:
+			return 'all';
+		case 2:
+			return 'none';
+		default:
+			return null;
+	}
+}
+
+function decodeFlags(
+	constellationModeCode: number,
+	flags: number,
+	brightnessCode: number,
+): ShareSettings | null {
+	const mode = decodeConstellationMode(constellationModeCode);
+	if (mode === null) return null;
 	return {
-		iauOverlay: (flags & ShareFlag.IauOverlay) !== 0,
+		constellationMode: mode,
 		starLabels: (flags & ShareFlag.StarLabels) !== 0,
 		coordGrid: (flags & ShareFlag.CoordGrid) !== 0,
 		brightness: decodeBrightness(brightnessCode),
@@ -302,7 +336,8 @@ export function encodeShareStateToHash(state: ShareState): string {
 	writer.writeBits(FORMAT_VERSION, 8);
 	writer.writeBits(state.entries.length, 8);
 	writer.writeBits(focusedIndex, 8);
-	writer.writeBits(encodeFlags(state.settings), 6);
+	writer.writeBits(encodeConstellationMode(state.settings.constellationMode), CONSTELLATION_MODE_BITS);
+	writer.writeBits(encodeFlags(state.settings), 5);
 	writer.writeBits(encodeBrightness(state.settings.brightness), 5);
 
 	for (const entry of state.entries) {
@@ -324,19 +359,24 @@ export function decodeHashToShareState(hash: string, starByIdx: Map<number, Star
 	const version = reader.readBits(8);
 	const entryCount = reader.readBits(8);
 	const focusedIndex = reader.readBits(8);
-	const flags = reader.readBits(6);
+	const constellationMode = reader.readBits(CONSTELLATION_MODE_BITS);
+	const flags = reader.readBits(5);
 	const brightnessCode = reader.readBits(5);
 
 	if (
 		version !== FORMAT_VERSION ||
 		entryCount === null ||
 		focusedIndex === null ||
+		constellationMode === null ||
 		flags === null ||
 		brightnessCode === null ||
 		brightnessCode > MAX_BRIGHTNESS_CODE
 	) {
 		return null;
 	}
+
+	const settings = decodeFlags(constellationMode, flags, brightnessCode);
+	if (settings === null) return null;
 
 	const entries: ShareEntry[] = [];
 	for (let entryIndex = 0; entryIndex < entryCount; entryIndex++) {
@@ -376,6 +416,6 @@ export function decodeHashToShareState(hash: string, starByIdx: Map<number, Star
 	return {
 		entries,
 		focusedIndex: focusedIndex === FOCUSED_INDEX_NONE ? -1 : focusedIndex,
-		settings: decodeFlags(flags, brightnessCode),
+		settings,
 	};
 }
