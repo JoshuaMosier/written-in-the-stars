@@ -1558,8 +1558,14 @@
 			constellationGroup.add(linePair.core);
 		}
 
-		const starCloud = hlPositions.length > 0 ? createDynamicPointCloud(hlMat, hlPositions.length, 2) : null;
-		if (starCloud) constellationGroup.add(starCloud.points);
+		let starPoints: THREE.Points | null = null;
+		if (hlPositions.length > 0) {
+			starPoints = new THREE.Points(new THREE.BufferGeometry(), hlMat);
+			starPoints.renderOrder = 2;
+			starPoints.visible = false;
+			starPoints.frustumCulled = false;
+			constellationGroup.add(starPoints);
+		}
 
 		let ringPoints: THREE.Points | null = null;
 		if (isolatedPositions.length > 0) {
@@ -1630,18 +1636,32 @@
 
 			if (linePair) updateDynamicLinePair(linePair, activeLineCount);
 
-			if (starCloud) {
+			if (starPoints) {
 				let starCount = 0;
 				for (let i = 0; i < hlPositions.length; i++) {
-					if (!revealedStars.has(hlKeys[i])) continue;
-					const pos = hlPositions[i];
-					const base = starCount * 3;
-					starCloud.positions[base] = pos.x;
-					starCloud.positions[base + 1] = pos.y;
-					starCloud.positions[base + 2] = pos.z;
-					starCount++;
+					if (revealedStars.has(hlKeys[i])) starCount++;
 				}
-				updateDynamicPointCloud(starCloud, starCount);
+				if (starCount > 0) {
+					const starPositions = new Float32Array(starCount * 3);
+					let writeIndex = 0;
+					for (let i = 0; i < hlPositions.length; i++) {
+						if (!revealedStars.has(hlKeys[i])) continue;
+						const pos = hlPositions[i];
+						const base = writeIndex * 3;
+						starPositions[base] = pos.x;
+						starPositions[base + 1] = pos.y;
+						starPositions[base + 2] = pos.z;
+						writeIndex++;
+					}
+					const nextGeometry = new THREE.BufferGeometry();
+					nextGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
+					const prevGeometry = starPoints.geometry as THREE.BufferGeometry;
+					starPoints.geometry = nextGeometry;
+					prevGeometry.dispose();
+					starPoints.visible = true;
+				} else {
+					starPoints.visible = false;
+				}
 			}
 
 			if (ringPoints) {
