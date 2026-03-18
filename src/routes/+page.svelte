@@ -209,6 +209,7 @@
 	let starField = $state<any>(null);
 	let constellations: ConstellationEntry[] = $state([]);
 	let focusedIndex = $state(-1);
+	let focusedConstellationEntry = $derived(focusedIndex >= 0 ? (constellations[focusedIndex] ?? null) : null);
 	let rerollBlacklist: number[] = []; // accumulates stars from previous re-rolls
 
 	// --- Color picker ---
@@ -613,13 +614,60 @@
 	function handleFocusConstellation(index: number) {
 		if (showInput || isMatching) return;
 		focusedIndex = index;
+		colorPickerOpen = null;
 		replaceShareHash();
 		const allResults = constellations.map((c) => c.result);
 		starField?.panToConstellation(
 			allResults,
 			index,
 			constellations.map((c) => c.color),
+			false,
 		);
+	}
+
+	function replayFocusedConstellation() {
+		if (showInput || isMatching || focusedIndex < 0) return;
+		colorPickerOpen = null;
+		const allResults = constellations.map((c) => c.result);
+		starField?.refocusConstellation(
+			allResults,
+			focusedIndex,
+			constellations.map((c) => c.color),
+		);
+	}
+
+	function cycleFocusConstellation(direction: number) {
+		if (constellations.length < 2 || focusedIndex < 0) return;
+		const nextIndex = (focusedIndex + direction + constellations.length) % constellations.length;
+		handleFocusConstellation(nextIndex);
+	}
+
+	let constellationSwipeStart: { x: number; y: number } | null = null;
+	let constellationSwipeHandled = false;
+	const CONSTELLATION_SWIPE_THRESHOLD = 36;
+
+	function handleConstellationSwipeStart(e: TouchEvent) {
+		if (windowWidth > 480 || constellations.length < 2 || showInput || isMatching) return;
+		const touch = e.touches[0];
+		if (!touch) return;
+		constellationSwipeStart = { x: touch.clientX, y: touch.clientY };
+		constellationSwipeHandled = false;
+	}
+
+	function handleConstellationSwipeMove(e: TouchEvent) {
+		if (!constellationSwipeStart || constellationSwipeHandled || windowWidth > 480) return;
+		const touch = e.touches[0];
+		if (!touch) return;
+		const dx = touch.clientX - constellationSwipeStart.x;
+		const dy = touch.clientY - constellationSwipeStart.y;
+		if (Math.abs(dx) < CONSTELLATION_SWIPE_THRESHOLD || Math.abs(dx) <= Math.abs(dy) * 1.1) return;
+		constellationSwipeHandled = true;
+		cycleFocusConstellation(dx < 0 ? 1 : -1);
+	}
+
+	function handleConstellationSwipeEnd() {
+		constellationSwipeStart = null;
+		constellationSwipeHandled = false;
 	}
 
 	function handleDeleteConstellation(index: number, event: MouseEvent) {
@@ -685,8 +733,24 @@
 		oldStar: Star;
 		newStar: Star;
 	}
-	let undoStack: DragAction[] = [];
-	let redoStack: DragAction[] = [];
+	let undoStack = $state<DragAction[]>([]);
+	let redoStack = $state<DragAction[]>([]);
+	let canUndoFocused = $derived(
+		focusedIndex >= 0 && undoStack.some((action) => action.constellationIndex === focusedIndex),
+	);
+	let canRedoFocused = $derived(
+		focusedIndex >= 0 && redoStack.some((action) => action.constellationIndex === focusedIndex),
+	);
+
+	function takeLastActionForConstellation(stack: DragAction[], constellationIndex: number): DragAction | undefined {
+		if (constellationIndex < 0) return undefined;
+		for (let i = stack.length - 1; i >= 0; i--) {
+			if (stack[i].constellationIndex === constellationIndex) {
+				return stack.splice(i, 1)[0];
+			}
+		}
+		return undefined;
+	}
 
 	function applyDragAction(action: DragAction, star: Star) {
 		const entry = constellations[action.constellationIndex];
@@ -707,15 +771,17 @@
 	}
 
 	function handleUndo() {
-		const action = undoStack.pop();
+		const action = takeLastActionForConstellation(undoStack, focusedIndex);
 		if (!action) return;
+		focusedIndex = action.constellationIndex;
 		redoStack.push(action);
 		applyDragAction(action, action.oldStar);
 	}
 
 	function handleRedo() {
-		const action = redoStack.pop();
+		const action = takeLastActionForConstellation(redoStack, focusedIndex);
 		if (!action) return;
+		focusedIndex = action.constellationIndex;
 		undoStack.push(action);
 		applyDragAction(action, action.newStar);
 	}
@@ -968,6 +1034,8 @@
 		// Skip if same star (no-op drag)
 		if (oldStar.idx === newStar.idx) return;
 
+		focusedIndex = constellationIndex;
+
 		// Push to undo stack, clear redo
 		undoStack.push({ constellationIndex, nodeIndex, oldStar, newStar });
 		redoStack = [];
@@ -999,11 +1067,17 @@
 	let selectionHistory = $state<SelectionState[]>([]);
 
 	// --- Guided tour (first-run only) ---
-	const TOUR_STEPS = [
+	const DESKTOP_TOUR_STEPS = [
 		'Drag any vertex to snap it to a different star',
 		'Try again for a completely different star placement',
 		'Undo with Ctrl+Z, redo with Ctrl+Y',
 	];
+	const MOBILE_TOUR_STEPS = [
+		'Press and hold any vertex, then drag it to a different star',
+		'Tap Try again for a completely different star placement',
+		'Use the Undo and Redo buttons next to Color to step through node changes',
+	];
+	let tourSteps = $derived(windowWidth <= 480 ? MOBILE_TOUR_STEPS : DESKTOP_TOUR_STEPS);
 	let tourStep = $state(0);
 	let tourSeen = $state(hasSeenTour);
 
@@ -1035,7 +1109,7 @@
 	});
 
 	function advanceTour() {
-		if (tourStep >= TOUR_STEPS.length) {
+		if (tourStep >= tourSteps.length) {
 			dismissTour();
 		} else {
 			tourStep++;
@@ -2193,12 +2267,21 @@
 
 	{#if constellations.length > 0}
 		<div class="result-overlay" class:dimmed={showInput} role="region" aria-label="Your constellations">
-			{#each constellations as entry, i}
-				<div class="constellation-card" class:focused={i === focusedIndex && !showInput}>
-					<button
+			{#if focusedConstellationEntry}
+				{@const entry = focusedConstellationEntry}
+				<div class="constellation-card" class:focused={!showInput}>
+					<div
+						class="constellation-focus-row"
+						role="presentation"
+						ontouchstart={handleConstellationSwipeStart}
+						ontouchmove={handleConstellationSwipeMove}
+						ontouchend={handleConstellationSwipeEnd}
+						ontouchcancel={handleConstellationSwipeEnd}
+					>
+						<button
 						class="constellation-entry"
-						class:focused={i === focusedIndex && !showInput}
-						onclick={() => handleFocusConstellation(i)}
+						class:focused={!showInput}
+						onclick={replayFocusedConstellation}
 						disabled={showInput || isMatching}
 					>
 						<div
@@ -2207,29 +2290,67 @@
 						>
 							{entry.name}
 						</div>
-						<div class="constellation-info">
+						{#if false}<div class="constellation-info">
 							<span class="catalog-id">{entry.catalogId}</span>
 							<span class="separator" aria-hidden="true">·</span>
 							<span class="star-count">{entry.starCount} stars</span>
+						</div>{/if}
+						</button>
+					</div>
+					{#if false && !showInput && !isMatching && constellations.length > 1}
+						<div class="constellation-nav-row" role="group" aria-label="Constellation navigation">
+							<button
+								class="constellation-nav-btn"
+								onclick={() => cycleFocusConstellation(-1)}
+								aria-label="Show previous constellation"
+							>
+								Prev
+							</button>
+							<button
+								class="constellation-nav-btn"
+								onclick={() => cycleFocusConstellation(1)}
+								aria-label="Show next constellation"
+							>
+								Next
+							</button>
 						</div>
-					</button>
+					{/if}
 					{#if !showInput && !isMatching}
 						<div class="constellation-side-controls">
+							{#if constellations.length > 1}
+								<button
+									class="constellation-nav-btn"
+									class:nav-icon-btn={windowWidth <= 480}
+									class:nav-text-btn={windowWidth > 480}
+									onclick={() => cycleFocusConstellation(-1)}
+									aria-label="Show previous constellation"
+								>
+									{windowWidth <= 480 ? '<' : 'Prev'}
+								</button>
+							{/if}
+							<div class="history-side-controls" role="group" aria-label="Node edit history">
+								<button class="color-picker-btn history-text-btn" onclick={handleUndo} disabled={!canUndoFocused}>
+									<span class="color-picker-btn-label">Undo</span>
+								</button>
+								<button class="color-picker-btn history-text-btn" onclick={handleRedo} disabled={!canRedoFocused}>
+									<span class="color-picker-btn-label">Redo</span>
+								</button>
+							</div>
 							<div class="color-picker-wrapper">
 								<button
 									class="color-picker-btn"
-									class:open={colorPickerOpen === i}
+									class:open={colorPickerOpen === focusedIndex}
 									onclick={(e) => {
 										e.stopPropagation();
-										colorPickerOpen = colorPickerOpen === i ? null : i;
+										colorPickerOpen = colorPickerOpen === focusedIndex ? null : focusedIndex;
 									}}
 									aria-label="Choose color for {entry.name}"
-									aria-expanded={colorPickerOpen === i}
+									aria-expanded={colorPickerOpen === focusedIndex}
 									aria-haspopup="dialog"
 								>
 									<span class="color-picker-btn-label">Color</span>
 								</button>
-								{#if colorPickerOpen === i}
+								{#if colorPickerOpen === focusedIndex}
 									{@const pickerState = getColorPickerState(entry.color)}
 									<div
 										class="hue-ring-container"
@@ -2243,8 +2364,8 @@
 										<!-- svelte-ignore a11y_no_static_element_interactions -->
 										<div
 											class="color-wheel-stage"
-											onpointerdown={(e) => handleWheelStart(e, i)}
-											onpointermove={(e) => handleWheelMove(e, i)}
+											onpointerdown={(e) => handleWheelStart(e, focusedIndex)}
+											onpointermove={(e) => handleWheelMove(e, focusedIndex)}
 											onpointerup={handleWheelEnd}
 											onpointercancel={handleWheelEnd}
 										>
@@ -2259,7 +2380,7 @@
 												<button
 													class="color-preset-btn"
 													class:selected={entry.color.toLowerCase() === preset}
-													onclick={() => commitConstellationColor(i, preset)}
+													onclick={() => commitConstellationColor(focusedIndex, preset)}
 													aria-label={preset === '#ffffff'
 														? 'Set color to white'
 														: `Set color to ${preset}`}
@@ -2278,31 +2399,24 @@
 									</div>
 								{/if}
 							</div>
+						<button class="delete-btn" onclick={(e) => handleDeleteConstellation(focusedIndex, e)} aria-label="Delete {entry.name}">
+							<span class="color-picker-btn-label">Delete</span>
+						</button>
+						{#if constellations.length > 1}
 							<button
-								class="delete-btn"
-								onclick={(e) => handleDeleteConstellation(i, e)}
-								aria-label="Delete {entry.name}"
+								class="constellation-nav-btn"
+								class:nav-icon-btn={windowWidth <= 480}
+								class:nav-text-btn={windowWidth > 480}
+								onclick={() => cycleFocusConstellation(1)}
+								aria-label="Show next constellation"
 							>
-								<svg
-									viewBox="0 0 24 24"
-									width="14"
-									height="14"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="1.5"
-									aria-hidden="true"
-								>
-									<polyline points="3 6 5 6 21 6" />
-									<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-									<path d="M10 11v6" />
-									<path d="M14 11v6" />
-									<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-								</svg>
+								{windowWidth <= 480 ? '>' : 'Next'}
 							</button>
-						</div>
+						{/if}
+					</div>
 					{/if}
-				</div>
-			{/each}
+					</div>
+			{/if}
 			{#if !showInput}
 				<div class="result-actions" role="toolbar" aria-label="Constellation actions">
 					<button
@@ -2351,10 +2465,10 @@
 		</div>
 	{/if}
 
-	{#if tourStep >= 1 && tourStep <= TOUR_STEPS.length}
-		<div class="tour-tooltip" role="status" aria-live="polite">
+	{#if tourStep >= 1 && tourStep <= tourSteps.length}
+		<div class="tour-tooltip" class:mobile={windowWidth <= 480} role="status" aria-live="polite">
 			<div class="tour-header">
-				<span class="tour-step">{tourStep}/{TOUR_STEPS.length}</span>
+				<span class="tour-step">{tourStep}/{tourSteps.length}</span>
 				<button class="tour-dismiss" onclick={dismissTour} aria-label="Dismiss tour">
 					<svg
 						viewBox="0 0 24 24"
@@ -2369,9 +2483,9 @@
 					</svg>
 				</button>
 			</div>
-			<div class="tour-text">{TOUR_STEPS[tourStep - 1]}</div>
+			<div class="tour-text">{tourSteps[tourStep - 1]}</div>
 			<button class="tour-next" onclick={advanceTour}>
-				{tourStep < TOUR_STEPS.length ? 'Next' : 'Got it'}
+				{tourStep < tourSteps.length ? 'Next' : 'Got it'}
 			</button>
 		</div>
 	{/if}
@@ -2671,9 +2785,71 @@
 		pointer-events: none;
 	}
 
+	.constellation-focus-row {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: min(680px, 100%);
+		max-width: 100%;
+		touch-action: pan-y;
+	}
+
+	.constellation-nav-btn {
+		background: rgba(255, 255, 255, 0.09);
+		border: 1px solid rgba(255, 255, 255, 0.12);
+		color: rgba(255, 255, 255, 0.5);
+		min-width: 92px;
+		padding: 8px 16px;
+		border-radius: 999px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+		font-family: inherit;
+		font-size: 12px;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		flex-shrink: 0;
+		transition:
+			color 0.2s,
+			background 0.2s,
+			border-color 0.2s;
+	}
+
+	.constellation-nav-btn:hover {
+		background: rgba(255, 255, 255, 0.12);
+		border-color: rgba(255, 255, 255, 0.22);
+		color: rgba(255, 255, 255, 0.72);
+	}
+
+	.constellation-nav-btn:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
+	}
+
+	.nav-text-btn {
+		min-width: 60px;
+		padding: 6px 12px;
+		font-size: 10px;
+		letter-spacing: 0.14em;
+		line-height: 1;
+	}
+
+	.nav-icon-btn {
+		min-width: 40px;
+		width: 40px;
+		padding: 6px 0;
+		font-size: 18px;
+		letter-spacing: 0;
+		line-height: 1;
+	}
+
 	.constellation-card {
 		position: relative;
 		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 8px;
 		justify-content: center;
 		pointer-events: auto;
 		width: max-content;
@@ -2684,6 +2860,9 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
+		min-width: 0;
+		width: min(100%, 520px);
+		max-width: min(100%, 520px);
 		gap: 4px;
 		opacity: 0.4;
 		transition: opacity 0.3s;
@@ -2708,12 +2887,11 @@
 	}
 
 	.constellation-side-controls {
-		position: absolute;
-		top: 50%;
-		left: 100%;
-		transform: translate(12px, -50%);
+		position: static;
 		display: flex;
 		align-items: center;
+		justify-content: center;
+		flex-wrap: wrap;
 		gap: 8px;
 		z-index: 1;
 	}
@@ -2723,7 +2901,7 @@
 	}
 
 	.color-picker-btn {
-		background: rgba(255, 255, 255, 0.06);
+		background: rgba(255, 255, 255, 0.09);
 		border: 1px solid rgba(255, 255, 255, 0.12);
 		color: rgba(255, 255, 255, 0.5);
 		cursor: pointer;
@@ -2950,12 +3128,13 @@
 	}
 
 	.delete-btn {
-		background: rgba(255, 255, 255, 0.06);
+		background: rgba(255, 255, 255, 0.09);
 		border: 1px solid rgba(255, 255, 255, 0.1);
 		color: rgba(255, 255, 255, 0.35);
 		cursor: pointer;
-		padding: 5px;
-		border-radius: 4px;
+		min-width: 84px;
+		padding: 6px 14px;
+		border-radius: 999px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -2966,10 +3145,15 @@
 		flex-shrink: 0;
 	}
 
-	.delete-btn:hover {
+	.delete-btn:hover:not(:disabled) {
 		color: rgba(255, 100, 100, 0.85);
 		background: rgba(255, 100, 100, 0.1);
 		border-color: rgba(255, 100, 100, 0.25);
+	}
+
+	.delete-btn:disabled {
+		opacity: 0.4;
+		cursor: default;
 	}
 
 	.delete-btn:focus-visible {
@@ -2982,6 +3166,13 @@
 		font-weight: 400;
 		font-size: 28px;
 		letter-spacing: 6px;
+		max-width: 100%;
+		line-height: 1.12;
+		text-align: center;
+		text-wrap: balance;
+		overflow-wrap: anywhere;
+		word-break: break-word;
+		white-space: normal;
 	}
 
 	.constellation-entry:not(.focused) .constellation-name {
@@ -2996,6 +3187,8 @@
 		display: flex;
 		gap: 8px;
 		align-items: center;
+		justify-content: center;
+		flex-wrap: wrap;
 	}
 
 	.constellation-entry:not(.focused) .constellation-info {
@@ -3046,6 +3239,24 @@
 
 	.share-btn {
 		min-width: 110px;
+	}
+
+	.history-side-controls {
+		display: inline-flex;
+		gap: 6px;
+	}
+
+	.history-text-btn {
+		min-width: 58px;
+	}
+
+	.history-text-btn:disabled,
+	.history-text-btn:disabled:hover {
+		opacity: 0.4;
+		cursor: default;
+		background: rgba(255, 255, 255, 0.09);
+		border-color: rgba(255, 255, 255, 0.12);
+		color: rgba(255, 255, 255, 0.5);
 	}
 
 	.save-image-container {
@@ -3423,7 +3634,7 @@
 
 		.constellation-name {
 			font-size: 22px;
-			letter-spacing: 4px;
+			letter-spacing: 3px;
 		}
 
 		.constellation-entry:not(.focused) .constellation-name {
@@ -3449,16 +3660,43 @@
 			bottom: 32px;
 		}
 
-		.constellation-card {
-			flex-direction: column;
-			align-items: center;
-			gap: 8px;
+		.constellation-entry {
+			width: min(92vw, 340px);
+			max-width: 100%;
+		}
+
+		.constellation-nav-btn {
+			font-size: 11px;
 		}
 
 		.constellation-side-controls {
 			position: static;
 			transform: none;
-			gap: 6px;
+			gap: 4px;
+			flex-wrap: nowrap;
+			justify-content: center;
+		}
+
+		.history-side-controls {
+			gap: 4px;
+		}
+
+		.history-text-btn,
+		.color-picker-btn {
+			min-width: 52px;
+			padding: 6px 10px;
+		}
+
+		.delete-btn {
+			min-width: 72px;
+			padding: 6px 12px;
+		}
+
+		.nav-icon-btn {
+			min-width: 36px;
+			width: 36px;
+			padding: 6px 0;
+			font-size: 16px;
 		}
 
 		.top-bar {
@@ -3480,6 +3718,31 @@
 		.constellation-name {
 			font-size: 18px;
 			letter-spacing: 3px;
+		}
+
+		.constellation-side-controls {
+			gap: 3px;
+		}
+
+		.history-side-controls {
+			gap: 3px;
+		}
+
+		.history-text-btn,
+		.color-picker-btn {
+			min-width: 48px;
+			padding: 6px 8px;
+		}
+
+		.delete-btn {
+			min-width: 64px;
+			padding: 6px 10px;
+		}
+
+		.nav-icon-btn {
+			min-width: 32px;
+			width: 32px;
+			font-size: 15px;
 		}
 	}
 
@@ -4017,6 +4280,12 @@
 		animation: tour-fade-in 0.4s ease-out;
 	}
 
+	.tour-tooltip.mobile {
+		bottom: calc(188px + env(safe-area-inset-bottom, 0px));
+		width: min(320px, calc(100vw - 24px));
+		max-width: none;
+	}
+
 	.tour-header {
 		display: flex;
 		justify-content: space-between;
@@ -4082,8 +4351,12 @@
 
 	@media (max-width: 480px) {
 		.tour-tooltip {
-			bottom: 160px;
-			max-width: 260px;
+			padding: 12px 14px;
+		}
+
+		.tour-tooltip.mobile {
+			bottom: calc(196px + env(safe-area-inset-bottom, 0px));
+			width: calc(100vw - 24px);
 		}
 	}
 </style>

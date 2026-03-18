@@ -1979,8 +1979,13 @@
 		}
 	}
 
-	/** Smooth pan to focused constellation, then draw it animated; others stay instant */
-	export function panToConstellation(allResults: MatchResult[], focusIndex: number, colors?: string[]) {
+	/** Smooth pan to focused constellation; optionally replay the focused draw on arrival */
+	export function panToConstellation(
+		allResults: MatchResult[],
+		focusIndex: number,
+		colors?: string[],
+		replayFocused = true,
+	) {
 		if (!controlsRef || !cameraRef) return;
 		cancelGlobeTransition();
 		cancelCameraAnimation();
@@ -1991,12 +1996,13 @@
 			return;
 		}
 
-		// Redraw everything instantly first (non-focused stay, focused will be redrawn animated on arrival)
+		// Redraw everything instantly first. When replaying, keep the focused constellation hidden
+		// until arrival so it can redraw animated.
 		clearAllConstellations();
 		currentResults = [...allResults];
 		currentColors = colors ? [...colors] : allResults.map(() => '#ffffff');
 		for (let i = 0; i < allResults.length; i++) {
-			if (i !== focusIndex) drawConstellationInstant(allResults[i], currentColors[i]);
+			if (!replayFocused || i !== focusIndex) drawConstellationInstant(allResults[i], currentColors[i]);
 		}
 
 		const result = allResults[focusIndex];
@@ -2085,7 +2091,7 @@
 				cameraRef.updateProjectionMatrix();
 				controlsRef.update();
 				if (t < 1) return true;
-				drawConstellationAnimated(result, true, currentColors[focusIndex]);
+				if (replayFocused) drawConstellationAnimated(result, true, currentColors[focusIndex]);
 				return false;
 			});
 			return;
@@ -2118,8 +2124,8 @@
 			cameraRef.updateProjectionMatrix();
 			controlsRef.update();
 			if (t < 1) return true;
-			// Camera arrived — draw the focused constellation with animation
-			drawConstellationAnimated(result, true, currentColors[focusIndex]);
+			// Camera arrived — optionally replay the focused constellation draw.
+			if (replayFocused) drawConstellationAnimated(result, true, currentColors[focusIndex]);
 			return false;
 		});
 	}
