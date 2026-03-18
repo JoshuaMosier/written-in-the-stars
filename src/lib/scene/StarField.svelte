@@ -30,6 +30,7 @@
 	let controlsRef: OrbitControls | null = null;
 	let rendererRef: THREE.WebGLRenderer | null = null;
 	let constellationGroups: THREE.Group[] = [];
+	let ringMaterials: THREE.ShaderMaterial[] = [];
 	let drawAnimationIds: number[] = [];
 	let starPointsRef: THREE.Points | null = null;
 	const projectedLabelPos = new THREE.Vector3();
@@ -1412,6 +1413,7 @@
 			disposeObject3D(group);
 		}
 		constellationGroups = [];
+		ringMaterials = [];
 		currentResults = [];
 		currentColors = [];
 	}
@@ -1478,13 +1480,13 @@
 			connectedNodes.add(nB);
 		}
 
-		// Collect highlighted star positions for edge-connected nodes only.
-		// Isolated nodes (like the dots on lowercase i/j) are rendered through
-		// the dedicated isolated-node cloud below, which matches the instant path.
+		// Collect highlighted star positions for all nodes (connected + isolated).
+		// Isolated nodes also get bright dots so they match connected-node styling;
+		// the ring overlay renders on top via the dedicated isolated-node cloud.
 		const hlPositions: THREE.Vector3[] = [];
 		for (const pair of result.pairs) {
 			const pos = nodeToPos.get(pair.nodeIndex);
-			if (pos && connectedNodes.has(pair.nodeIndex)) hlPositions.push(pos.clone());
+			if (pos) hlPositions.push(pos.clone());
 		}
 
 		// Find isolated nodes (no edges) — e.g. periods/dots
@@ -1524,12 +1526,16 @@
 
 		// Ring shader for isolated nodes (periods/dots)
 		const ringMat = new THREE.ShaderMaterial({
-			uniforms: { uColor: { value: new THREE.Vector3(cr, cg, cb) } },
+			uniforms: {
+				uColor: { value: new THREE.Vector3(cr, cg, cb) },
+				uFovScale: { value: 1.0 },
+			},
 			vertexShader: `
+				uniform float uFovScale;
 				void main() {
 					vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
 					gl_Position = projectionMatrix * mvPosition;
-					gl_PointSize = 28.0;
+					gl_PointSize = 18.0 * uFovScale;
 				}
 			`,
 			fragmentShader: `
@@ -1569,6 +1575,7 @@
 
 		let ringPoints: THREE.Points | null = null;
 		if (isolatedPositions.length > 0) {
+			ringMaterials.push(ringMat);
 			ringPoints = new THREE.Points(new THREE.BufferGeometry(), ringMat);
 			ringPoints.renderOrder = 2;
 			ringPoints.visible = false;
@@ -1761,7 +1768,7 @@
 		const hlPositions: number[] = [];
 		for (const pair of result.pairs) {
 			const pos = nodeToPos.get(pair.nodeIndex);
-			if (pos && connectedNodes.has(pair.nodeIndex)) hlPositions.push(pos.x, pos.y, pos.z);
+			if (pos) hlPositions.push(pos.x, pos.y, pos.z);
 		}
 
 		if (hlPositions.length > 0) {
@@ -1790,13 +1797,17 @@
 		}
 		if (isoPositions.length > 0) {
 			const ringMat = new THREE.ShaderMaterial({
-				uniforms: { uColor: { value: new THREE.Vector3(cr, cg, cb) } },
-				vertexShader: `void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_PointSize = 28.0; }`,
+				uniforms: {
+					uColor: { value: new THREE.Vector3(cr, cg, cb) },
+					uFovScale: { value: 1.0 },
+				},
+				vertexShader: `uniform float uFovScale; void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_PointSize = 18.0 * uFovScale; }`,
 				fragmentShader: `uniform vec3 uColor; void main() { float d = length(gl_PointCoord - 0.5) * 2.0; if (d > 1.0) discard; float ring = smoothstep(0.35, 0.55, d) * smoothstep(0.95, 0.7, d); float glow = exp(-d * d * 6.0) * 0.15; float alpha = ring * 0.7 + glow; gl_FragColor = vec4(uColor * alpha, alpha); }`,
 				transparent: true,
 				depthTest: false,
 				blending: THREE.AdditiveBlending,
 			});
+			ringMaterials.push(ringMat);
 			const ringGeom = new THREE.BufferGeometry();
 			ringGeom.setAttribute('position', new THREE.Float32BufferAttribute(isoPositions, 3));
 			const ringPoints = new THREE.Points(ringGeom, ringMat);
@@ -3153,6 +3164,7 @@
 
 	// --- Star highlight (large label + ring) for search/click ---
 	let starHighlightGroup: THREE.Group | null = null;
+	let starHighlightRingMat: THREE.ShaderMaterial | null = null;
 	let starHighlightLabel: Text | null = null;
 
 	export function highlightStar(star: Star) {
@@ -3166,11 +3178,13 @@
 		const ringGeom = new THREE.BufferGeometry();
 		ringGeom.setAttribute('position', new THREE.Float32BufferAttribute([pos.x, pos.y, pos.z], 3));
 		const ringMat = new THREE.ShaderMaterial({
+			uniforms: { uFovScale: { value: 1.0 } },
 			vertexShader: `
+				uniform float uFovScale;
 				void main() {
 					vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
 					gl_Position = projectionMatrix * mvPosition;
-					gl_PointSize = 28.0;
+					gl_PointSize = 18.0 * uFovScale;
 				}
 			`,
 			fragmentShader: `
@@ -3187,6 +3201,7 @@
 			depthTest: false,
 			blending: THREE.AdditiveBlending,
 		});
+		starHighlightRingMat = ringMat;
 		const ringPoints = new THREE.Points(ringGeom, ringMat);
 		ringPoints.renderOrder = 5;
 		group.add(ringPoints);
@@ -3221,6 +3236,7 @@
 		if (starHighlightGroup && sceneRef) {
 			disposeObject3D(starHighlightGroup);
 			starHighlightGroup = null;
+			starHighlightRingMat = null;
 		}
 		if (starHighlightLabel) {
 			disposeOverlayLabel(starHighlightLabel);
@@ -4018,6 +4034,10 @@
 					uniforms.uFovScale.value = DEFAULT_FOV / camera.fov;
 				}
 			}
+			// Sync ring materials — clamp so rings stay readable in globe view
+			const ringFovScale = Math.max(uniforms.uFovScale.value, 0.7);
+			for (const mat of ringMaterials) mat.uniforms.uFovScale.value = ringFovScale;
+			if (starHighlightRingMat) starHighlightRingMat.uniforms.uFovScale.value = ringFovScale;
 
 			// Update camera heading readout when grid is active
 			if (coordGridActive) {
