@@ -50,15 +50,41 @@ const rows = phrases.map((text) => {
 	let totalMs = 0;
 	let minMs = Infinity;
 	let maxMs = 0;
-	let lastResult = matchStarsToAnchors(stars, graph);
+	let lastResult = matchStarsToAnchors(stars, graph, null, undefined, { captureProfile: true });
+	let prepMs = 0;
+	let coarseMs = 0;
+	let ransacMs = 0;
+	let refineMs = 0;
+	let assignMs = 0;
+	let profiledTotalMs = 0;
+	let coarseEvalCount = 0;
+	let fineEvalCount = 0;
+	let ransacEvalCount = 0;
+	let gnomonicEvalCount = 0;
+	let gnomonicCacheHits = 0;
+	let gnomonicCacheMisses = 0;
+	let refinedCandidateCount = 0;
 
 	for (let i = 0; i < iterations; i++) {
 		const start = performance.now();
-		lastResult = matchStarsToAnchors(stars, graph);
+		lastResult = matchStarsToAnchors(stars, graph, null, undefined, { captureProfile: true });
 		const elapsed = performance.now() - start;
 		totalMs += elapsed;
 		minMs = Math.min(minMs, elapsed);
 		maxMs = Math.max(maxMs, elapsed);
+		prepMs += lastResult.profile?.prepMs ?? 0;
+		coarseMs += lastResult.profile?.coarseMs ?? 0;
+		ransacMs += lastResult.profile?.ransacMs ?? 0;
+		refineMs += lastResult.profile?.refineMs ?? 0;
+		assignMs += lastResult.profile?.assignMs ?? 0;
+		profiledTotalMs += lastResult.profile?.totalMs ?? 0;
+		coarseEvalCount += lastResult.profile?.coarseEvalCount ?? 0;
+		fineEvalCount += lastResult.profile?.fineEvalCount ?? 0;
+		ransacEvalCount += lastResult.profile?.ransacEvalCount ?? 0;
+		gnomonicEvalCount += lastResult.profile?.gnomonicEvalCount ?? 0;
+		gnomonicCacheHits += lastResult.profile?.gnomonicCacheHits ?? 0;
+		gnomonicCacheMisses += lastResult.profile?.gnomonicCacheMisses ?? 0;
+		refinedCandidateCount += lastResult.profile?.refinedCandidateCount ?? 0;
 	}
 
 	return {
@@ -75,7 +101,89 @@ const rows = phrases.map((text) => {
 		edge: Number((lastResult.costBreakdown?.edgeShape ?? Number.NaN).toFixed(4)),
 		duplicates: Number((lastResult.costBreakdown?.duplicates ?? Number.NaN).toFixed(4)),
 		blacklist: Number((lastResult.costBreakdown?.blacklist ?? Number.NaN).toFixed(4)),
+		prepMs: Number((prepMs / iterations).toFixed(2)),
+		coarseMs: Number((coarseMs / iterations).toFixed(1)),
+		ransacMs: Number((ransacMs / iterations).toFixed(1)),
+		refineMs: Number((refineMs / iterations).toFixed(1)),
+		assignMs: Number((assignMs / iterations).toFixed(1)),
+		profiledTotalMs: Number((profiledTotalMs / iterations).toFixed(1)),
+		coarseEvalCount: Math.round(coarseEvalCount / iterations),
+		fineEvalCount: Math.round(fineEvalCount / iterations),
+		ransacEvalCount: Math.round(ransacEvalCount / iterations),
+		gnomonicEvalCount: Math.round(gnomonicEvalCount / iterations),
+		gnomonicCacheHits: Math.round(gnomonicCacheHits / iterations),
+		gnomonicCacheMisses: Math.round(gnomonicCacheMisses / iterations),
+		refinedCandidateCount: Math.round(refinedCandidateCount / iterations),
 	};
 });
 
-console.table(rows);
+console.table(
+	rows.map(
+		({
+			text,
+			nodes,
+			edges,
+			avgMs,
+			minMs,
+			maxMs,
+			cost,
+			searchCost,
+			point,
+			pointSq,
+			edge,
+			duplicates,
+			blacklist,
+		}) => ({
+			text,
+			nodes,
+			edges,
+			avgMs,
+			minMs,
+			maxMs,
+			cost,
+			searchCost,
+			point,
+			pointSq,
+			edge,
+			duplicates,
+			blacklist,
+		}),
+	),
+);
+
+console.log('');
+console.table(
+	rows.map(
+		({
+			text,
+			prepMs,
+			coarseMs,
+			ransacMs,
+			refineMs,
+			assignMs,
+			profiledTotalMs,
+			coarseEvalCount,
+			fineEvalCount,
+			ransacEvalCount,
+			gnomonicEvalCount,
+			gnomonicCacheHits,
+			gnomonicCacheMisses,
+			refinedCandidateCount,
+		}) => ({
+			text,
+			prepMs,
+			coarseMs,
+			ransacMs,
+			refineMs,
+			assignMs,
+			profiledTotalMs,
+			coarseEvalCount,
+			fineEvalCount,
+			ransacEvalCount,
+			gnomonicEvalCount,
+			gnomonicCacheHits,
+			gnomonicCacheMisses,
+			refinedCandidateCount,
+		}),
+	),
+);

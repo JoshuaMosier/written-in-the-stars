@@ -26,11 +26,28 @@ export interface MatchCostBreakdown {
 	total: number;
 }
 
+export interface MatchProfile {
+	prepMs: number;
+	coarseMs: number;
+	ransacMs: number;
+	refineMs: number;
+	assignMs: number;
+	totalMs: number;
+	coarseEvalCount: number;
+	fineEvalCount: number;
+	ransacEvalCount: number;
+	gnomonicEvalCount: number;
+	gnomonicCacheHits: number;
+	gnomonicCacheMisses: number;
+	refinedCandidateCount: number;
+}
+
 export interface MatchResult {
 	pairs: { star: Star; nodeIndex: number }[];
 	cost: number; // standardized final-assignment score
 	searchCost?: number; // nearest-neighbor proxy score used during optimization
 	costBreakdown?: MatchCostBreakdown;
+	profile?: MatchProfile;
 	transform: { x: number; y: number; scale: number };
 	graph: GlyphGraph;
 }

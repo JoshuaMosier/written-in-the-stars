@@ -15,7 +15,7 @@
 import kdTreePkg from 'kd-tree-javascript';
 const { kdTree } = kdTreePkg;
 import { cmaes } from './optimizer';
-import type { Star, MatchResult, GlyphGraph, MatchCostBreakdown } from './types';
+import type { Star, MatchResult, GlyphGraph, MatchCostBreakdown, MatchProfile } from './types';
 
 // ---------------------------------------------------------------------------
 // Projection helpers
@@ -82,6 +82,10 @@ interface PreparedCatalog {
 	maxSX: number;
 	minSY: number;
 	maxSY: number;
+}
+
+interface MatchOptions {
+	captureProfile?: boolean;
 }
 
 class StarGrid {
@@ -674,16 +678,27 @@ export function matchStarsToAnchors(
 	graph: GlyphGraph,
 	blacklist: Set<number> | null = null,
 	onProgress?: (pct: number) => void,
+	options: MatchOptions = {},
 ): MatchResult {
 	const { nodes, edges } = graph;
+	const captureProfile = options.captureProfile === true;
+	const totalStart = captureProfile ? performance.now() : 0;
 
 	if (nodes.length === 0 || stars.length === 0) {
 		return { pairs: [], cost: Infinity, transform: { x: 0, y: 0, scale: 0 }, graph };
 	}
 
+	const prepStart = captureProfile ? performance.now() : 0;
 	const prepared = prepareMatcherCatalog(stars);
+	const prepMs = captureProfile ? performance.now() - prepStart : 0;
 	const { eqStars, eqGrid, minSX: preparedMinSX, maxSX: preparedMaxSX, minSY: preparedMinSY, maxSY: preparedMaxSY } =
 		prepared;
+	let coarseEvalCount = 0;
+	let fineEvalCount = 0;
+	let ransacEvalCount = 0;
+	let gnomonicEvalCount = 0;
+	let gnomonicCacheHits = 0;
+	let gnomonicCacheMisses = 0;
 
 	// --- Compute node centroid and pre-center anchor offsets ---
 	const n = nodes.length;
@@ -827,6 +842,7 @@ export function matchStarsToAnchors(
 
 	const coarseCellW = rangeX / coarseStepsX;
 	const coarseCellH = rangeY / coarseStepsY;
+	const coarseStart = captureProfile ? performance.now() : 0;
 
 	// Pass 1: coarse grid with scale-adaptive stepping
 	// At large scales the glyph covers many cells, so adjacent positions are
@@ -840,6 +856,7 @@ export function matchStarsToAnchors(
 				for (let yi = 0; yi < coarseStepsY; yi += strideY) {
 					const ty = minSY + (rangeY * (yi + jy + 0.5)) / coarseStepsY;
 					gen++;
+					coarseEvalCount++;
 					const cost = computeCostEq(
 						eqGrid,
 						anchorDx,
@@ -889,6 +906,7 @@ export function matchStarsToAnchors(
 				for (let fj = 0; fj < fineSteps; fj++) {
 					const fty = cand.ty - fineHalfH + fineStepH * (fj + 0.5);
 					gen++;
+					fineEvalCount++;
 					const cost = computeCostEq(
 						eqGrid,
 						anchorDx,
@@ -912,6 +930,7 @@ export function matchStarsToAnchors(
 			}
 		}
 	}
+	const coarseMs = captureProfile ? performance.now() - coarseStart : 0;
 
 	onProgress?.(0.25);
 
@@ -933,6 +952,7 @@ export function matchStarsToAnchors(
 	// Sample stars with a stride; use two different offsets to catch different stars
 	const ransacSampleSize = 1500;
 	const ransacStride = Math.max(1, Math.floor(eqStars.length / ransacSampleSize));
+	const ransacStart = captureProfile ? performance.now() : 0;
 
 	for (const re of ransacEdges) {
 		for (let si = 0; si < eqStars.length; si += ransacStride) {
@@ -960,6 +980,7 @@ export function matchStarsToAnchors(
 
 				// Score and insert
 				gen++;
+				ransacEvalCount++;
 				const cost = computeCostEq(
 					eqGrid,
 					anchorDx,
@@ -982,6 +1003,7 @@ export function matchStarsToAnchors(
 			}
 		}
 	}
+	const ransacMs = captureProfile ? performance.now() - ransacStart : 0;
 
 	onProgress?.(0.4);
 
@@ -992,6 +1014,7 @@ export function matchStarsToAnchors(
 	// For each top candidate, project nearby stars onto a gnomonic tangent plane
 	// centered at the candidate's equirectangular position, then run Nelder-Mead
 	// in that locally-Euclidean space.
+	const refineStart = captureProfile ? performance.now() : 0;
 
 	interface NMResult {
 		params: number[];
@@ -1057,9 +1080,12 @@ export function matchStarsToAnchors(
 		const cacheKey = `${Math.round(ra0 / GNO_CACHE_RES)}:${Math.round(dec0 / GNO_CACHE_RES)}`;
 		let cachedGno = gnoGridCache.get(cacheKey);
 		if (cachedGno === undefined) {
+			gnomonicCacheMisses++;
 			const gno = buildGnoGrid(ra0, dec0);
 			cachedGno = gno ? { grid: gno.grid, ra0, dec0 } : null;
 			gnoGridCache.set(cacheKey, cachedGno);
+		} else {
+			gnomonicCacheHits++;
 		}
 		if (!cachedGno) continue;
 
@@ -1075,6 +1101,7 @@ export function matchStarsToAnchors(
 
 		const costFn = (p: number[]): number => {
 			gnoGen++;
+			gnomonicEvalCount++;
 			return computeCostGnomonic(
 				cachedGno!.grid,
 				anchorDx,
@@ -1109,12 +1136,14 @@ export function matchStarsToAnchors(
 
 		gen = gnoGen;
 	}
+	const refineMs = captureProfile ? performance.now() - refineStart : 0;
 
 	onProgress?.(0.9);
 
 	// =========================================================================
 	// Phase 3: Final pair assignment in gnomonic space
 	// =========================================================================
+	const assignStart = captureProfile ? performance.now() : 0;
 
 	const { ra0, dec0 } = bestResult;
 	const sinRa0 = Math.sin(ra0);
@@ -1169,6 +1198,7 @@ export function matchStarsToAnchors(
 		gnoScale,
 		blacklist,
 	);
+	const assignMs = captureProfile ? performance.now() - assignStart : 0;
 
 	// Convert gnomonic center + offset back to equirectangular for camera
 	// Inverse gnomonic: recover (ra, dec) from tangent-plane (x, y)
@@ -1187,12 +1217,30 @@ export function matchStarsToAnchors(
 
 	// Normalize RA to [0, 2π)
 	const normRa = ((finalRa % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+	const profile: MatchProfile | undefined = captureProfile
+		? {
+				prepMs,
+				coarseMs,
+				ransacMs,
+				refineMs,
+				assignMs,
+				totalMs: performance.now() - totalStart,
+				coarseEvalCount,
+				fineEvalCount,
+				ransacEvalCount,
+				gnomonicEvalCount,
+				gnomonicCacheHits,
+				gnomonicCacheMisses,
+				refinedCandidateCount: bestLen,
+			}
+		: undefined;
 
 	return {
 		pairs,
 		cost: costBreakdown.total,
 		searchCost: bestResult.cost,
 		costBreakdown,
+		profile,
 		transform: {
 			x: normRa / (2 * Math.PI),
 			y: (finalDec + Math.PI / 2) / Math.PI,

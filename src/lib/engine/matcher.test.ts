@@ -65,6 +65,17 @@ describe('matchStarsToAnchors', () => {
 			expect(result.costBreakdown!.total).toBe(result.cost);
 			expect(result.costBreakdown!.duplicates).toBe(0);
 		});
+
+		it('captures optional phase timing profile', () => {
+			const graph = textToGraph('HI');
+			const result = matchStarsToAnchors(stars, graph, null, undefined, { captureProfile: true });
+
+			expect(result.profile).toBeDefined();
+			expect(result.profile!.totalMs).toBeGreaterThan(0);
+			expect(result.profile!.coarseEvalCount).toBeGreaterThan(0);
+			expect(result.profile!.gnomonicEvalCount).toBeGreaterThan(0);
+			expect(result.profile!.refinedCandidateCount).toBeGreaterThan(0);
+		});
 	});
 
 	describe('multi-letter text', () => {
