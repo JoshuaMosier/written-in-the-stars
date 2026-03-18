@@ -8,6 +8,9 @@
 
 	const GITHUB_REPO_URL = 'https://github.com/JoshuaMosier/written-in-the-stars';
 	const HOW_IT_WORKS_URL = `${GITHUB_REPO_URL}/blob/main/docs/how-it-works.md`;
+	const COLOR_PRESETS = ['#ffffff', '#ffd166', '#7dd3fc', '#34d399', '#f472b6'];
+	const COLOR_WHEEL_RADIUS = 56;
+	const COLOR_WHEEL_INDICATOR_TRAVEL = COLOR_WHEEL_RADIUS - 10;
 
 	function scheduleLowPriorityTask(task: () => void, timeout = 150): () => void {
 		if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
@@ -208,38 +211,67 @@
 	let focusedIndex = $state(-1);
 	let rerollBlacklist: number[] = []; // accumulates stars from previous re-rolls
 
-	// --- Hue ring color picker ---
+	// --- Color picker ---
 	let colorPickerOpen = $state<number | null>(null);
 	let colorDragActive = false;
 	let colorUpdateRaf = 0;
 
-	function hslToHex(h: number): string {
-		const s = 1,
-			l = 0.5;
-		const a = s * Math.min(l, 1 - l);
-		const f = (n: number) => {
-			const k = (n + h / 30) % 12;
-			const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-			return Math.round(255 * color)
-				.toString(16)
-				.padStart(2, '0');
-		};
-		return `#${f(0)}${f(8)}${f(4)}`;
+	function clamp(value: number, min: number, max: number): number {
+		return Math.min(max, Math.max(min, value));
 	}
 
-	function hexToHue(hex: string): number | null {
+	function hsvToHex(h: number, s = 1, v = 1): string {
+		const hue = ((h % 360) + 360) % 360;
+		const chroma = v * s;
+		const x = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
+		const m = v - chroma;
+		let r = 0;
+		let g = 0;
+		let b = 0;
+
+		if (hue < 60) [r, g, b] = [chroma, x, 0];
+		else if (hue < 120) [r, g, b] = [x, chroma, 0];
+		else if (hue < 180) [r, g, b] = [0, chroma, x];
+		else if (hue < 240) [r, g, b] = [0, x, chroma];
+		else if (hue < 300) [r, g, b] = [x, 0, chroma];
+		else [r, g, b] = [chroma, 0, x];
+
+		const toHex = (channel: number) =>
+			Math.round((channel + m) * 255)
+				.toString(16)
+				.padStart(2, '0');
+
+		return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+	}
+
+	function hexToHsv(hex: string): { h: number; s: number; v: number } | null {
+		if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return null;
 		const r = parseInt(hex.slice(1, 3), 16) / 255;
 		const g = parseInt(hex.slice(3, 5), 16) / 255;
 		const b = parseInt(hex.slice(5, 7), 16) / 255;
 		const max = Math.max(r, g, b),
 			min = Math.min(r, g, b);
-		if (max - min < 0.01) return null;
 		const d = max - min;
 		let h = 0;
-		if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
-		else if (max === g) h = ((b - r) / d + 2) / 6;
-		else h = ((r - g) / d + 4) / 6;
-		return h * 360;
+		if (d > 0.0001) {
+			if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+			else if (max === g) h = ((b - r) / d + 2) / 6;
+			else h = ((r - g) / d + 4) / 6;
+		}
+		return { h: h * 360, s: max === 0 ? 0 : d / max, v: max };
+	}
+
+	function getColorPickerState(color: string) {
+		const hsv = hexToHsv(color) ?? { h: 0, s: 0, v: 1 };
+		const indicatorDistance = COLOR_WHEEL_INDICATOR_TRAVEL * hsv.s;
+		const indicatorAngle = ((hsv.h - 90) * Math.PI) / 180;
+		return {
+			h: hsv.h,
+			s: hsv.s,
+			v: hsv.v,
+			indicatorX: Math.cos(indicatorAngle) * indicatorDistance,
+			indicatorY: Math.sin(indicatorAngle) * indicatorDistance,
+		};
 	}
 
 	function updateConstellationColor(index: number, color: string) {
@@ -253,6 +285,12 @@
 		});
 	}
 
+	function commitConstellationColor(index: number, color: string) {
+		updateConstellationColor(index, color);
+		colorPickerOpen = null;
+		replaceShareHash();
+	}
+
 	function hueFromPointer(e: PointerEvent, container: HTMLElement): number {
 		const rect = container.getBoundingClientRect();
 		const dx = e.clientX - (rect.left + rect.width / 2);
@@ -260,21 +298,39 @@
 		return Math.round(((Math.atan2(dy, dx) * 180) / Math.PI + 90 + 360) % 360) % 360;
 	}
 
-	function handleRingStart(e: PointerEvent, index: number) {
-		if ((e.target as HTMLElement).closest('.hue-ring-center')) return;
+	function saturationFromPointer(e: PointerEvent, container: HTMLElement): number {
+		const rect = container.getBoundingClientRect();
+		const dx = e.clientX - (rect.left + rect.width / 2);
+		const dy = e.clientY - (rect.top + rect.height / 2);
+		const distance = Math.sqrt(dx * dx + dy * dy);
+		return clamp(distance / COLOR_WHEEL_RADIUS, 0, 1);
+	}
+
+	function colorFromWheelPointer(e: PointerEvent, container: HTMLElement, fallbackHue: number): string {
+		const rect = container.getBoundingClientRect();
+		const dx = e.clientX - (rect.left + rect.width / 2);
+		const dy = e.clientY - (rect.top + rect.height / 2);
+		const distance = Math.sqrt(dx * dx + dy * dy);
+		const hue = distance < 1 ? fallbackHue : hueFromPointer(e, container);
+		return hsvToHex(hue, saturationFromPointer(e, container), 1);
+	}
+
+	function handleWheelStart(e: PointerEvent, index: number) {
 		const container = e.currentTarget as HTMLElement;
 		container.setPointerCapture(e.pointerId);
 		colorDragActive = true;
-		updateConstellationColor(index, hslToHex(hueFromPointer(e, container)));
+		const current = getColorPickerState(constellations[index]?.color ?? '#ffffff');
+		updateConstellationColor(index, colorFromWheelPointer(e, container, current.h));
 	}
 
-	function handleRingMove(e: PointerEvent, index: number) {
+	function handleWheelMove(e: PointerEvent, index: number) {
 		if (!colorDragActive) return;
 		const container = e.currentTarget as HTMLElement;
-		updateConstellationColor(index, hslToHex(hueFromPointer(e, container)));
+		const current = getColorPickerState(constellations[index]?.color ?? '#ffffff');
+		updateConstellationColor(index, colorFromWheelPointer(e, container, current.h));
 	}
 
-	function handleRingEnd() {
+	function handleWheelEnd() {
 		if (colorDragActive) {
 			colorDragActive = false;
 			colorPickerOpen = null;
@@ -1174,6 +1230,9 @@
 		if (settingsOpen && !target.closest('.settings-container')) {
 			settingsOpen = false;
 		}
+		if (colorPickerOpen !== null && !target.closest('.color-picker-wrapper')) {
+			colorPickerOpen = null;
+		}
 		// Close search dropdown when clicking outside
 		if (searchOpen && !target.closest('.star-search-container')) {
 			searchOpen = false;
@@ -1296,16 +1355,14 @@
 						fill="none"
 						stroke="currentColor"
 						stroke-width="1.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
 						aria-hidden="true"
 					>
-						{#if settingsOpen}
-							<line x1="6" y1="6" x2="18" y2="18" />
-							<line x1="18" y1="6" x2="6" y2="18" />
-						{:else}
-							<line x1="4" y1="7" x2="20" y2="7" />
-							<line x1="4" y1="12" x2="20" y2="12" />
-							<line x1="4" y1="17" x2="20" y2="17" />
-						{/if}
+						<line x1="4" y1="7" x2="14" y2="7" />
+						<line x1="10" y1="17" x2="20" y2="17" />
+						<circle cx="17" cy="7" r="3" />
+						<circle cx="7" cy="17" r="3" />
 					</svg>
 				</button>
 
@@ -2061,7 +2118,7 @@
 		</a>
 		<span class="credits-divider">&middot;</span>
 		<a class="credits-neal" href="https://neal.fun/constellation-draw/" target="_blank" rel="noopener noreferrer">
-			Inspired by
+			<span class="credits-neal-label">Inspired by</span>
 			<svg class="neal-logo" viewBox="0 0 333 89" aria-label="Neal.fun" role="img">
 				<g transform="matrix(1,0,0,1,0,-217)">
 					<g id="neal-art" transform="matrix(0.982301,0,0,1,0,216.559)">
@@ -2138,7 +2195,6 @@
 		<div class="result-overlay" class:dimmed={showInput} role="region" aria-label="Your constellations">
 			{#each constellations as entry, i}
 				<div class="constellation-card" class:focused={i === focusedIndex && !showInput}>
-					<div class="delete-spacer" aria-hidden="true"></div>
 					<button
 						class="constellation-entry"
 						class:focused={i === focusedIndex && !showInput}
@@ -2158,14 +2214,74 @@
 						</div>
 					</button>
 					{#if !showInput && !isMatching}
-						<div class="color-picker-wrapper">
+						<div class="constellation-side-controls">
+							<div class="color-picker-wrapper">
+								<button
+									class="color-picker-btn"
+									class:open={colorPickerOpen === i}
+									onclick={(e) => {
+										e.stopPropagation();
+										colorPickerOpen = colorPickerOpen === i ? null : i;
+									}}
+									aria-label="Choose color for {entry.name}"
+									aria-expanded={colorPickerOpen === i}
+									aria-haspopup="dialog"
+								>
+									<span class="color-picker-btn-label">Color</span>
+								</button>
+								{#if colorPickerOpen === i}
+									{@const pickerState = getColorPickerState(entry.color)}
+									<div
+										class="hue-ring-container"
+										role="dialog"
+										aria-label="Choose color for {entry.name}"
+									>
+										<div class="hue-ring-header">
+											<div class="hue-ring-title">Choose color</div>
+											<div class="hue-ring-subtitle">Drag anywhere in the wheel.</div>
+										</div>
+										<!-- svelte-ignore a11y_no_static_element_interactions -->
+										<div
+											class="color-wheel-stage"
+											onpointerdown={(e) => handleWheelStart(e, i)}
+											onpointermove={(e) => handleWheelMove(e, i)}
+											onpointerup={handleWheelEnd}
+											onpointercancel={handleWheelEnd}
+										>
+											<div class="color-wheel"></div>
+											<div
+												class="color-wheel-indicator"
+												style="transform: translate(calc(-50% + {pickerState.indicatorX}px), calc(-50% + {pickerState.indicatorY}px));"
+											></div>
+										</div>
+										<div class="color-preset-row" aria-label="Color presets">
+											{#each COLOR_PRESETS as preset}
+												<button
+													class="color-preset-btn"
+													class:selected={entry.color.toLowerCase() === preset}
+													onclick={() => commitConstellationColor(i, preset)}
+													aria-label={preset === '#ffffff'
+														? 'Set color to white'
+														: `Set color to ${preset}`}
+												>
+													<span class="color-preset-swatch" style="background: {preset};"></span>
+												</button>
+											{/each}
+										</div>
+										<div class="hue-ring-footer">
+											<div class="hue-ring-current-label">Current</div>
+											<div class="hue-ring-current-value">
+												<span class="hue-ring-current-dot" style="background: {entry.color};"></span>
+												<span class="hue-ring-current-hex">{entry.color.toUpperCase()}</span>
+											</div>
+										</div>
+									</div>
+								{/if}
+							</div>
 							<button
-								class="color-picker-btn"
-								onclick={(e) => {
-									e.stopPropagation();
-									colorPickerOpen = colorPickerOpen === i ? null : i;
-								}}
-								aria-label="Change color for {entry.name}"
+								class="delete-btn"
+								onclick={(e) => handleDeleteConstellation(i, e)}
+								aria-label="Delete {entry.name}"
 							>
 								<svg
 									viewBox="0 0 24 24"
@@ -2176,62 +2292,14 @@
 									stroke-width="1.5"
 									aria-hidden="true"
 								>
-									<circle cx="12" cy="12" r="5" fill={entry.color} stroke="none" />
-									<circle cx="12" cy="12" r="8" />
+									<polyline points="3 6 5 6 21 6" />
+									<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+									<path d="M10 11v6" />
+									<path d="M14 11v6" />
+									<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
 								</svg>
 							</button>
-							{#if colorPickerOpen === i}
-								<div class="hue-ring-backdrop" onclick={() => (colorPickerOpen = null)} role="none"></div>
-								<!-- svelte-ignore a11y_no_static_element_interactions -->
-								<div
-									class="hue-ring-container"
-									onpointerdown={(e) => handleRingStart(e, i)}
-									onpointermove={(e) => handleRingMove(e, i)}
-									onpointerup={handleRingEnd}
-									onpointercancel={handleRingEnd}
-								>
-									<div class="hue-ring"></div>
-									{#if hexToHue(entry.color) !== null}
-										<div class="hue-ring-indicator" style="transform: rotate({hexToHue(entry.color)}deg)">
-											<div
-												class="hue-ring-dot"
-												style="background: {entry.color}; box-shadow: 0 0 6px {entry.color};"
-											></div>
-										</div>
-									{/if}
-									<button
-										class="hue-ring-center"
-										onclick={() => {
-											updateConstellationColor(i, '#ffffff');
-											colorPickerOpen = null;
-											replaceShareHash();
-										}}
-										aria-label="Reset to white"
-									></button>
-								</div>
-							{/if}
 						</div>
-						<button
-							class="delete-btn"
-							onclick={(e) => handleDeleteConstellation(i, e)}
-							aria-label="Delete {entry.name}"
-						>
-							<svg
-								viewBox="0 0 24 24"
-								width="14"
-								height="14"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="1.5"
-								aria-hidden="true"
-							>
-								<polyline points="3 6 5 6 21 6" />
-								<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-								<path d="M10 11v6" />
-								<path d="M14 11v6" />
-								<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-							</svg>
-						</button>
 					{/if}
 				</div>
 			{/each}
@@ -2606,8 +2674,10 @@
 	.constellation-card {
 		position: relative;
 		display: flex;
-		align-items: center;
+		justify-content: center;
 		pointer-events: auto;
+		width: max-content;
+		max-width: 100%;
 	}
 
 	.constellation-entry {
@@ -2619,7 +2689,7 @@
 		transition: opacity 0.3s;
 		background: none;
 		border: none;
-		padding: 4px 12px;
+		padding: 4px 0;
 		cursor: pointer;
 		font-family: inherit;
 		border-radius: 6px;
@@ -2637,118 +2707,246 @@
 		opacity: 1;
 	}
 
-	.delete-spacer {
-		width: 56px;
-		flex-shrink: 0;
+	.constellation-side-controls {
+		position: absolute;
+		top: 50%;
+		left: 100%;
+		transform: translate(12px, -50%);
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		z-index: 1;
 	}
 
 	.color-picker-wrapper {
 		position: relative;
-		flex-shrink: 0;
-		margin-left: 4px;
 	}
 
 	.color-picker-btn {
 		background: rgba(255, 255, 255, 0.06);
-		border: 1px solid rgba(255, 255, 255, 0.1);
-		color: rgba(255, 255, 255, 0.35);
+		border: 1px solid rgba(255, 255, 255, 0.12);
+		color: rgba(255, 255, 255, 0.5);
 		cursor: pointer;
-		padding: 5px;
-		border-radius: 4px;
+		min-width: 60px;
+		padding: 6px 12px;
+		border-radius: 999px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		transition: opacity 0.2s;
+		transition:
+			background 0.2s,
+			border-color 0.2s,
+			color 0.2s;
 	}
 
 	.color-picker-btn:hover {
 		background: rgba(255, 255, 255, 0.12);
-		border-color: rgba(255, 255, 255, 0.2);
+		border-color: rgba(255, 255, 255, 0.22);
+		color: rgba(255, 255, 255, 0.72);
 	}
 
-	.hue-ring-backdrop {
-		position: fixed;
-		inset: 0;
-		z-index: 99;
+	.color-picker-btn.open {
+		background: rgba(255, 255, 255, 0.14);
+		border-color: rgba(255, 255, 255, 0.26);
+		color: rgba(255, 255, 255, 0.78);
+	}
+
+	.color-picker-btn-label {
+		display: block;
+		width: 100%;
+		text-align: center;
+		line-height: 1;
+		font-size: 10px;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
 	}
 
 	.hue-ring-container {
 		position: absolute;
-		width: 80px;
-		height: 80px;
-		top: 50%;
+		bottom: calc(100% + 10px);
 		left: 50%;
-		transform: translate(-50%, -50%);
+		transform: translateX(-50%);
 		z-index: 100;
-		touch-action: none;
+		width: 196px;
+		padding: 12px;
+		border-radius: 16px;
+		background: rgba(4, 6, 12, 0.94);
+		border: 1px solid rgba(255, 255, 255, 0.12);
+		backdrop-filter: blur(18px);
+		box-shadow: 0 16px 32px rgba(0, 0, 0, 0.35);
 		animation: ring-appear 0.15s ease-out;
 	}
 
 	@keyframes ring-appear {
 		from {
-			transform: translate(-50%, -50%) scale(0.5);
+			transform: translateX(-50%) translateY(6px) scale(0.96);
 			opacity: 0;
 		}
 		to {
-			transform: translate(-50%, -50%) scale(1);
+			transform: translateX(-50%) translateY(0) scale(1);
 			opacity: 1;
 		}
 	}
 
-	.hue-ring {
+	.hue-ring-header {
+		text-align: center;
+	}
+
+	.hue-ring-title {
+		font-size: 10px;
+		letter-spacing: 0.18em;
+		text-transform: uppercase;
+		color: rgba(255, 255, 255, 0.72);
+	}
+
+	.hue-ring-subtitle {
+		margin-top: 4px;
+		font-size: 10px;
+		letter-spacing: 0.03em;
+		color: rgba(255, 255, 255, 0.36);
+	}
+
+	.color-wheel-stage {
+		position: relative;
+		width: 112px;
+		height: 112px;
+		margin: 12px auto 12px;
+		touch-action: none;
+	}
+
+	.color-wheel {
 		position: absolute;
 		inset: 0;
 		border-radius: 50%;
-		background: conic-gradient(
-			hsl(0, 100%, 50%),
-			hsl(60, 100%, 50%),
-			hsl(120, 100%, 50%),
-			hsl(180, 100%, 50%),
-			hsl(240, 100%, 50%),
-			hsl(300, 100%, 50%),
-			hsl(360, 100%, 50%)
-		);
-		-webkit-mask: radial-gradient(circle, transparent 55%, black 60%);
-		mask: radial-gradient(circle, transparent 55%, black 60%);
+		overflow: hidden;
+		background:
+			radial-gradient(circle at center, #ffffff 0%, rgba(255, 255, 255, 0) 52%),
+			conic-gradient(
+				hsl(0, 100%, 50%),
+				hsl(60, 100%, 50%),
+				hsl(120, 100%, 50%),
+				hsl(180, 100%, 50%),
+				hsl(240, 100%, 50%),
+				hsl(300, 100%, 50%),
+				hsl(360, 100%, 50%)
+			);
+		box-shadow:
+			0 10px 24px rgba(0, 0, 0, 0.28),
+			0 0 0 1px rgba(8, 10, 18, 0.85);
 		cursor: crosshair;
 	}
 
-	.hue-ring-indicator {
+	.color-wheel::after {
+		content: '';
 		position: absolute;
-		top: 0;
-		left: 50%;
-		width: 0;
-		height: 50%;
-		transform-origin: bottom center;
+		inset: 0;
+		border-radius: 50%;
+		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 		pointer-events: none;
 	}
 
-	.hue-ring-dot {
-		position: absolute;
-		top: 2px;
-		left: -6px;
-		width: 12px;
-		height: 12px;
-		border-radius: 50%;
-		border: 2px solid white;
-	}
-
-	.hue-ring-center {
+	.color-wheel-indicator {
 		position: absolute;
 		top: 50%;
 		left: 50%;
-		transform: translate(-50%, -50%);
-		width: 32px;
-		height: 32px;
+		width: 18px;
+		height: 18px;
 		border-radius: 50%;
-		background: #ffffff;
-		border: 2px solid rgba(255, 255, 255, 0.25);
-		cursor: pointer;
-		transition: border-color 0.15s;
+		pointer-events: none;
+		border: 5px solid rgba(255, 255, 255, 0.98);
+		box-shadow:
+			0 0 0 1px rgba(0, 0, 0, 0.2),
+			0 0 14px rgba(255, 255, 255, 0.18);
 	}
 
-	.hue-ring-center:hover {
-		border-color: rgba(255, 255, 255, 0.6);
+	.color-preset-row {
+		display: flex;
+		justify-content: center;
+		gap: 8px;
+	}
+
+	.color-preset-btn {
+		width: 22px;
+		height: 22px;
+		padding: 0;
+		border-radius: 50%;
+		border: 1px solid rgba(255, 255, 255, 0.14);
+		background: rgba(255, 255, 255, 0.04);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+		transition:
+			transform 0.15s,
+			border-color 0.15s,
+			background 0.15s;
+	}
+
+	.color-preset-btn:hover {
+		transform: scale(1.08);
+		border-color: rgba(255, 255, 255, 0.28);
+		background: rgba(255, 255, 255, 0.08);
+	}
+
+	.color-preset-btn.selected {
+		border-color: rgba(255, 255, 255, 0.5);
+		background: rgba(255, 255, 255, 0.12);
+		box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+	}
+
+	.color-preset-swatch {
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+	}
+
+	.hue-ring-footer {
+		margin-top: 10px;
+		padding-top: 10px;
+		border-top: 1px solid rgba(255, 255, 255, 0.06);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		text-align: center;
+	}
+
+	.hue-ring-current-label {
+		font-size: 9px;
+		letter-spacing: 0.16em;
+		text-transform: uppercase;
+		color: rgba(255, 255, 255, 0.34);
+	}
+
+	.hue-ring-current-value {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 10px;
+		color: rgba(255, 255, 255, 0.66);
+	}
+
+	.hue-ring-current-dot {
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+	}
+
+	.hue-ring-current-hex {
+		min-width: 7ch;
+		text-align: center;
+		font-family:
+			'SFMono-Regular',
+			Consolas,
+			'Liberation Mono',
+			Menlo,
+			monospace;
+		font-variant-numeric: tabular-nums;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
 	}
 
 	.delete-btn {
@@ -2765,7 +2963,6 @@
 			color 0.2s,
 			background 0.2s,
 			border-color 0.2s;
-		margin-left: 4px;
 		flex-shrink: 0;
 	}
 
@@ -2911,10 +3108,36 @@
 		gap: 8px;
 		font-size: 12px;
 		letter-spacing: 0.5px;
+		isolation: isolate;
+	}
+
+	.credits::before {
+		content: '';
+		position: absolute;
+		inset: -16px -22px;
+		border-radius: 999px;
+		background: radial-gradient(
+			ellipse at center,
+			rgba(0, 0, 0, 0.92) 0%,
+			rgba(0, 0, 0, 0.7) 40%,
+			rgba(0, 0, 0, 0.34) 72%,
+			transparent 100%
+		);
+		filter: blur(16px);
+		pointer-events: none;
+		z-index: -1;
 	}
 
 	.credits-made-by {
 		color: rgba(255, 255, 255, 0.35);
+	}
+
+	.credits-made-by,
+	.credits-neal-label {
+		font-family: var(--font-ui);
+		font-size: 12px;
+		font-weight: 400;
+		letter-spacing: 0.5px;
 	}
 
 	.credits a {
@@ -2973,9 +3196,9 @@
 	}
 
 	.top-bar-btn {
-		background: rgba(255, 255, 255, 0.06);
-		border: 1px solid rgba(255, 255, 255, 0.12);
-		color: rgba(255, 255, 255, 0.4);
+		background: rgba(8, 11, 20, 0.72);
+		border: 1px solid rgba(255, 255, 255, 0.18);
+		color: rgba(255, 255, 255, 0.52);
 		border-radius: 8px;
 		width: 34px;
 		height: 34px;
@@ -2990,15 +3213,15 @@
 	}
 
 	.top-bar-btn:hover {
-		background: rgba(255, 255, 255, 0.1);
-		color: rgba(255, 255, 255, 0.7);
-		border-color: rgba(255, 255, 255, 0.25);
+		background: rgba(18, 23, 38, 0.88);
+		color: rgba(255, 255, 255, 0.8);
+		border-color: rgba(255, 255, 255, 0.3);
 	}
 
 	.top-bar-btn.open {
-		background: rgba(255, 255, 255, 0.1);
-		color: rgba(255, 255, 255, 0.7);
-		border-color: rgba(255, 255, 255, 0.25);
+		background: rgba(18, 23, 38, 0.9);
+		color: rgba(255, 255, 255, 0.82);
+		border-color: rgba(255, 255, 255, 0.32);
 	}
 
 	.top-bar-btn:focus-visible {
@@ -3274,8 +3497,8 @@
 		width: 100%;
 		height: 34px;
 		box-sizing: border-box;
-		background: rgba(255, 255, 255, 0.06);
-		border: 1px solid rgba(255, 255, 255, 0.12);
+		background: rgba(8, 11, 20, 0.72);
+		border: 1px solid rgba(255, 255, 255, 0.18);
 		border-radius: 8px;
 		color: #fff;
 		font-size: 13px;
@@ -3294,6 +3517,7 @@
 	}
 
 	.star-search-input:focus {
+		background: rgba(18, 23, 38, 0.88);
 		border-color: rgba(255, 215, 0, 0.3);
 	}
 

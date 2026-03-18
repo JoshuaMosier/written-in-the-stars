@@ -13,7 +13,7 @@
  * - per constellation:
  *   - 10 bits : text length (characters)
  *   - 7 bits  : character code for each supported character
- *   - 9 bits  : color code (0..359 = hue, 360 = white)
+ *   - 24 bits : exact RGB color (#RRGGBB)
  *   - 14 bits : packed star index for each graph node
  */
 
@@ -22,11 +22,10 @@ import type { MatchResult, Star } from './types';
 
 /** Number of bits used to encode each star index. */
 const BITS_PER_IDX = 14;
-const FORMAT_VERSION = 3;
+const FORMAT_VERSION = 4;
 const TEXT_LENGTH_BITS = 10;
 const TEXT_CHAR_BITS = 7;
-const COLOR_BITS = 9;
-const COLOR_WHITE_CODE = 360;
+const COLOR_BITS = 24;
 const FOCUSED_INDEX_NONE = 0xff;
 const CONSTELLATION_MODE_BITS = 2;
 const MIN_BRIGHTNESS = 0.0;
@@ -206,47 +205,18 @@ function decodeBrightness(code: number): number {
 	return Number((MIN_BRIGHTNESS + code * BRIGHTNESS_STEP).toFixed(1));
 }
 
-function colorToHue(color: string): number | null {
-	if (!/^#[0-9a-fA-F]{6}$/.test(color)) return null;
-	const r = parseInt(color.slice(1, 3), 16) / 255;
-	const g = parseInt(color.slice(3, 5), 16) / 255;
-	const b = parseInt(color.slice(5, 7), 16) / 255;
-	const max = Math.max(r, g, b);
-	const min = Math.min(r, g, b);
-	if (max - min < 0.01) return null;
-
-	const delta = max - min;
-	let hue = 0;
-	if (max === r) hue = ((g - b) / delta + (g < b ? 6 : 0)) / 6;
-	else if (max === g) hue = ((b - r) / delta + 2) / 6;
-	else hue = ((r - g) / delta + 4) / 6;
-	return Math.round((hue * 360 + 360) % 360) % 360;
-}
-
-function hueToHex(hue: number): string {
-	const s = 1;
-	const l = 0.5;
-	const a = s * Math.min(l, 1 - l);
-	const channel = (n: number) => {
-		const k = (n + hue / 30) % 12;
-		const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-		return Math.round(255 * color)
-			.toString(16)
-			.padStart(2, '0');
-	};
-	return `#${channel(0)}${channel(8)}${channel(4)}`;
+function colorToCode(color: string): number {
+	if (!/^#[0-9a-fA-F]{6}$/.test(color)) return 0xffffff;
+	return parseInt(color.slice(1), 16);
 }
 
 function encodeColor(color: string): number {
-	if (color.toLowerCase() === '#ffffff') return COLOR_WHITE_CODE;
-	const hue = colorToHue(color);
-	return hue === null ? COLOR_WHITE_CODE : hue;
+	return colorToCode(color);
 }
 
 function decodeColor(code: number): string | null {
-	if (code === COLOR_WHITE_CODE) return '#ffffff';
-	if (code < 0 || code >= COLOR_WHITE_CODE) return null;
-	return hueToHex(code);
+	if (!Number.isInteger(code) || code < 0 || code > 0xffffff) return null;
+	return `#${code.toString(16).padStart(6, '0')}`;
 }
 
 function encodeFlags(settings: ShareSettings): number {

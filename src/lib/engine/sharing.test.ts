@@ -46,7 +46,7 @@ describe('encodeShareStateToHash / decodeHashToShareState', () => {
 	it('round-trips multiple constellations with colors and scene settings', () => {
 		const state = makeState([
 			{ text: 'Hello, Stars!', color: '#ffffff', baseIdx: 100 },
-			{ text: "Orion's Belt", color: '#00ffff', baseIdx: 500 },
+			{ text: "Orion's Belt", color: '#7db3f6', baseIdx: 500 },
 		]);
 		const allStars = state.entries.flatMap((entry) => entry.result.pairs.map((pair) => pair.star));
 
@@ -57,7 +57,7 @@ describe('encodeShareStateToHash / decodeHashToShareState', () => {
 		expect(decoded!.focusedIndex).toBe(state.focusedIndex);
 		expect(decoded!.settings).toEqual(state.settings);
 		expect(decoded!.entries.map((entry) => entry.text)).toEqual(state.entries.map((entry) => entry.text));
-		expect(decoded!.entries.map((entry) => entry.color)).toEqual(['#ffffff', '#00ffff']);
+		expect(decoded!.entries.map((entry) => entry.color)).toEqual(['#ffffff', '#7db3f6']);
 		expect(decoded!.entries[1].result.pairs.map((pair) => pair.nodeIndex)).toEqual(
 			state.entries[1].result.pairs.map((pair) => pair.nodeIndex),
 		);
