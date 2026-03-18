@@ -763,11 +763,6 @@
 		// Skip if same star (no-op drag)
 		if (oldStar.idx === newStar.idx) return;
 
-		// Reject if the star is already used by any constellation (preserves uniqueness invariant)
-		for (const c of constellations) {
-			if (c.result.pairs.some(p => p.star.idx === newStar.idx)) return;
-		}
-
 		// Push to undo stack, clear redo
 		undoStack.push({ constellationIndex, nodeIndex, oldStar, newStar });
 		redoStack = [];
