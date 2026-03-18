@@ -3449,6 +3449,18 @@
 			bottom: 32px;
 		}
 
+		.constellation-card {
+			flex-direction: column;
+			align-items: center;
+			gap: 8px;
+		}
+
+		.constellation-side-controls {
+			position: static;
+			transform: none;
+			gap: 6px;
+		}
+
 		.top-bar {
 			top: env(safe-area-inset-top, 16px);
 			left: env(safe-area-inset-left, 16px);
@@ -3823,10 +3835,10 @@
 		}
 
 		.top-bar-mode-btn {
-			width: 92px;
-			min-width: 92px;
+			width: auto;
+			min-width: 0;
 			height: 34px;
-			padding: 0 8px;
+			padding: 0 7px;
 			font-size: 10px;
 			letter-spacing: 0.9px;
 		}
