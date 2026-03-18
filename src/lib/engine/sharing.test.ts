@@ -1,119 +1,105 @@
-import { describe, it, expect } from 'vitest';
-import { encodeSingleResult, decodeSingleResult, encodeAllToHash, decodeHashToResults } from './sharing';
-import { textToGraph } from './glyphs';
-import type { Star, MatchResult } from './types';
+import { describe, expect, it } from 'vitest';
 
-/** Create a minimal fake star for testing. */
+import { textToGraph } from './glyphs';
+import {
+	decodeHashToShareState,
+	encodeShareStateToHash,
+	type ShareState,
+} from './sharing';
+import type { MatchResult, Star } from './types';
+
 function fakeStar(idx: number): Star {
 	return { idx, id: idx, ra: idx * 0.1, dec: idx * 0.05, mag: 3.0 };
 }
 
-/** Build a MatchResult from text and a list of star indices. */
 function fakeResult(text: string, starIndices: number[]): MatchResult {
 	const graph = textToGraph(text);
 	const pairs = starIndices.map((idx, i) => ({ star: fakeStar(idx), nodeIndex: i }));
 	return { pairs, cost: 0, transform: { x: 0, y: 0, scale: 1 }, graph };
 }
 
-/** Build a starByIdx map from a list of Stars. */
 function buildMap(stars: Star[]): Map<number, Star> {
-	const map = new Map<number, Star>();
-	for (const s of stars) map.set(s.idx, s);
-	return map;
+	return new Map(stars.map(star => [star.idx, star]));
 }
 
-describe('encodeSingleResult / decodeSingleResult', () => {
-	it('round-trips a simple result', () => {
-		const text = 'HI';
-		const result = fakeResult(text, Array.from({ length: textToGraph(text).nodes.length }, (_, i) => i + 10));
-		const allStars = result.pairs.map(p => p.star);
-		const encoded = encodeSingleResult(text, result);
-		const decoded = decodeSingleResult(encoded, buildMap(allStars));
+function makeState(entries: Array<{ text: string; color: string; baseIdx: number }>): ShareState {
+	return {
+		entries: entries.map(({ text, color, baseIdx }) => {
+			const count = textToGraph(text).nodes.length;
+			const indices = Array.from({ length: count }, (_, i) => baseIdx + i);
+			return {
+				text,
+				color,
+				result: fakeResult(text, indices),
+			};
+		}),
+		focusedIndex: entries.length - 1,
+		settings: {
+			iauOverlay: true,
+			starLabels: false,
+			coordGrid: true,
+			brightness: 1.4,
+			monoColor: true,
+			showSun: true,
+			globeView: true,
+		},
+	};
+}
+
+describe('encodeShareStateToHash / decodeHashToShareState', () => {
+	it('round-trips multiple constellations with colors and scene settings', () => {
+		const state = makeState([
+			{ text: 'Hello, Stars!', color: '#ffffff', baseIdx: 100 },
+			{ text: "Orion's Belt", color: '#00ffff', baseIdx: 500 },
+		]);
+		const allStars = state.entries.flatMap(entry => entry.result.pairs.map(pair => pair.star));
+
+		const hash = encodeShareStateToHash(state);
+		const decoded = decodeHashToShareState(hash, buildMap(allStars));
 
 		expect(decoded).not.toBeNull();
-		expect(decoded!.text).toBe(text);
-		expect(decoded!.result.pairs.length).toBe(result.pairs.length);
-		// Star indices should match
-		const originalIndices = result.pairs.map(p => p.star.idx).sort((a, b) => a - b);
-		const decodedIndices = decoded!.result.pairs.map(p => p.star.idx).sort((a, b) => a - b);
-		expect(decodedIndices).toEqual(originalIndices);
+		expect(decoded!.focusedIndex).toBe(state.focusedIndex);
+		expect(decoded!.settings).toEqual(state.settings);
+		expect(decoded!.entries.map(entry => entry.text)).toEqual(state.entries.map(entry => entry.text));
+		expect(decoded!.entries.map(entry => entry.color)).toEqual(['#ffffff', '#00ffff']);
+		expect(decoded!.entries[1].result.pairs.map(pair => pair.nodeIndex)).toEqual(
+			state.entries[1].result.pairs.map(pair => pair.nodeIndex),
+		);
+		expect(decoded!.entries[1].result.pairs.map(pair => pair.star.idx)).toEqual(
+			state.entries[1].result.pairs.map(pair => pair.star.idx),
+		);
 	});
 
-	it('preserves node ordering', () => {
-		const text = 'AB';
-		const graph = textToGraph(text);
-		const indices = Array.from({ length: graph.nodes.length }, (_, i) => 100 + i);
-		const result = fakeResult(text, indices);
-		const allStars = result.pairs.map(p => p.star);
-		const encoded = encodeSingleResult(text, result);
-		const decoded = decodeSingleResult(encoded, buildMap(allStars));
+	it('round-trips lowercase and punctuation text through the packed alphabet', () => {
+		const state = makeState([{ text: "don't panic?", color: '#ff0000', baseIdx: 900 }]);
+		const allStars = state.entries[0].result.pairs.map(pair => pair.star);
+
+		const hash = encodeShareStateToHash(state);
+		const decoded = decodeHashToShareState(hash, buildMap(allStars));
 
 		expect(decoded).not.toBeNull();
-		for (let i = 0; i < decoded!.result.pairs.length; i++) {
-			expect(decoded!.result.pairs[i].nodeIndex).toBe(i);
-		}
+		expect(decoded!.entries[0].text).toBe("don't panic?");
+		expect(decoded!.entries[0].color).toBe('#ff0000');
 	});
 
-	it('handles unicode text', () => {
-		const text = 'café';
-		const graph = textToGraph(text);
-		const indices = Array.from({ length: graph.nodes.length }, (_, i) => i + 50);
-		const result = fakeResult(text, indices);
-		const allStars = result.pairs.map(p => p.star);
-		const encoded = encodeSingleResult(text, result);
-		const decoded = decodeSingleResult(encoded, buildMap(allStars));
-
-		expect(decoded).not.toBeNull();
-		expect(decoded!.text).toBe(text);
-	});
-
-	it('returns null for garbage input', () => {
+	it('returns null for invalid or corrupted hashes', () => {
 		const map = new Map<number, Star>();
-		expect(decodeSingleResult('', map)).toBeNull();
-		expect(decodeSingleResult('no-tilde-here', map)).toBeNull();
-		expect(decodeSingleResult('~~~', map)).toBeNull();
+
+		expect(decodeHashToShareState('', map)).toBeNull();
+		expect(decodeHashToShareState('!!!not-base64!!!', map)).toBeNull();
 	});
 
-	it('returns null when star index is not in map', () => {
-		const text = 'A';
-		const graph = textToGraph(text);
-		const indices = Array.from({ length: graph.nodes.length }, (_, i) => 9999 + i);
-		const result = fakeResult(text, indices);
-		const encoded = encodeSingleResult(text, result);
-		// Decode with an empty map — stars won't be found
-		expect(decodeSingleResult(encoded, new Map())).toBeNull();
-	});
-});
+	it('returns null when a shared star index cannot be resolved', () => {
+		const state = makeState([{ text: 'A', color: '#ffffff', baseIdx: 2048 }]);
+		const hash = encodeShareStateToHash(state);
 
-describe('encodeAllToHash / decodeHashToResults', () => {
-	it('round-trips multiple constellations', () => {
-		const entries = ['HI', 'AB'].map(text => {
-			const graph = textToGraph(text);
-			const indices = Array.from({ length: graph.nodes.length }, (_, i) => i + 200);
-			return { text, result: fakeResult(text, indices) };
-		});
-
-		const allStars = entries.flatMap(e => e.result.pairs.map(p => p.star));
-		const hash = encodeAllToHash(entries);
-		expect(hash).toContain('|');
-
-		const decoded = decodeHashToResults(hash, buildMap(allStars));
-		expect(decoded.length).toBe(2);
-		expect(decoded[0].text).toBe('HI');
-		expect(decoded[1].text).toBe('AB');
+		expect(decodeHashToShareState(hash, new Map())).toBeNull();
 	});
 
-	it('skips invalid segments gracefully', () => {
-		const text = 'A';
-		const graph = textToGraph(text);
-		const indices = Array.from({ length: graph.nodes.length }, (_, i) => i);
-		const result = fakeResult(text, indices);
-		const allStars = result.pairs.map(p => p.star);
-		const valid = encodeSingleResult(text, result);
+	it('rejects malformed focus metadata', () => {
+		const state = makeState([{ text: 'AB', color: '#ffffff', baseIdx: 50 }]);
+		state.focusedIndex = 7;
 
-		const hash = `garbage|${valid}|also-garbage`;
-		const decoded = decodeHashToResults(hash, buildMap(allStars));
-		expect(decoded.length).toBe(1);
-		expect(decoded[0].text).toBe('A');
+		expect(() => encodeShareStateToHash(state)).toThrow(/Focused index/);
 	});
 });

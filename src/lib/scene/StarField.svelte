@@ -3049,7 +3049,7 @@
 		if (uniformsRef) uniformsRef.uShowSun.value = show ? 1.0 : 0.0;
 	}
 
-	export function toggleGlobeView(on: boolean) {
+	export function toggleGlobeView(on: boolean, immediate = false) {
 		if (!controlsRef || !cameraRef) return;
 		if (on === globeViewActive && !globeTransitionActive) return;
 		cancelCameraAnimation();
@@ -3067,7 +3067,7 @@
 		const endFov = on ? getGlobeFov() : DEFAULT_FOV;
 		const endFovScale = getViewFovScale(endPos, endFov, on);
 
-		if (reducedMotion) {
+		if (immediate || reducedMotion) {
 			finalizeGlobeTransition(on, endPos, endTarget, endUp, endFov, endFovScale, enableRotate);
 			return;
 		}

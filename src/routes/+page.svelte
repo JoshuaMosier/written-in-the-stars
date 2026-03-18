@@ -1,5 +1,11 @@
 <script lang="ts">
-	import { encodeAllToHash, decodeHashToResults } from '$lib/engine/sharing';
+	import { tick } from 'svelte';
+	import {
+		decodeHashToShareState,
+		encodeShareStateToHash,
+		type ShareSettings,
+		type ShareState,
+	} from '$lib/engine/sharing';
 	import type { Star, MatchResult } from '$lib/engine/types';
 	import { CONSTELLATIONS } from '$lib/data/constellations';
 	import { SUPPORTED_CHARS } from '$lib/engine/glyphs';
@@ -169,7 +175,7 @@
 		const rect = container.getBoundingClientRect();
 		const dx = e.clientX - (rect.left + rect.width / 2);
 		const dy = e.clientY - (rect.top + rect.height / 2);
-		return ((Math.atan2(dy, dx) * 180 / Math.PI) + 90 + 360) % 360;
+		return Math.round(((Math.atan2(dy, dx) * 180) / Math.PI + 90 + 360) % 360) % 360;
 	}
 
 	function handleRingStart(e: PointerEvent, index: number) {
@@ -190,10 +196,11 @@
 		if (colorDragActive) {
 			colorDragActive = false;
 			colorPickerOpen = null;
+			replaceShareHash();
 		}
 	}
 
-	function makeEntry(text: string, result: MatchResult): ConstellationEntry {
+	function makeEntry(text: string, result: MatchResult, color?: string): ConstellationEntry {
 		const now = new Date();
 		return {
 			text,
@@ -201,7 +208,7 @@
 			starCount: result.pairs.length,
 			catalogId: `WSC ${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`,
 			result,
-			color: constellations.length > 0 ? constellations[constellations.length - 1].color : '#ffffff',
+			color: color ?? (constellations.length > 0 ? constellations[constellations.length - 1].color : '#ffffff'),
 		};
 	}
 
@@ -214,14 +221,13 @@
 		stopMatchingPhrases();
 		isMatching = false;
 
-		// Update URL hash with all constellations
-		history.replaceState(null, '', '#' + encodeAllToHash(constellations));
+		replaceShareHash();
 
 		starField?.animateToMatch(result, false, entry.color);
 	}
 
 	// --- Check URL hash on load ---
-	let pendingHashResults: { text: string; result: MatchResult }[] = [];
+	let pendingShareState: ShareState | null = null;
 	let hashWasPresent = typeof window !== 'undefined' && window.location.hash.length > 1;
 
 	// Initialize web worker and decode hash after stars are fetched
@@ -245,20 +251,24 @@
 	function initAfterStarsLoaded() {
 		worker.postMessage({ type: 'init', payload: { stars: matchableStars } });
 		if (hashWasPresent) {
-			pendingHashResults = decodeHashToResults(window.location.hash.slice(1), starByIdx);
+			pendingShareState = decodeHashToShareState(window.location.hash.slice(1), starByIdx);
 		}
 	}
 
-	function handleStarFieldReady() {
-		if (pendingHashResults.length > 0) {
-			const results = pendingHashResults;
-			pendingHashResults = [];
+	async function handleStarFieldReady() {
+		await tick();
+		if (pendingShareState) {
+			const shareState = pendingShareState;
+			pendingShareState = null;
+			applyShareSettings(shareState.settings, { immediateGlobe: true });
+			if (shareState.entries.length === 0) return;
 			requestAnimationFrame(() => {
 				// Build all constellation entries without triggering individual animations
-				for (const { text, result } of results) {
-					constellations = [...constellations, makeEntry(text, result)];
+				for (const { text, result, color } of shareState.entries) {
+					constellations = [...constellations, makeEntry(text, result, color)];
 				}
-				focusedIndex = constellations.length - 1;
+				focusedIndex =
+					shareState.focusedIndex >= 0 ? shareState.focusedIndex : constellations.length - 1;
 				showInput = false;
 				// Use refocusConstellation to draw all and animate camera to the last one
 				const allResults = constellations.map(c => c.result);
@@ -385,7 +395,7 @@
 		isMatching = false;
 		showInput = false;
 
-		history.replaceState(null, '', '#' + encodeAllToHash(constellations));
+		replaceShareHash();
 
 		// Redraw all constellations with focus on the re-rolled one
 		const allResults = constellations.map(c => c.result);
@@ -422,6 +432,7 @@
 	function handleFocusConstellation(index: number) {
 		if (showInput || isMatching) return;
 		focusedIndex = index;
+		replaceShareHash();
 		const allResults = constellations.map(c => c.result);
 		starField?.panToConstellation(allResults, index, constellations.map(c => c.color));
 	}
@@ -441,7 +452,7 @@
 		} else if (focusedIndex > index) {
 			focusedIndex--;
 		}
-		history.replaceState(null, '', '#' + encodeAllToHash(constellations));
+		replaceShareHash();
 		const allResults = constellations.map(c => c.result);
 		starField?.refocusConstellation(allResults, focusedIndex, constellations.map(c => c.color));
 	}
@@ -501,7 +512,7 @@
 			newEntry,
 			...constellations.slice(action.constellationIndex + 1),
 		];
-		history.replaceState(null, '', '#' + encodeAllToHash(constellations));
+		replaceShareHash();
 		starField?.redrawConstellations(constellations.map(c => c.result), constellations.map(c => c.color));
 	}
 
@@ -535,6 +546,58 @@
 	let settingsOpen = $state(false);
 	let aboutOpen = $state(false);
 
+	function getShareSettings(): ShareSettings {
+		return {
+			iauOverlay,
+			starLabels,
+			coordGrid,
+			brightness,
+			monoColor,
+			showSun,
+			globeView,
+		};
+	}
+
+	function applyShareSettings(settings: ShareSettings, options: { immediateGlobe?: boolean } = {}) {
+		iauOverlay = settings.iauOverlay;
+		starLabels = settings.starLabels;
+		coordGrid = settings.coordGrid;
+		brightness = settings.brightness;
+		monoColor = settings.monoColor;
+		showSun = settings.showSun;
+		globeView = settings.globeView;
+
+		starField?.toggleIAUOverlay(iauOverlay);
+		starField?.toggleCoordinateGrid(coordGrid);
+		starField?.setBrightness(brightness);
+		starField?.setMonochrome(monoColor);
+		starField?.toggleSun(showSun);
+		starField?.toggleStarLabels(starLabels);
+		starField?.toggleGlobeView(globeView, options.immediateGlobe ?? false);
+	}
+
+	function replaceShareHash() {
+		if (constellations.length === 0) {
+			history.replaceState(null, '', window.location.pathname);
+			return;
+		}
+
+		history.replaceState(
+			null,
+			'',
+			'#' +
+				encodeShareStateToHash({
+					entries: constellations.map(entry => ({
+						text: entry.text,
+						result: entry.result,
+						color: entry.color,
+					})),
+					focusedIndex,
+					settings: getShareSettings(),
+				}),
+		);
+	}
+
 	function handleToggleAutoRotate() {
 		autoRotate = !autoRotate;
 		starField?.toggleAutoRotate(autoRotate);
@@ -543,16 +606,19 @@
 	function handleToggleIAU() {
 		iauOverlay = !iauOverlay;
 		starField?.toggleIAUOverlay(iauOverlay);
+		replaceShareHash();
 	}
 
 	function handleToggleStarLabels() {
 		starLabels = !starLabels;
 		starField?.toggleStarLabels(starLabels);
+		replaceShareHash();
 	}
 
 	function handleToggleCoordGrid() {
 		coordGrid = !coordGrid;
 		starField?.toggleCoordinateGrid(coordGrid);
+		replaceShareHash();
 	}
 
 	function handleToggleShootingStars() {
@@ -563,21 +629,25 @@
 	function handleBrightnessChange(e: Event) {
 		brightness = parseFloat((e.target as HTMLInputElement).value);
 		starField?.setBrightness(brightness);
+		replaceShareHash();
 	}
 
 	function handleToggleMonoColor() {
 		monoColor = !monoColor;
 		starField?.setMonochrome(monoColor);
+		replaceShareHash();
 	}
 
 	function handleToggleSun() {
 		showSun = !showSun;
 		starField?.toggleSun(showSun);
+		replaceShareHash();
 	}
 
 	function handleToggleGlobeView() {
 		globeView = !globeView;
 		starField?.toggleGlobeView(globeView);
+		replaceShareHash();
 	}
 
 	async function handleShare() {
@@ -1464,6 +1534,7 @@
 								onpointerdown={(e) => handleRingStart(e, i)}
 								onpointermove={(e) => handleRingMove(e, i)}
 								onpointerup={handleRingEnd}
+								onpointercancel={handleRingEnd}
 							>
 								<div class="hue-ring"></div>
 								{#if hexToHue(entry.color) !== null}
@@ -1473,7 +1544,7 @@
 								{/if}
 								<button
 									class="hue-ring-center"
-									onclick={() => { updateConstellationColor(i, '#ffffff'); colorPickerOpen = null; }}
+									onclick={() => { updateConstellationColor(i, '#ffffff'); colorPickerOpen = null; replaceShareHash(); }}
 									aria-label="Reset to white"
 								></button>
 							</div>
