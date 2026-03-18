@@ -750,9 +750,12 @@
 		setTimeout(() => (copied = false), 2000);
 	}
 
-	async function handleSaveImage() {
+	let saveMenuOpen = $state(false);
+
+	async function handleSaveImage(w?: number, h?: number) {
+		saveMenuOpen = false;
 		try {
-			const blob = await starField?.captureImage();
+			const blob = await starField?.captureImage(w, h);
 			if (!blob) return;
 			const url = URL.createObjectURL(blob);
 			const a = document.createElement('a');
@@ -1016,6 +1019,10 @@
 		// Close search dropdown when clicking outside
 		if (searchOpen && !target.closest('.star-search-container')) {
 			searchOpen = false;
+		}
+		// Close save image menu when clicking outside
+		if (saveMenuOpen && !target.closest('.save-image-container')) {
+			saveMenuOpen = false;
 		}
 		// Dismiss star/constellation panel when clicking outside
 		if ((selectedStar || selectedConstellation) && !starClickedThisTick && !target.closest('.star-panel') && !target.closest('.star-search-container')) {
@@ -1665,10 +1672,20 @@
 					<button class="reset-btn" onclick={handleReroll} disabled={isRerolling} aria-label="Try again for a different constellation placement">
 						{isRerolling ? 'Trying...' : 'Try again'}
 					</button>
-					<button class="reset-btn" onclick={handleShare} aria-label={copied ? 'Link copied to clipboard' : 'Copy shareable link'}>
+					<div class="save-image-container">
+						<button class="reset-btn" onclick={() => saveMenuOpen = !saveMenuOpen} aria-label="Save constellation as image" aria-expanded={saveMenuOpen}>Save image</button>
+						{#if saveMenuOpen}
+							<div class="save-image-menu" role="menu">
+								<button class="save-image-option" role="menuitem" onclick={() => handleSaveImage()}>Current window</button>
+								<button class="save-image-option" role="menuitem" onclick={() => handleSaveImage(1920, 1080)}>1920 × 1080 (HD)</button>
+								<button class="save-image-option" role="menuitem" onclick={() => handleSaveImage(2560, 1440)}>2560 × 1440 (2K)</button>
+								<button class="save-image-option" role="menuitem" onclick={() => handleSaveImage(3840, 2160)}>3840 × 2160 (4K)</button>
+							</div>
+						{/if}
+					</div>
+					<button class="reset-btn share-btn" onclick={handleShare} aria-label={copied ? 'Link copied to clipboard' : 'Copy shareable link'}>
 						{copied ? 'Copied!' : 'Share'}
 					</button>
-					<button class="reset-btn" onclick={handleSaveImage} aria-label="Save constellation as image">Save image</button>
 					<button class="reset-btn" onclick={handleAddAnother} aria-label="Add another constellation">Add more</button>
 					<button class="reset-btn" onclick={handleReset} aria-label="Clear all constellations">Clear all</button>
 				</div>
@@ -2159,6 +2176,56 @@
 	.reset-btn:disabled {
 		opacity: 0.4;
 		cursor: default;
+	}
+
+	.share-btn {
+		min-width: 110px;
+	}
+
+	.save-image-container {
+		position: relative;
+	}
+
+	.save-image-menu {
+		position: absolute;
+		bottom: calc(100% + 6px);
+		left: 50%;
+		transform: translateX(-50%);
+		background: rgb(0, 0, 0);
+		border: 1px solid rgba(255, 255, 255, 0.15);
+		border-radius: 6px;
+		padding: 4px;
+		display: flex;
+		flex-direction: column;
+		min-width: 150px;
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+		animation: fade-in 0.12s ease-out;
+		z-index: 15;
+	}
+
+	@keyframes fade-in {
+		from { opacity: 0; }
+		to { opacity: 1; }
+	}
+
+	.save-image-option {
+		background: none;
+		border: none;
+		color: rgba(255, 255, 255, 0.5);
+		padding: 8px 14px;
+		font-size: 13px;
+		letter-spacing: 1px;
+		font-family: inherit;
+		cursor: pointer;
+		text-align: left;
+		border-radius: 4px;
+		transition: all 0.2s;
+		white-space: nowrap;
+	}
+
+	.save-image-option:hover {
+		border-color: rgba(255, 215, 0, 0.3);
+		color: rgba(255, 215, 0, 0.7);
 	}
 
 	.credits {

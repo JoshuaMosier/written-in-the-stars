@@ -33,6 +33,7 @@
 	let ringMaterials: THREE.ShaderMaterial[] = [];
 	let drawAnimationIds: number[] = [];
 	let starPointsRef: THREE.Points | null = null;
+	let captureViewportOverride: { width: number; height: number; scale: number } | null = null;
 	const projectedLabelPos = new THREE.Vector3();
 	const overlayCameraDir = new THREE.Vector3();
 
@@ -108,6 +109,36 @@
 	function clearObjectChildren(node: THREE.Object3D) {
 		while (node.children.length > 0) {
 			disposeObject3D(node.children[0]);
+		}
+	}
+
+	function getActiveViewport() {
+		return captureViewportOverride ?? {
+			width: container?.clientWidth ?? 1,
+			height: container?.clientHeight ?? 1,
+			scale: 1,
+		};
+	}
+
+	function setOverlayCameraBounds(camera: THREE.OrthographicCamera, width: number, height: number) {
+		camera.left = -width / 2;
+		camera.right = width / 2;
+		camera.top = height / 2;
+		camera.bottom = -height / 2;
+		camera.updateProjectionMatrix();
+	}
+
+	function applyMobileViewOffset(
+		camera: THREE.PerspectiveCamera,
+		width: number,
+		height: number,
+		useCompactLayout = width <= 480,
+	) {
+		if (useCompactLayout) {
+			const offsetY = Math.round(height * 0.08);
+			camera.setViewOffset(width, height, 0, offsetY, width, height);
+		} else {
+			camera.clearViewOffset();
 		}
 	}
 
@@ -431,11 +462,13 @@
 		const hlGeom = new THREE.BufferGeometry();
 		hlGeom.setAttribute('position', new THREE.Float32BufferAttribute([candidatePos.x, candidatePos.y, candidatePos.z], 3));
 		const hlMat = new THREE.ShaderMaterial({
+			uniforms: { uRenderScale: { value: 1.0 } },
 			vertexShader: `
+				uniform float uRenderScale;
 				void main() {
 					vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
 					gl_Position = projectionMatrix * mvPosition;
-					gl_PointSize = 18.0;
+					gl_PointSize = 18.0 * uRenderScale;
 				}
 			`,
 			fragmentShader: `
@@ -1014,6 +1047,7 @@
 		uDim: THREE.Uniform<number>;
 		uTime: THREE.Uniform<number>;
 		uFovScale: THREE.Uniform<number>;
+		uRenderScale: THREE.Uniform<number>;
 		uHoveredIndex: THREE.Uniform<number>;
 		uBrightness: THREE.Uniform<number>;
 		uMonochrome: THREE.Uniform<number>;
@@ -1100,15 +1134,14 @@
 	}
 
 	function updateOverlayLabelPosition(label: Text, worldPos: THREE.Vector3, offsetY: number) {
-		if (!cameraRef || !container) return false;
-		const width = container.clientWidth;
-		const height = container.clientHeight;
+		if (!cameraRef) return false;
+		const { width, height, scale } = getActiveViewport();
 		projectedLabelPos.copy(worldPos).project(cameraRef);
 		if (projectedLabelPos.z >= 1) return false;
 
 		const sx = (projectedLabelPos.x * 0.5 + 0.5) * width;
 		const sy = (-projectedLabelPos.y * 0.5 + 0.5) * height;
-		label.position.set(sx - width * 0.5, height * 0.5 - sy + offsetY, 0);
+		label.position.set(sx - width * 0.5, height * 0.5 - sy + offsetY * scale, 0);
 		return true;
 	}
 
@@ -1267,6 +1300,7 @@
 		attribute float aIndex;
 		attribute float aNamed;
 		uniform float uFovScale;
+		uniform float uRenderScale;
 		uniform float uHoveredIndex;
 		uniform float uBrightness;
 		varying float vMag;
@@ -1299,7 +1333,7 @@
 			float baseSize = 4.0 + 35.0 * pow(flux, 0.3);
 			// Scale up as FOV decreases (zooming in)
 			float hoverScale = 1.0 + vHover * 0.6;
-			gl_PointSize = baseSize * uFovScale * hoverScale * uBrightness;
+			gl_PointSize = baseSize * uFovScale * hoverScale * uBrightness * uRenderScale;
 		}
 	`;
 
@@ -1502,12 +1536,16 @@
 		const hlKeys = hlPositions.map(starKey);
 
 		const hlMat = new THREE.ShaderMaterial({
-			uniforms: { uColor: { value: new THREE.Vector3(cr, cg, cb) } },
+			uniforms: {
+				uColor: { value: new THREE.Vector3(cr, cg, cb) },
+				uRenderScale: { value: 1.0 },
+			},
 			vertexShader: `
+				uniform float uRenderScale;
 				void main() {
 					vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
 					gl_Position = projectionMatrix * mvPosition;
-					gl_PointSize = 12.0;
+					gl_PointSize = 12.0 * uRenderScale;
 				}
 			`,
 			fragmentShader: `
@@ -1529,13 +1567,15 @@
 			uniforms: {
 				uColor: { value: new THREE.Vector3(cr, cg, cb) },
 				uFovScale: { value: 1.0 },
+				uRenderScale: { value: 1.0 },
 			},
 			vertexShader: `
 				uniform float uFovScale;
+				uniform float uRenderScale;
 				void main() {
 					vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
 					gl_Position = projectionMatrix * mvPosition;
-					gl_PointSize = 18.0 * uFovScale;
+					gl_PointSize = 18.0 * uFovScale * uRenderScale;
 				}
 			`,
 			fragmentShader: `
@@ -1773,8 +1813,11 @@
 
 		if (hlPositions.length > 0) {
 			const hlMat = new THREE.ShaderMaterial({
-				uniforms: { uColor: { value: new THREE.Vector3(cr, cg, cb) } },
-				vertexShader: `void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_PointSize = 12.0; }`,
+				uniforms: {
+					uColor: { value: new THREE.Vector3(cr, cg, cb) },
+					uRenderScale: { value: 1.0 },
+				},
+				vertexShader: `uniform float uRenderScale; void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_PointSize = 12.0 * uRenderScale; }`,
 				fragmentShader: `uniform vec3 uColor; void main() { float d = length(gl_PointCoord - 0.5) * 2.0; if (d > 1.0) discard; float alpha = exp(-d * d * 4.0) * 0.9; gl_FragColor = vec4(uColor * alpha, alpha); }`,
 				transparent: true,
 				depthTest: false,
@@ -1800,8 +1843,9 @@
 				uniforms: {
 					uColor: { value: new THREE.Vector3(cr, cg, cb) },
 					uFovScale: { value: 1.0 },
+					uRenderScale: { value: 1.0 },
 				},
-				vertexShader: `uniform float uFovScale; void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_PointSize = 18.0 * uFovScale; }`,
+				vertexShader: `uniform float uFovScale; uniform float uRenderScale; void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_PointSize = 18.0 * uFovScale * uRenderScale; }`,
 				fragmentShader: `uniform vec3 uColor; void main() { float d = length(gl_PointCoord - 0.5) * 2.0; if (d > 1.0) discard; float ring = smoothstep(0.35, 0.55, d) * smoothstep(0.95, 0.7, d); float glow = exp(-d * d * 6.0) * 0.15; float alpha = ring * 0.7 + glow; gl_FragColor = vec4(uColor * alpha, alpha); }`,
 				transparent: true,
 				depthTest: false,
@@ -2308,11 +2352,16 @@
 		}
 
 		const hlMat = new THREE.ShaderMaterial({
+			uniforms: {
+				uOpacity: new THREE.Uniform(0),
+				uRenderScale: { value: 1.0 },
+			},
 			vertexShader: `
+				uniform float uRenderScale;
 				void main() {
 					vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
 					gl_Position = projectionMatrix * mvPosition;
-					gl_PointSize = 8.0;
+					gl_PointSize = 8.0 * uRenderScale;
 				}
 			`,
 			fragmentShader: `
@@ -2325,7 +2374,6 @@
 					gl_FragColor = vec4(color * alpha, alpha);
 				}
 			`,
-			uniforms: { uOpacity: new THREE.Uniform(0) },
 			transparent: true,
 			depthTest: false,
 			blending: THREE.AdditiveBlending,
@@ -3178,13 +3226,17 @@
 		const ringGeom = new THREE.BufferGeometry();
 		ringGeom.setAttribute('position', new THREE.Float32BufferAttribute([pos.x, pos.y, pos.z], 3));
 		const ringMat = new THREE.ShaderMaterial({
-			uniforms: { uFovScale: { value: 1.0 } },
+			uniforms: {
+				uFovScale: { value: 1.0 },
+				uRenderScale: { value: 1.0 },
+			},
 			vertexShader: `
 				uniform float uFovScale;
+				uniform float uRenderScale;
 				void main() {
 					vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
 					gl_Position = projectionMatrix * mvPosition;
-					gl_PointSize = 18.0 * uFovScale;
+					gl_PointSize = 18.0 * uFovScale * uRenderScale;
 				}
 			`,
 			fragmentShader: `
@@ -3466,29 +3518,150 @@
 		panToRaDec(centroidRa, centroidDec, targetFov);
 	}
 
-	export function captureImage(): Promise<Blob> {
+	export function captureImage(captureW?: number, captureH?: number): Promise<Blob> {
 		return new Promise((resolve, reject) => {
 			if (!container || !sceneRef || !overlaySceneRef || !cameraRef || !overlayCameraRef) {
 				return reject(new Error('Scene not ready'));
 			}
 
-			const width = container.clientWidth;
-			const height = container.clientHeight;
-			const pixelRatio = rendererRef?.getPixelRatio() ?? Math.min(window.devicePixelRatio, 2);
+			const scene = sceneRef;
+			const overlayScene = overlaySceneRef;
+			const camera = cameraRef;
+			const overlayCamera = overlayCameraRef;
+			const liveWidth = Math.max(1, container.clientWidth);
+			const liveHeight = Math.max(1, container.clientHeight);
+			const baseDpr = rendererRef?.getPixelRatio() ?? Math.min(window.devicePixelRatio, 2);
+			const targetWidth = Math.max(1, Math.round(captureW ?? liveWidth * baseDpr));
+			const targetHeight = Math.max(1, Math.round(captureH ?? liveHeight * baseDpr));
+			const renderScale = Math.min(targetWidth / liveWidth, targetHeight / liveHeight);
+			const useCompactLayout = liveWidth <= 480;
+
 			const captureRenderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 			captureRenderer.getContext().drawingBufferColorSpace = 'srgb';
 			captureRenderer.autoClear = false;
-			captureRenderer.setPixelRatio(pixelRatio);
-			captureRenderer.setSize(width, height, false);
+			captureRenderer.setPixelRatio(1);
+			captureRenderer.setSize(targetWidth, targetHeight, false);
 			captureRenderer.setClearColor(0x000005);
 
-			cameraRef.updateMatrixWorld();
-			overlayCameraRef.updateMatrixWorld();
-			updateOverlayLabels(performance.now());
-			captureRenderer.clear();
-			captureRenderer.render(sceneRef, cameraRef);
-			captureRenderer.clearDepth();
-			captureRenderer.render(overlaySceneRef, overlayCameraRef);
+			const originalViewportOverride = captureViewportOverride;
+			const originalAspect = camera.aspect;
+			const originalOverlayBounds = {
+				left: overlayCamera.left,
+				right: overlayCamera.right,
+				top: overlayCamera.top,
+				bottom: overlayCamera.bottom,
+			};
+			const lineStates: { mat: LineMaterial; linewidth: number; resolution: THREE.Vector2 }[] = [];
+			const shaderStates: { mat: THREE.ShaderMaterial; value: number }[] = [];
+			const labelStates: { label: Text; scale: THREE.Vector3 }[] = [];
+			const seenMaterials = new Set<THREE.Material>();
+
+			const captureMaterial = (material: THREE.Material) => {
+				if (seenMaterials.has(material)) return;
+				seenMaterials.add(material);
+
+				if (material instanceof LineMaterial) {
+					lineStates.push({
+						mat: material,
+						linewidth: material.linewidth,
+						resolution: material.resolution.clone(),
+					});
+					return;
+				}
+
+				if (material instanceof THREE.ShaderMaterial) {
+					const renderScaleUniform = material.uniforms?.uRenderScale as THREE.Uniform<number> | undefined;
+					if (renderScaleUniform) {
+						shaderStates.push({ mat: material, value: renderScaleUniform.value });
+					}
+				}
+			};
+
+			const captureObjectMaterials = (obj: THREE.Object3D) => {
+				const material = (obj as THREE.Object3D & {
+					material?: THREE.Material | THREE.Material[];
+				}).material;
+				if (Array.isArray(material)) {
+					for (const entry of material) captureMaterial(entry);
+				} else if (material) {
+					captureMaterial(material);
+				}
+			};
+
+			scene.traverse(captureObjectMaterials);
+			overlayScene.traverse((obj) => {
+				captureObjectMaterials(obj);
+				if (obj instanceof Text) {
+					labelStates.push({ label: obj, scale: obj.scale.clone() });
+				}
+			});
+
+			const restoreRenderState = () => {
+				captureViewportOverride = originalViewportOverride;
+				camera.aspect = originalAspect;
+				applyMobileViewOffset(camera, liveWidth, liveHeight, useCompactLayout);
+				camera.updateProjectionMatrix();
+				overlayCamera.left = originalOverlayBounds.left;
+				overlayCamera.right = originalOverlayBounds.right;
+				overlayCamera.top = originalOverlayBounds.top;
+				overlayCamera.bottom = originalOverlayBounds.bottom;
+				overlayCamera.updateProjectionMatrix();
+
+				for (const { mat, linewidth, resolution } of lineStates) {
+					mat.linewidth = linewidth;
+					mat.resolution.copy(resolution);
+				}
+				for (const { mat, value } of shaderStates) {
+					const renderScaleUniform = mat.uniforms?.uRenderScale as THREE.Uniform<number> | undefined;
+					if (renderScaleUniform) renderScaleUniform.value = value;
+				}
+				for (const { label, scale } of labelStates) {
+					label.scale.copy(scale);
+				}
+
+				camera.updateMatrixWorld();
+				overlayCamera.updateMatrixWorld();
+				updateOverlayLabels(performance.now());
+			};
+
+			try {
+				captureViewportOverride = {
+					width: targetWidth,
+					height: targetHeight,
+					scale: renderScale,
+				};
+				camera.aspect = targetWidth / targetHeight;
+				applyMobileViewOffset(camera, targetWidth, targetHeight, useCompactLayout);
+				camera.updateProjectionMatrix();
+				setOverlayCameraBounds(overlayCamera, targetWidth, targetHeight);
+
+				for (const { mat } of lineStates) {
+					mat.linewidth *= renderScale;
+					mat.resolution.set(targetWidth, targetHeight);
+				}
+				for (const { mat } of shaderStates) {
+					const renderScaleUniform = mat.uniforms?.uRenderScale as THREE.Uniform<number> | undefined;
+					if (renderScaleUniform) renderScaleUniform.value = renderScale;
+				}
+				for (const { label } of labelStates) {
+					label.scale.set(renderScale, renderScale, 1);
+				}
+
+				camera.updateMatrixWorld();
+				overlayCamera.updateMatrixWorld();
+				updateOverlayLabels(performance.now());
+				captureRenderer.clear();
+				captureRenderer.render(scene, camera);
+				captureRenderer.clearDepth();
+				captureRenderer.render(overlayScene, overlayCamera);
+			} catch (error) {
+				restoreRenderState();
+				captureRenderer.dispose();
+				captureRenderer.forceContextLoss();
+				return reject(error instanceof Error ? error : new Error('Failed to capture image'));
+			}
+
+			restoreRenderState();
 
 			captureRenderer.domElement.toBlob((blob) => {
 				captureRenderer.dispose();
@@ -3682,6 +3855,7 @@
 			uDim: new THREE.Uniform(1.0),
 			uTime: new THREE.Uniform(0.0),
 			uFovScale: new THREE.Uniform(1.0),
+			uRenderScale: new THREE.Uniform(1.0),
 			uHoveredIndex: new THREE.Uniform(-1.0),
 			uBrightness: new THREE.Uniform(1.0),
 			uMonochrome: new THREE.Uniform(0.0),
@@ -4081,35 +4255,19 @@
 		}
 		render();
 
-		function applyMobileViewOffset() {
-			const w = container.clientWidth;
-			const h = container.clientHeight;
-			if (w <= 480) {
-				// Shift the view upward by 8% of the viewport height
-				const offsetY = Math.round(h * 0.08);
-				camera.setViewOffset(w, h, 0, offsetY, w, h);
-			} else {
-				camera.clearViewOffset();
-			}
-		}
-
 		const onResize = () => {
 			camera.aspect = container.clientWidth / container.clientHeight;
-			applyMobileViewOffset();
+			applyMobileViewOffset(camera, container.clientWidth, container.clientHeight);
 			camera.updateProjectionMatrix();
 			if (overlayCameraRef) {
-				overlayCameraRef.left = -container.clientWidth / 2;
-				overlayCameraRef.right = container.clientWidth / 2;
-				overlayCameraRef.top = container.clientHeight / 2;
-				overlayCameraRef.bottom = -container.clientHeight / 2;
-				overlayCameraRef.updateProjectionMatrix();
+				setOverlayCameraBounds(overlayCameraRef, container.clientWidth, container.clientHeight);
 			}
 			renderer.setSize(container.clientWidth, container.clientHeight);
 			rendererSize.set(container.clientWidth, container.clientHeight);
 			updateRotateSpeed();
 			updateStarProjectionCache(camera, container.clientWidth, container.clientHeight);
 		};
-		applyMobileViewOffset();
+		applyMobileViewOffset(camera, container.clientWidth, container.clientHeight);
 		camera.updateProjectionMatrix();
 		window.addEventListener('resize', onResize);
 
