@@ -562,7 +562,7 @@
 	let monoColor = $state(false);
 	let showSun = $state(false);
 	let globeView = $state(false);
-	let settingsOpen = $state(!hasSeenTour);
+	let settingsOpen = $state(false);
 	let aboutOpen = $state(false);
 
 	function constellationModeLabel(mode: ConstellationDisplayMode): string {
@@ -596,11 +596,15 @@
 	}
 
 	function viewLabel(globe: boolean): string {
-		return globe ? 'Globe' : '2D';
+		return globe ? 'Globe' : 'Chart';
+	}
+
+	function viewButtonLabel(globe: boolean): string {
+		return `View: ${viewLabel(globe)}`;
 	}
 
 	function nextViewLabel(globe: boolean): string {
-		return globe ? '2D' : 'Globe';
+		return globe ? 'Chart' : 'Globe';
 	}
 
 	function brightnessLabel(value: number): string {
@@ -1119,20 +1123,7 @@
 					onclick={handleToggleGlobeView}
 					aria-label={`Switch to ${nextViewLabel(globeView)} view`}
 				>
-					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-						{#if !globeView}
-							<circle cx="12" cy="12" r="9" />
-							<ellipse cx="12" cy="12" rx="9" ry="4" />
-							<ellipse cx="12" cy="12" rx="4" ry="9" />
-						{:else}
-							<rect x="3" y="6" width="18" height="12" rx="2" />
-							<line x1="3" y1="15" x2="21" y2="15" />
-							<circle cx="8" cy="11" r="1.2" fill="currentColor" stroke="none" />
-							<circle cx="14" cy="9" r="1.2" fill="currentColor" stroke="none" />
-							<line x1="8" y1="11" x2="14" y2="9" />
-						{/if}
-					</svg>
-					<span>{nextViewLabel(globeView)}</span>
+					<span>{viewButtonLabel(globeView)}</span>
 				</button>
 
 				{#if settingsOpen}
@@ -1273,7 +1264,7 @@
 					else if (e.key === 'Enter' && results.length > 0) { handleSearchSelect(results[searchHighlight]); searchInputEl?.blur(); }
 					else if (e.key === 'Escape') { searchOpen = false; searchInputEl?.blur(); }
 				}}
-				placeholder={windowWidth <= 480 ? "Search stars..." : "Search stars & constellations..."}
+				placeholder={windowWidth <= 480 ? "Find stars" : "Find stars or constellations"}
 				autocomplete="off"
 			/>
 			{#if searchQuery}
@@ -1320,18 +1311,18 @@
 				<div class="input-reject-msg">{inputRejectMsg}</div>
 			{/if}
 			<div class="input-sizer">
-				<span class="input-measure" aria-hidden="true">{inputText || 'Search the stars...'}</span>
+				<span class="input-measure" aria-hidden="true">{inputText || 'Write something in the stars...'}</span>
 				<input
 					id="constellation-input"
 					type="text"
 					bind:value={inputText}
 					oninput={filterInput}
 					onkeydown={handleKeydown}
-					placeholder="Search the stars..."
+					placeholder="Write something in the stars..."
 					maxlength={30}
 					disabled={isMatching || !starsReady}
 					autocomplete="off"
-					aria-describedby={isMatching ? 'matching-status' : undefined}
+					aria-describedby={isMatching ? 'matching-status' : constellations.length === 0 ? 'input-helper' : undefined}
 					use:autoFocus
 				/>
 			</div>
@@ -1346,6 +1337,8 @@
 						esc
 					</button>
 				</div>
+			{:else if constellations.length === 0}
+				<div id="input-helper" class="input-helper">Press Enter to map it to real stars.</div>
 			{:else if constellations.length > 0}
 				<button class="cancel-match go-back-btn" onclick={cancelAddMore} aria-label="Go back to constellation view">
 					<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -1837,6 +1830,35 @@
 	@keyframes reject-fade-in {
 		from { opacity: 0; }
 		to { opacity: 1; }
+	}
+
+	.input-helper {
+		position: absolute;
+		top: 100%;
+		left: 50%;
+		transform: translateX(-50%);
+		margin-top: 12px;
+		padding: 7px 18px;
+		color: rgba(255, 255, 255, 0.38);
+		font-size: 11px;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		text-align: center;
+		white-space: nowrap;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+		pointer-events: none;
+		z-index: 0;
+		isolation: isolate;
+	}
+
+	.input-helper::before {
+		content: '';
+		position: absolute;
+		inset: -16px -34px;
+		border-radius: 999px;
+		background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.92) 0%, rgba(0, 0, 0, 0.7) 40%, rgba(0, 0, 0, 0.34) 72%, transparent 100%);
+		filter: blur(16px);
+		z-index: -1;
 	}
 
 	.matching-indicator {
@@ -2334,15 +2356,18 @@
 	}
 
 	.top-bar-mode-btn {
-		gap: 6px;
-		min-width: 86px;
+		width: 92px;
+		min-width: 92px;
 		height: 34px;
-		padding: 0 10px;
+		padding: 0 8px;
 		box-sizing: border-box;
 		font-size: 11px;
 		letter-spacing: 1.1px;
 		text-transform: uppercase;
 		line-height: 1;
+		justify-content: flex-start;
+		text-align: left;
+		white-space: nowrap;
 	}
 
 	.settings-panel {
@@ -2913,9 +2938,10 @@
 		}
 
 		.top-bar-mode-btn {
-			min-width: 78px;
+			width: 92px;
+			min-width: 92px;
 			height: 34px;
-			padding: 0 9px;
+			padding: 0 8px;
 			font-size: 10px;
 			letter-spacing: 0.9px;
 		}
