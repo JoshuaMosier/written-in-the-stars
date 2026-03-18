@@ -5,7 +5,8 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
-		"build": "vite build",
+		"build": "node scripts/build-with-og-version.mjs",
+		"build:vite": "vite build",
 		"preview": "vite preview",
 		"fetch-stars": "tsx scripts/fetch-stars.ts",
 		"benchmark:matcher": "tsx scripts/benchmark-matcher.ts",

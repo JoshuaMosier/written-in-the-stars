@@ -16,7 +16,10 @@
 			property="og:description"
 			content="Some things are written in the stars. Type any word and watch real stars spell it across the night sky."
 		/>
-		<meta property="og:image" content="https://starspelled.com/og-image.png" />
+		<meta
+			property="og:image"
+			content="https://starspelled.com/og-image.png?v=%sveltekit.env.PUBLIC_OG_IMAGE_VERSION%"
+		/>
 		<meta property="og:image:width" content="1200" />
 		<meta property="og:image:height" content="630" />
 		<meta property="og:url" content="https://starspelled.com" />
@@ -28,7 +31,10 @@
 			name="twitter:description"
 			content="Some things are written in the stars. Type any word and watch real stars spell it across the night sky."
 		/>
-		<meta name="twitter:image" content="https://starspelled.com/og-image.png" />
+		<meta
+			name="twitter:image"
+			content="https://starspelled.com/og-image.png?v=%sveltekit.env.PUBLIC_OG_IMAGE_VERSION%"
+		/>
 
 		<!-- Icons -->
 		<meta name="theme-color" content="#000005" />
