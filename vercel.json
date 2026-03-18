@@ -1,4 +1,42 @@
 {
 	"buildCommand": "npm run build",
-	"outputDirectory": "build"
+	"outputDirectory": "build",
+	"headers": [
+		{
+			"source": "/_app/(.*)",
+			"headers": [
+				{
+					"key": "Cache-Control",
+					"value": "public, max-age=31536000, immutable"
+				}
+			]
+		},
+		{
+			"source": "/stars.json",
+			"headers": [
+				{
+					"key": "Cache-Control",
+					"value": "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800"
+				}
+			]
+		},
+		{
+			"source": "/star-wiki.json",
+			"headers": [
+				{
+					"key": "Cache-Control",
+					"value": "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800"
+				}
+			]
+		},
+		{
+			"source": "/constellation-wiki.json",
+			"headers": [
+				{
+					"key": "Cache-Control",
+					"value": "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800"
+				}
+			]
+		}
+	]
 }

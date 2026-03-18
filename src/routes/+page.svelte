@@ -6,6 +6,9 @@
 	import { SUPPORTED_CHARS } from '$lib/engine/supported-chars';
 	import MatchWorker from '$lib/engine/match.worker?worker';
 
+	const GITHUB_REPO_URL = 'https://github.com/JoshuaMosier/written-in-the-stars';
+	const HOW_IT_WORKS_URL = `${GITHUB_REPO_URL}/blob/main/docs/how-it-works.md`;
+
 	function scheduleLowPriorityTask(task: () => void, timeout = 150): () => void {
 		if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
 			const idleId = window.requestIdleCallback(() => task(), { timeout: 1000 });
@@ -948,15 +951,6 @@
 	let tourStep = $state(0);
 	let tourSeen = $state(hasSeenTour);
 
-	// Auto-focus search box when result overlay appears
-	$effect(() => {
-		if (!showInput && searchInputEl) {
-			// Tick delay so the DOM is rendered before focus
-			const t = setTimeout(() => searchInputEl?.focus(), 50);
-			return () => clearTimeout(t);
-		}
-	});
-
 	$effect(() => {
 		if (!tourSeen && !showInput && constellations.length === 1 && tourStep === 0) {
 			const timer = setTimeout(() => {
@@ -1663,7 +1657,9 @@
 					maxlength={30}
 					disabled={isMatching || !starsReady}
 					autocomplete="off"
-					aria-describedby={isMatching ? 'matching-status' : constellations.length === 0 ? 'input-helper' : undefined}
+					aria-describedby={
+						isMatching ? 'matching-status' : !starsReady || !!starsError || constellations.length === 0 ? 'input-helper' : undefined
+					}
 					use:autoFocus
 				/>
 			</div>
@@ -1686,6 +1682,10 @@
 						esc
 					</button>
 				</div>
+			{:else if starsError}
+				<div id="input-helper" class="input-helper input-helper-loading">Star catalog unavailable.</div>
+			{:else if !starsReady}
+				<div id="input-helper" class="input-helper input-helper-loading">Loading ~9,000 cataloged stars...</div>
 			{:else if constellations.length === 0}
 				<div id="input-helper" class="input-helper">Press Enter to map it to real stars.</div>
 			{:else if constellations.length > 0}
@@ -1907,6 +1907,19 @@
 					</ul>
 				</div>
 
+				<div class="about-section">
+					<h3 class="about-heading">Read more</h3>
+					<p class="about-text about-link-row">
+						<a class="about-inline-link" href={HOW_IT_WORKS_URL} target="_blank" rel="noopener noreferrer"
+							>How it works</a
+						>
+						<span class="about-divider" aria-hidden="true">&middot;</span>
+						<a class="about-inline-link" href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer"
+							>Source code</a
+						>
+					</p>
+				</div>
+
 				<div class="about-footer">
 					<span>Made by Josh Mosier</span>
 					<a href="https://x.com/joshrmosier" target="_blank" rel="noopener noreferrer" aria-label="X (Twitter)">
@@ -1917,7 +1930,7 @@
 						>
 					</a>
 					<a
-						href="https://github.com/JoshuaMosier/written-in-the-stars"
+						href={GITHUB_REPO_URL}
 						target="_blank"
 						rel="noopener noreferrer"
 						aria-label="GitHub"
@@ -2028,7 +2041,7 @@
 			>
 		</a>
 		<a
-			href="https://github.com/JoshuaMosier/written-in-the-stars"
+			href={GITHUB_REPO_URL}
 			target="_blank"
 			rel="noopener noreferrer"
 			aria-label="GitHub"
@@ -2472,6 +2485,10 @@
 		);
 		filter: blur(16px);
 		z-index: -1;
+	}
+
+	.input-helper-loading {
+		color: rgba(255, 215, 0, 0.72);
 	}
 
 	.matching-indicator {
@@ -3653,6 +3670,22 @@
 
 	.about-text {
 		margin: 0 0 14px;
+	}
+
+	.about-link-row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		flex-wrap: wrap;
+	}
+
+	.about-inline-link {
+		color: rgba(170, 200, 255, 0.78);
+		text-decoration: none;
+	}
+
+	.about-inline-link:hover {
+		color: rgba(170, 200, 255, 1);
 	}
 
 	.about-section {
