@@ -3,6 +3,7 @@
 	import type { Star, MatchResult } from '$lib/engine/types';
 	import type { ConstellationDisplayMode, ShareSettings, ShareState } from '$lib/engine/sharing';
 	import type { ConstellationDef } from '$lib/data/constellations';
+	import { getZenithEquatorialCoords } from '$lib/engine/observer';
 	import { SUPPORTED_CHARS } from '$lib/engine/supported-chars';
 	import MatchWorker from '$lib/engine/match.worker?worker';
 
@@ -803,8 +804,10 @@
 	let monoColor = $state(false);
 	let showSun = $state(false);
 	let globeView = $state(false);
+	let mySkyPending = $state(false);
 	let settingsOpen = $state(false);
 	let aboutOpen = $state(false);
+	const geolocationSupported = typeof navigator !== 'undefined' && 'geolocation' in navigator;
 
 	function constellationModeLabel(mode: ConstellationDisplayMode): string {
 		switch (mode) {
@@ -964,6 +967,79 @@
 		globeView = !globeView;
 		starField?.toggleGlobeView(globeView);
 		replaceShareHash();
+	}
+
+	function getCurrentPosition(options?: PositionOptions): Promise<GeolocationPosition> {
+		return new Promise((resolve, reject) => {
+			if (!geolocationSupported) {
+				reject(new Error('Geolocation is not supported on this device.'));
+				return;
+			}
+			navigator.geolocation.getCurrentPosition(resolve, reject, options);
+		});
+	}
+
+	function getGeolocationErrorMessage(error: unknown): string {
+		if (error && typeof error === 'object' && 'code' in error) {
+			switch ((error as GeolocationPositionError).code) {
+				case 1:
+					return 'Location access was denied. Allow location to use My Sky.';
+				case 2:
+					return 'Your location could not be determined. Please try again.';
+				case 3:
+					return 'Getting your location timed out. Please try again.';
+			}
+		}
+		if (error instanceof Error && error.message) return error.message;
+		return 'Unable to determine your location right now.';
+	}
+
+	async function handleUseMySky() {
+		if (mySkyPending) return;
+		if (!starField) {
+			errorMessage = 'Sky view is still loading. Please try again in a moment.';
+			setTimeout(() => (errorMessage = ''), 4000);
+			return;
+		}
+		mySkyPending = true;
+		try {
+			const position = await getCurrentPosition({
+				enableHighAccuracy: false,
+				maximumAge: 5 * 60 * 1000,
+				timeout: 10_000,
+			});
+			const now = new Date();
+			const { latitude, longitude } = position.coords;
+			const { ra, dec } = getZenithEquatorialCoords(now, latitude, longitude);
+
+			settingsOpen = false;
+			searchQuery = '';
+			searchOpen = false;
+			searchInputEl?.blur();
+			selectedStar = null;
+			selectedConstellation = null;
+			selectionHistory = [];
+			starField?.clearStarHighlight();
+			starField?.clearTempConstellation();
+
+			if (globeView) {
+				globeView = false;
+				starField?.toggleGlobeView(false, true);
+				replaceShareHash();
+			}
+
+			if (autoRotate) {
+				autoRotate = false;
+				starField?.toggleAutoRotate(false);
+			}
+
+			starField?.panToRaDec(ra, dec, 90);
+		} catch (error) {
+			errorMessage = getGeolocationErrorMessage(error);
+			setTimeout(() => (errorMessage = ''), 4000);
+		} finally {
+			mySkyPending = false;
+		}
 	}
 
 	async function handleShare() {
@@ -1531,6 +1607,36 @@
 						</div>
 						<button
 							class="settings-item"
+							class:active={mySkyPending}
+							onclick={handleUseMySky}
+							role="menuitem"
+							aria-label="Center the view on your current sky"
+							aria-busy={mySkyPending}
+							disabled={!geolocationSupported || mySkyPending}
+						>
+							<svg
+								viewBox="0 0 24 24"
+								width="16"
+								height="16"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.5"
+								aria-hidden="true"
+							>
+								<circle cx="12" cy="12" r="7" />
+								<circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+								<line x1="12" y1="2" x2="12" y2="5" />
+								<line x1="12" y1="19" x2="12" y2="22" />
+								<line x1="2" y1="12" x2="5" y2="12" />
+								<line x1="19" y1="12" x2="22" y2="12" />
+							</svg>
+							<span class="settings-item-label">My Sky</span>
+							<span class="settings-item-value"
+								>{mySkyPending ? 'Locating' : geolocationSupported ? 'Locate' : 'Unavailable'}</span
+							>
+						</button>
+						<button
+							class="settings-item"
 							class:active={autoRotate}
 							onclick={handleToggleAutoRotate}
 							role="menuitemcheckbox"
@@ -1565,16 +1671,102 @@
 								fill="none"
 								stroke="currentColor"
 								stroke-width="1.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
 								aria-hidden="true"
 							>
-								<circle cx="5" cy="5" r="1.5" fill="currentColor" stroke="none" />
-								<circle cx="19" cy="4" r="1.5" fill="currentColor" stroke="none" />
-								<circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
-								<line x1="5" y1="5" x2="12" y2="12" />
-								<line x1="19" y1="4" x2="12" y2="12" />
+								<g stroke-width="1.15">
+									<line x1="14.28" y1="16.6" x2="13.23" y2="16.13" />
+									<line x1="13.23" y1="16.13" x2="12.26" y2="15.55" />
+									<line x1="19.54" y1="2.87" x2="21.5" y2="6.35" />
+									<line x1="21.5" y1="6.35" x2="20.49" y2="5.99" />
+									<line x1="20.49" y1="5.99" x2="17.44" y2="2.5" />
+									<line x1="21.5" y1="6.35" x2="19.29" y2="9.24" />
+									<line x1="19.29" y1="9.24" x2="17.62" y2="10.67" />
+									<line x1="17.62" y1="10.67" x2="14.28" y2="16.6" />
+									<line x1="14.28" y1="16.6" x2="15.9" y2="21.5" />
+									<line x1="15.9" y1="21.5" x2="8.22" y2="20.57" />
+									<line x1="8.22" y1="20.57" x2="12.26" y2="15.55" />
+									<line x1="12.26" y1="15.55" x2="10.67" y2="11.34" />
+									<line x1="10.67" y1="11.34" x2="12.98" y2="9.06" />
+									<line x1="12.98" y1="9.06" x2="17.62" y2="10.67" />
+									<line x1="10.67" y1="11.34" x2="2.5" y2="10.95" />
+									<line x1="2.5" y1="10.95" x2="2.82" y2="11.81" />
+									<line x1="2.82" y1="11.81" x2="3.32" y2="13.77" />
+									<line x1="3.32" y1="13.77" x2="4.51" y2="14.28" />
+									<line x1="2.5" y1="10.95" x2="2.68" y2="9.72" />
+									<line x1="2.68" y1="9.72" x2="3.67" y2="8.92" />
+									<line x1="20.49" y1="5.99" x2="19.29" y2="9.24" />
+								</g>
+								<circle cx="2.5" cy="10.95" r="0.8" fill="currentColor" stroke="none" />
+								<circle cx="2.68" cy="9.72" r="0.62" fill="currentColor" stroke="none" />
+								<circle cx="2.82" cy="11.81" r="0.7" fill="currentColor" stroke="none" />
+								<circle cx="3.32" cy="13.77" r="0.55" fill="currentColor" stroke="none" />
+								<circle cx="3.67" cy="8.92" r="0.58" fill="currentColor" stroke="none" />
+								<circle cx="4.51" cy="14.28" r="0.6" fill="currentColor" stroke="none" />
+								<circle cx="8.22" cy="20.57" r="1.45" fill="currentColor" stroke="none" />
+								<circle cx="10.67" cy="11.34" r="1.05" fill="currentColor" stroke="none" />
+								<circle cx="12.26" cy="15.55" r="0.95" fill="currentColor" stroke="none" />
+								<circle cx="12.98" cy="9.06" r="0.82" fill="currentColor" stroke="none" />
+								<circle cx="13.23" cy="16.13" r="1" fill="currentColor" stroke="none" />
+								<circle cx="14.28" cy="16.6" r="1.02" fill="currentColor" stroke="none" />
+								<circle cx="15.9" cy="21.5" r="1.15" fill="currentColor" stroke="none" />
+								<circle cx="17.44" cy="2.5" r="0.62" fill="currentColor" stroke="none" />
+								<circle cx="17.62" cy="10.67" r="1.4" fill="currentColor" stroke="none" />
+								<circle cx="19.29" cy="9.24" r="0.65" fill="currentColor" stroke="none" />
+								<circle cx="19.54" cy="2.87" r="0.52" fill="currentColor" stroke="none" />
+								<circle cx="20.49" cy="5.99" r="0.64" fill="currentColor" stroke="none" />
+								<circle cx="21.5" cy="6.35" r="0.62" fill="currentColor" stroke="none" />
 							</svg>
 							<span class="settings-item-label">Constellations</span>
 							<span class="settings-item-value">{constellationModeLabel(constellationMode)}</span>
+						</button>
+						<button
+							class="settings-item"
+							class:active={coordGrid}
+							onclick={handleToggleCoordGrid}
+							role="menuitemcheckbox"
+							aria-checked={coordGrid}
+						>
+							<svg
+								viewBox="0 0 24 24"
+								width="16"
+								height="16"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.5"
+								aria-hidden="true"
+							>
+								<circle cx="12" cy="12" r="9" />
+								<line x1="12" y1="3" x2="12" y2="21" />
+								<line x1="3" y1="12" x2="21" y2="12" />
+								<ellipse cx="12" cy="12" rx="4" ry="9" />
+							</svg>
+							<span class="settings-item-label">Coordinates</span>
+							<span class="settings-item-value">{toggleLabel(coordGrid)}</span>
+						</button>
+						<button
+							class="settings-item"
+							class:active={starLabels}
+							onclick={handleToggleStarLabels}
+							role="menuitemcheckbox"
+							aria-checked={starLabels}
+						>
+							<svg
+								viewBox="0 0 24 24"
+								width="16"
+								height="16"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.5"
+								aria-hidden="true"
+							>
+								<polygon
+									points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"
+								/>
+							</svg>
+							<span class="settings-item-label">Star names</span>
+							<span class="settings-item-value">{toggleLabel(starLabels)}</span>
 						</button>
 						<div class="settings-item slider-row">
 							<svg
@@ -1602,53 +1794,6 @@
 								oninput={handleBrightnessChange}
 							/>
 						</div>
-						<button
-							class="settings-item"
-							class:active={starLabels}
-							onclick={handleToggleStarLabels}
-							role="menuitemcheckbox"
-							aria-checked={starLabels}
-						>
-							<svg
-								viewBox="0 0 24 24"
-								width="16"
-								height="16"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="1.5"
-								aria-hidden="true"
-							>
-								<polygon
-									points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"
-								/>
-							</svg>
-							<span class="settings-item-label">Star names</span>
-							<span class="settings-item-value">{toggleLabel(starLabels)}</span>
-						</button>
-						<button
-							class="settings-item"
-							class:active={coordGrid}
-							onclick={handleToggleCoordGrid}
-							role="menuitemcheckbox"
-							aria-checked={coordGrid}
-						>
-							<svg
-								viewBox="0 0 24 24"
-								width="16"
-								height="16"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="1.5"
-								aria-hidden="true"
-							>
-								<circle cx="12" cy="12" r="9" />
-								<line x1="12" y1="3" x2="12" y2="21" />
-								<line x1="3" y1="12" x2="21" y2="12" />
-								<ellipse cx="12" cy="12" rx="4" ry="9" />
-							</svg>
-							<span class="settings-item-label">Coordinates</span>
-							<span class="settings-item-value">{toggleLabel(coordGrid)}</span>
-						</button>
 						<button
 							class="settings-item"
 							class:active={!monoColor}
@@ -3631,6 +3776,17 @@
 	.settings-item:hover {
 		background: rgba(255, 255, 255, 0.06);
 		color: rgba(255, 255, 255, 0.7);
+	}
+
+	.settings-item:disabled,
+	.settings-item:disabled:hover {
+		background: none;
+		color: rgba(255, 255, 255, 0.25);
+		cursor: default;
+	}
+
+	.settings-item:disabled .settings-item-value {
+		color: rgba(255, 255, 255, 0.2);
 	}
 
 	.settings-item.active {
