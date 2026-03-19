@@ -789,7 +789,9 @@
 	let copied = $state(false);
 	const reducedMotion =
 		typeof window !== 'undefined' ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false;
-	const hasSeenTour = typeof localStorage !== 'undefined' && localStorage.getItem('starspelled-tour-seen') === '1';
+	const TOUR_STORAGE_KEY = 'starspelled-tour-seen';
+	const TOUR_VERSION = '2';
+	const hasSeenTour = typeof localStorage !== 'undefined' && localStorage.getItem(TOUR_STORAGE_KEY) === TOUR_VERSION;
 	let constellationMode = $state<ConstellationDisplayMode>('ambient');
 	let autoRotate = $state(!reducedMotion);
 	let starLabels = $state(false);
@@ -1067,15 +1069,62 @@
 	let selectionHistory = $state<SelectionState[]>([]);
 
 	// --- Guided tour (first-run only) ---
-	const DESKTOP_TOUR_STEPS = [
-		'Drag any vertex to snap it to a different star',
-		'Try again for a completely different star placement',
-		'Undo with Ctrl+Z, redo with Ctrl+Y',
+	interface GuidedTourStep {
+		title: string;
+		body: string;
+	}
+
+	const DESKTOP_TOUR_STEPS: GuidedTourStep[] = [
+		{
+			title: 'Move Stars',
+			body: 'Drag any vertex to snap it to a different star and refine the drawing.',
+		},
+		{
+			title: 'Try Variants',
+			body: 'Use Try again for a fresh placement, Add more to keep this one and make another, or Clear all to reset the session.',
+		},
+		{
+			title: 'Compare Constellations',
+			body: 'After you add more, use Prev and Next to switch focus. Click the constellation name to replay its draw-in animation.',
+		},
+		{
+			title: 'Edit The Focused One',
+			body: 'Undo and Redo only affect the focused constellation. Use Color to recolor it or Delete to remove it.',
+		},
+		{
+			title: 'Save Or Share',
+			body: 'Save image exports a snapshot, and Share copies a link to the current view.',
+		},
+		{
+			title: 'Explore The Sky',
+			body: 'Use the search box to jump to named stars and constellations, or switch between Chart and Globe in the top-left.',
+		},
 	];
-	const MOBILE_TOUR_STEPS = [
-		'Press and hold any vertex, then drag it to a different star',
-		'Tap Try again for a completely different star placement',
-		'Use the Undo and Redo buttons next to Color to step through node changes',
+	const MOBILE_TOUR_STEPS: GuidedTourStep[] = [
+		{
+			title: 'Move Stars',
+			body: 'Press and hold any vertex, then drag it to a different star.',
+		},
+		{
+			title: 'Try Variants',
+			body: 'Tap Try again for a fresh placement, Add more to keep this one and make another, or Clear all to reset everything.',
+		},
+		{
+			title: 'Compare Constellations',
+			body: 'After you add more, swipe across the constellation name or use the < and > buttons to move between results.',
+		},
+		{
+			title: 'Edit The Focused One',
+			body: 'Undo, Redo, Color, and Delete only affect the focused constellation. Tap the name to replay its animation.',
+		},
+		{
+			title: 'Save Or Share',
+			body: 'Use Save image for a snapshot and Share for a link you can send from your phone.',
+		},
+		{
+			title: 'Explore The Sky',
+			body: 'The top-left controls let you search named stars and switch between Chart and Globe.',
+		},
 	];
 	let tourSteps = $derived(windowWidth <= 480 ? MOBILE_TOUR_STEPS : DESKTOP_TOUR_STEPS);
 	let tourStep = $state(0);
@@ -1119,7 +1168,7 @@
 	function dismissTour() {
 		tourStep = 0;
 		tourSeen = true;
-		localStorage.setItem('starspelled-tour-seen', '1');
+		localStorage.setItem(TOUR_STORAGE_KEY, TOUR_VERSION);
 	}
 
 	function pushSelection() {
@@ -2466,6 +2515,7 @@
 	{/if}
 
 	{#if tourStep >= 1 && tourStep <= tourSteps.length}
+		{@const currentTourStep = tourSteps[tourStep - 1]}
 		<div class="tour-tooltip" class:mobile={windowWidth <= 480} role="status" aria-live="polite">
 			<div class="tour-header">
 				<span class="tour-step">{tourStep}/{tourSteps.length}</span>
@@ -2483,7 +2533,8 @@
 					</svg>
 				</button>
 			</div>
-			<div class="tour-text">{tourSteps[tourStep - 1]}</div>
+			<div class="tour-title">{currentTourStep.title}</div>
+			<div class="tour-text">{currentTourStep.body}</div>
 			<button class="tour-next" onclick={advanceTour}>
 				{tourStep < tourSteps.length ? 'Next' : 'Got it'}
 			</button>
@@ -4314,7 +4365,7 @@
 		border: 1px solid rgba(255, 215, 0, 0.15);
 		border-radius: 10px;
 		padding: 12px 16px;
-		max-width: 300px;
+		max-width: 332px;
 		animation: tour-fade-in 0.4s ease-out;
 	}
 
@@ -4349,6 +4400,14 @@
 
 	.tour-dismiss:hover {
 		color: rgba(255, 255, 255, 0.6);
+	}
+
+	.tour-title {
+		font-size: 12px;
+		color: rgba(255, 255, 255, 0.92);
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		margin-bottom: 6px;
 	}
 
 	.tour-text {
