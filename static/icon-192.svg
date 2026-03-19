@@ -2,8 +2,8 @@
   <rect width="192" height="192" fill="#000005"/>
   <defs>
     <radialGradient id="glow">
-      <stop offset="0%" stop-color="rgba(170,200,255,0.4)"/>
-      <stop offset="100%" stop-color="rgba(170,200,255,0)"/>
+      <stop offset="0%" stop-color="rgb(170,200,255)" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="rgb(170,200,255)" stop-opacity="0"/>
     </radialGradient>
   </defs>
   <circle cx="96" cy="96" r="100.79999999999998" fill="url(#glow)"/>
