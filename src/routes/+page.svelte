@@ -676,7 +676,7 @@
 		redoStack = [];
 		constellations = constellations.filter((_, i) => i !== index);
 		if (constellations.length === 0) {
-			handleReset();
+			handleReset({ focusInput: windowWidth > 480 });
 			return;
 		}
 		// Adjust focusedIndex
@@ -695,6 +695,7 @@
 	}
 
 	function handleAddAnother() {
+		shouldAutoFocusInput = true;
 		showInput = true;
 		inputText = '';
 	}
@@ -706,7 +707,7 @@
 		}
 	}
 
-	function handleReset() {
+	function handleReset(options: { focusInput?: boolean } = {}) {
 		matchRequestId++; // invalidate any in-flight request
 		clearMatchTimeout();
 		isMatching = false;
@@ -717,6 +718,7 @@
 		rerollBlacklist = [];
 		undoStack = [];
 		redoStack = [];
+		shouldAutoFocusInput = options.focusInput ?? true;
 		showInput = true;
 		inputText = '';
 		// Clear hash
@@ -1379,8 +1381,23 @@
 		}
 	}
 
-	function autoFocus(node: HTMLInputElement) {
-		requestAnimationFrame(() => node.focus());
+	let shouldAutoFocusInput = $state(true);
+
+	function autoFocus(node: HTMLInputElement, enabled = true) {
+		const run = () => {
+			if (!enabled) return;
+			requestAnimationFrame(() => {
+				if (enabled) node.focus();
+			});
+		};
+
+		run();
+
+		return {
+			update(nextEnabled: boolean) {
+				enabled = nextEnabled;
+			},
+		};
 	}
 
 	function handleGlobalKeydown(e: KeyboardEvent) {
@@ -1840,7 +1857,7 @@
 					aria-describedby={
 						isMatching ? 'matching-status' : !starsReady || !!starsError || constellations.length === 0 ? 'input-helper' : undefined
 					}
-					use:autoFocus
+					use:autoFocus={shouldAutoFocusInput}
 				/>
 			</div>
 			{#if isMatching}
@@ -2508,7 +2525,7 @@
 						{copied ? 'Copied!' : 'Share'}
 					</button>
 					<button class="reset-btn result-action-add" onclick={handleAddAnother} aria-label="Add another constellation">Add more</button>
-					<button class="reset-btn result-action-clear" onclick={handleReset} aria-label="Clear all constellations">Clear all</button>
+					<button class="reset-btn result-action-clear" onclick={() => handleReset()} aria-label="Clear all constellations">Clear all</button>
 				</div>
 			{/if}
 		</div>
