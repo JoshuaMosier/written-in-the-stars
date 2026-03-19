@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, tick } from 'svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
 	import type { Star, MatchResult } from '$lib/engine/types';
 	import type { ConstellationDisplayMode, ShareSettings, ShareState } from '$lib/engine/sharing';
 	import type { ConstellationDef } from '$lib/data/constellations';
@@ -46,10 +46,19 @@
 	let constellationsLoadPromise: Promise<ConstellationDef[]> | null = null;
 	let wikiDataPromise: Promise<void> | null = null;
 	let pendingWarmupCancel: (() => void) | null = null;
+	const APP_LOADING_CLASS = 'app-loading';
 
 	function loadSharingModule() {
 		return (sharingModulePromise ??= import('$lib/engine/sharing'));
 	}
+
+	onMount(() => {
+		const readyFrame = requestAnimationFrame(() => {
+			document.documentElement.classList.remove(APP_LOADING_CLASS);
+		});
+
+		return () => cancelAnimationFrame(readyFrame);
+	});
 
 	function ensureStarFieldModule() {
 		return (starFieldPromise ??= import('$lib/scene/StarField.svelte'));

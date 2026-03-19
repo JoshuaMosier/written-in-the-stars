@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="app-loading">
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -99,6 +99,14 @@
 				font-size: 13px;
 				line-height: 1.5;
 			}
+
+			#app-shell {
+				min-height: 100%;
+			}
+
+			html.app-loading #app-shell {
+				visibility: hidden;
+			}
 		</style>
 		<script type="application/ld+json">
 			{
@@ -117,7 +125,7 @@
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
-		<div style="display: contents">%sveltekit.body%</div>
+		<div id="app-shell">%sveltekit.body%</div>
 		<noscript>
 			<p class="app-noscript">JavaScript is required to run this app.</p>
 		</noscript>
