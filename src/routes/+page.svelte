@@ -1195,6 +1195,13 @@
 			starField?.drawTempConstellation(prev.constellation.name);
 			starField?.panToIAUConstellation(prev.constellation.name);
 		}
+		scheduleAutoRotateSync();
+	}
+
+	function scheduleAutoRotateSync() {
+		requestAnimationFrame(() => {
+			starField?.syncAutoRotateState();
+		});
 	}
 
 	// Build search index of named stars (derived from reactive stars)
@@ -1271,6 +1278,7 @@
 		}
 		searchQuery = '';
 		searchOpen = false;
+		scheduleAutoRotateSync();
 	}
 
 	function handleStarClick(star: Star, _screenPos: { x: number; y: number }) {
@@ -1287,6 +1295,7 @@
 		selectedConstellation = null;
 		starField?.clearTempConstellation();
 		starField?.highlightStar(star);
+		scheduleAutoRotateSync();
 		// Prevent the bubbling click event from immediately dismissing
 		starClickedThisTick = true;
 		requestAnimationFrame(() => {
@@ -2004,6 +2013,7 @@
 									starField?.clearStarHighlight();
 									starField?.drawTempConstellation(c.name);
 									starField?.panToIAUConstellation(c.name);
+									scheduleAutoRotateSync();
 								}}>{c.name}</button
 							>{#if i < starConsts.length - 1},&nbsp;{/if}
 						{/each}
@@ -2052,6 +2062,7 @@
 								selectedConstellation = null;
 								starField?.highlightStar(s);
 								starField?.panToRaDec(s.ra, s.dec, 30);
+								scheduleAutoRotateSync();
 							}}
 						>
 							{s.name} <span class="star-panel-star-mag">({s.mag.toFixed(1)})</span>

@@ -2792,6 +2792,10 @@
 		if (controlsRef) controlsRef.autoRotate = on;
 	}
 
+	export function syncAutoRotateState() {
+		if (controlsRef) controlsRef.autoRotate = autoRotateActive;
+	}
+
 	export function toggleStarLabels(show: boolean) {
 		if (show === starLabelsActive) return;
 		starLabelsActive = show;
