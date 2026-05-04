@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, onMount, tick } from 'svelte';
+	import { onDestroy, tick } from 'svelte';
 	import type { Star, MatchResult } from '$lib/engine/types';
 	import type { ConstellationDisplayMode, ShareSettings, ShareState } from '$lib/engine/sharing';
 	import type { ConstellationDef } from '$lib/data/constellations';
@@ -52,13 +52,10 @@
 		return (sharingModulePromise ??= import('$lib/engine/sharing'));
 	}
 
-	onMount(() => {
-		const readyFrame = requestAnimationFrame(() => {
-			document.documentElement.classList.remove(APP_LOADING_CLASS);
-		});
-
-		return () => cancelAnimationFrame(readyFrame);
-	});
+	function clearAppLoadingState() {
+		if (typeof document === 'undefined') return;
+		document.documentElement.classList.remove(APP_LOADING_CLASS);
+	}
 
 	function ensureStarFieldModule() {
 		return (starFieldPromise ??= import('$lib/scene/StarField.svelte'));
@@ -121,6 +118,7 @@
 				return;
 			}
 			starsError = err instanceof Error ? err.message : 'Failed to load star catalog';
+			clearAppLoadingState();
 		});
 
 	interface ConstellationEntry {
@@ -426,6 +424,7 @@
 	}
 
 	async function handleStarFieldReady() {
+		requestAnimationFrame(clearAppLoadingState);
 		await tick();
 		if (pageDisposed) return;
 		if (pendingShareState) {
@@ -2285,7 +2284,7 @@
 				<div class="about-footer">
 					<span>Made by Josh Mosier</span>
 					<a href="https://x.com/joshrmosier" target="_blank" rel="noopener noreferrer" aria-label="X (Twitter)">
-						<svg viewBox="0 0 24 24" fill="currentColor" class="about-footer-icon"
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" class="about-footer-icon"
 							><path
 								d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"
 							/></svg
@@ -2297,14 +2296,14 @@
 						rel="noopener noreferrer"
 						aria-label="GitHub"
 					>
-						<svg viewBox="0 0 24 24" fill="currentColor" class="about-footer-icon"
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" class="about-footer-icon"
 							><path
 								d="M12 1.27a11 11 0 00-3.48 21.46c.55.09.73-.28.73-.55v-1.84c-3.03.64-3.67-1.46-3.67-1.46-.55-1.29-1.28-1.65-1.28-1.65-.92-.65.1-.65.1-.65 1.1 0 1.73 1.1 1.73 1.1.92 1.65 2.57 1.2 3.21.92a2.16 2.16 0 01.64-1.47c-2.47-.27-5.04-1.19-5.04-5.5 0-1.1.46-2.1 1.2-2.84a3.76 3.76 0 010-2.93s.91-.28 3.11 1.1c1.8-.49 3.7-.49 5.5 0 2.1-1.38 3.02-1.1 3.02-1.1a3.76 3.76 0 010 2.93c.74.74 1.2 1.74 1.2 2.84 0 4.31-2.58 5.23-5.06 5.5.45.37.82.92.82 2.02v3.03c0 .27.18.64.73.55A11 11 0 0012 1.27"
 							/></svg
 						>
 					</a>
 					<a href="https://joshmosier.com/" target="_blank" rel="noopener noreferrer" aria-label="Personal website">
-						<svg viewBox="0 0 24 24" fill="currentColor" class="about-footer-icon"
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" class="about-footer-icon"
 							><path
 								d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"
 							/></svg
@@ -2318,7 +2317,7 @@
 						rel="noopener noreferrer"
 					>
 						Inspired by
-						<svg class="neal-logo" viewBox="0 0 333 89" aria-label="Neal.fun" role="img">
+						<svg height="14" class="neal-logo" viewBox="0 0 333 89" aria-label="Neal.fun" role="img">
 							<g transform="matrix(1,0,0,1,0,-217)">
 								<g id="neal-art-about" transform="matrix(0.982301,0,0,1,0,216.559)">
 									<clipPath id="_clip1_about"><rect x="0" y="0.441" width="339" height="88.559" /></clipPath>
@@ -2396,7 +2395,7 @@
 	<div class="credits">
 		<span class="credits-made-by">Made by Josh Mosier</span>
 		<a href="https://x.com/joshrmosier" target="_blank" rel="noopener noreferrer" aria-label="X (Twitter)">
-			<svg viewBox="0 0 24 24" fill="currentColor" class="credits-icon"
+			<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" class="credits-icon"
 				><path
 					d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"
 				/></svg
@@ -2408,14 +2407,14 @@
 			rel="noopener noreferrer"
 			aria-label="GitHub"
 		>
-			<svg viewBox="0 0 24 24" fill="currentColor" class="credits-icon"
+			<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" class="credits-icon"
 				><path
 					d="M12 1.27a11 11 0 00-3.48 21.46c.55.09.73-.28.73-.55v-1.84c-3.03.64-3.67-1.46-3.67-1.46-.55-1.29-1.28-1.65-1.28-1.65-.92-.65.1-.65.1-.65 1.1 0 1.73 1.1 1.73 1.1.92 1.65 2.57 1.2 3.21.92a2.16 2.16 0 01.64-1.47c-2.47-.27-5.04-1.19-5.04-5.5 0-1.1.46-2.1 1.2-2.84a3.76 3.76 0 010-2.93s.91-.28 3.11 1.1c1.8-.49 3.7-.49 5.5 0 2.1-1.38 3.02-1.1 3.02-1.1a3.76 3.76 0 010 2.93c.74.74 1.2 1.74 1.2 2.84 0 4.31-2.58 5.23-5.06 5.5.45.37.82.92.82 2.02v3.03c0 .27.18.64.73.55A11 11 0 0012 1.27"
 				/></svg
 			>
 		</a>
 		<a href="https://joshmosier.com/" target="_blank" rel="noopener noreferrer" aria-label="Personal website">
-			<svg viewBox="0 0 24 24" fill="currentColor" class="credits-icon"
+			<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" class="credits-icon"
 				><path
 					d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"
 				/></svg
@@ -2424,7 +2423,7 @@
 		<span class="credits-divider">&middot;</span>
 		<a class="credits-neal" href="https://neal.fun/constellation-draw/" target="_blank" rel="noopener noreferrer">
 			<span class="credits-neal-label">Inspired by</span>
-			<svg class="neal-logo" viewBox="0 0 333 89" aria-label="Neal.fun" role="img">
+			<svg height="14" class="neal-logo" viewBox="0 0 333 89" aria-label="Neal.fun" role="img">
 				<g transform="matrix(1,0,0,1,0,-217)">
 					<g id="neal-art" transform="matrix(0.982301,0,0,1,0,216.559)">
 						<clipPath id="_clip1"><rect x="0" y="0.441" width="339" height="88.559" /></clipPath>
